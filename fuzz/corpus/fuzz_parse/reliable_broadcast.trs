@@ -1,0 +1,81 @@
+// Reliable Broadcast Protocol (Bracha, 1987)
+//
+// A correct protocol where all honest processes agree on whether
+// to deliver a message from a designated sender.
+//
+// Three phases: init, echo, ready
+// - Sender broadcasts Init
+// - On receiving Init, broadcast Echo
+// - On receiving 2t+1 Echo, broadcast Ready
+// - On receiving t+1 Ready (or 2t+1 Echo), broadcast Ready
+// - On receiving 2t+1 Ready, deliver (decide)
+//
+// Simplified version for threshold automata verification.
+
+protocol ReliableBroadcast {
+    parameters {
+        n: nat;     // total number of processes
+        t: nat;     // max number of faulty processes
+        f: nat;     // actual number of faulty processes
+    }
+
+    resilience {
+        n > 3*t;
+    }
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message Init;
+    message Echo;
+    message Ready;
+
+    role Process {
+        var accepted: bool = false;
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init waiting;
+
+        // Phase 1: waiting for initial broadcast
+        phase waiting {
+            // On receiving Init from sender, send Echo
+            when received >= 1 Init => {
+                accepted = true;
+                send Echo;
+                goto phase echoed;
+            }
+        }
+
+        // Phase 2: sent Echo, waiting for threshold
+        phase echoed {
+            // On receiving 2t+1 Echo messages, send Ready
+            when received >= 2*t+1 Echo => {
+                send Ready;
+                goto phase readied;
+            }
+        }
+
+        // Phase 3: sent Ready, waiting for delivery
+        phase readied {
+            // On receiving 2t+1 Ready messages, deliver
+            when received >= 2*t+1 Ready => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+        }
+
+        // Terminal phase
+        phase done {
+        }
+    }
+
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
