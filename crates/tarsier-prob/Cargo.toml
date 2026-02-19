@@ -1,0 +1,8 @@
+[package]
+name = "tarsier-prob"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+num = "0.4"
+thiserror.workspace = true

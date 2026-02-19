@@ -1,0 +1,49 @@
+protocol HotstuffSimpleSafeFaithful {
+    params n, t, f, gst;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        auth: signed;
+        network: identity_selective;
+        delivery: per_recipient;
+        faults: per_recipient;
+        equivocation: none;
+        values: sign;
+    }
+
+    identity Replica: role key replica_key;
+
+    message Proposal(view: nat);
+    message Vote(view: nat);
+
+    role Replica {
+        var decided: bool = false;
+
+        init propose;
+
+        phase propose {
+            when received >= 1 Proposal(view=0) => {
+                send Vote(view=0);
+                goto phase voted;
+            }
+        }
+
+        phase voted {
+            when received distinct >= 2*t+1 Vote(view=0) => {
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica. p.decided == q.decided
+    }
+}

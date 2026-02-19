@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/certificate-schema-v2.json",
+  "title": "Tarsier Certificate Bundle Metadata (v2)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "protocol_file",
+    "proof_engine",
+    "induction_k",
+    "solver_used",
+    "soundness",
+    "committee_bounds",
+    "bundle_sha256",
+    "obligations"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["safety_proof", "fair_liveness_proof"]
+    },
+    "protocol_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proof_engine": {
+      "type": "string",
+      "enum": ["kinduction", "pdr"]
+    },
+    "induction_k": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "solver_used": {
+      "type": "string",
+      "enum": ["z3", "cvc5"]
+    },
+    "soundness": {
+      "type": "string",
+      "enum": ["strict", "permissive"]
+    },
+    "fairness": {
+      "type": ["string", "null"],
+      "enum": ["weak", "strong", null]
+    },
+    "committee_bounds": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "string", "minLength": 1 },
+          { "type": "integer", "minimum": 0 }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "bundle_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "obligations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "expected", "file", "sha256"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected": {
+            "type": "string",
+            "const": "unsat"
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": ["string", "null"],
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": { "const": "safety_proof" },
+          "proof_engine": { "const": "kinduction" }
+        },
+        "required": ["kind", "proof_engine"]
+      },
+      "then": {
+        "properties": {
+          "fairness": { "type": "null" },
+          "obligations": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "allOf": [
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "name": { "const": "base_case" } },
+                  "required": ["name"]
+                }
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "name": { "const": "inductive_step" } },
+                  "required": ["name"]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": { "const": "safety_proof" },
+          "proof_engine": { "const": "pdr" }
+        },
+        "required": ["kind", "proof_engine"]
+      },
+      "then": {
+        "properties": {
+          "fairness": { "type": "null" },
+          "obligations": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "allOf": [
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "name": { "const": "init_implies_inv" } },
+                  "required": ["name"]
+                }
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "name": { "const": "inv_and_transition_implies_inv_prime" } },
+                  "required": ["name"]
+                }
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "name": { "const": "inv_implies_safe" } },
+                  "required": ["name"]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": { "const": "fair_liveness_proof" }
+        },
+        "required": ["kind"]
+      },
+      "then": {
+        "required": ["fairness"],
+        "properties": {
+          "proof_engine": { "const": "pdr" },
+          "fairness": {
+            "type": "string",
+            "enum": ["weak", "strong"]
+          },
+          "obligations": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "allOf": [
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "name": { "const": "init_implies_inv" } },
+                  "required": ["name"]
+                }
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "name": { "const": "inv_and_transition_implies_inv_prime" } },
+                  "required": ["name"]
+                }
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": { "name": { "const": "inv_implies_no_fair_bad" } },
+                  "required": ["name"]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

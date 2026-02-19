@@ -1,0 +1,15 @@
+[package]
+name = "tarsier-certcheck"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "tarsier-certcheck"
+path = "src/main.rs"
+
+[dependencies]
+tarsier-proof-kernel = { path = "../tarsier-proof-kernel" }
+clap = { version = "4", features = ["derive"] }
+miette = { version = "7", features = ["fancy"] }
+serde.workspace = true
+serde_json.workspace = true

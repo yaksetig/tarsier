@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tarsier Playground</title>
+  <style>
+    :root {
+      --bg-top: #08111f;
+      --bg-bottom: #03121a;
+      --panel: #0c2330;
+      --panel-alt: #112d3d;
+      --line: #1d4153;
+      --text: #e8f4ff;
+      --muted: #9cb9cb;
+      --ok: #3ad29f;
+      --warn: #f0b565;
+      --bad: #ff7b78;
+      --accent: #4ec5ff;
+      --accent-2: #7fffd4;
+      --shadow: 0 14px 42px rgba(0, 0, 0, 0.35);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: radial-gradient(1200px 700px at 15% -10%, #123453 0%, transparent 55%),
+                  radial-gradient(800px 500px at 90% 0%, #225a4e 0%, transparent 50%),
+                  linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+    }
+
+    body {
+      padding: 20px;
+    }
+
+    .shell {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(155deg, rgba(78,197,255,0.14), rgba(127,255,212,0.07));
+      box-shadow: var(--shadow);
+      animation: fade-slide 420ms ease-out;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0.2px;
+    }
+
+    .hero p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status-pill {
+      border-radius: 999px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.2);
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(160deg, rgba(12,35,48,0.95), rgba(6,27,38,0.95));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      animation: fade-slide 480ms ease-out;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
+      gap: 8px;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(160px, 1fr));
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(17,45,61,0.35);
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .advanced-control {
+      display: none;
+    }
+
+    .field label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .inline-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .inline-toggle input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+    }
+
+    select,
+    input,
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    select,
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: rgba(4, 16, 25, 0.85);
+      color: var(--text);
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    select:focus,
+    input:focus,
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(78, 197, 255, 0.2);
+    }
+
+    .editor-wrap {
+      padding: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 620px;
+    }
+
+    .editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(17,45,61,0.25);
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(9, 31, 43, 0.9);
+      color: var(--text);
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: transform 140ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      border-color: var(--accent);
+      background: rgba(14, 43, 60, 0.95);
+    }
+
+    button:disabled,
+    button:disabled:hover {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      border-color: var(--line);
+      background: rgba(9, 31, 43, 0.9);
+    }
+
+    button.primary {
+      border-color: #2f8fbb;
+      background: linear-gradient(135deg, rgba(78,197,255,0.28), rgba(127,255,212,0.24));
+      font-weight: 600;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100%;
+      border: none;
+      padding: 14px;
+      resize: none;
+      background: rgba(3, 13, 20, 0.92);
+      color: #d8ebff;
+      font-size: 13px;
+      line-height: 1.4;
+      font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      min-height: 620px;
+    }
+
+    .result-summary {
+      margin: 12px 14px 0;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 13px;
+    }
+
+    .summary-ok { border-color: rgba(58, 210, 159, 0.55); color: var(--ok); }
+    .summary-fail { border-color: rgba(255, 123, 120, 0.55); color: var(--bad); }
+    .summary-unknown { border-color: rgba(240, 181, 101, 0.55); color: var(--warn); }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .result-toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 0 14px 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tab {
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: rgba(9, 31, 43, 0.8);
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .tab.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: rgba(78,197,255,0.18);
+    }
+
+    .pane {
+      display: none;
+      padding: 12px 14px;
+      overflow: auto;
+    }
+
+    .pane.active {
+      display: block;
+      animation: fade-in 180ms ease-out;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #d7e9fa;
+    }
+
+    .trace-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .trace-table th,
+    .trace-table td {
+      border-bottom: 1px solid var(--line);
+      padding: 7px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .trace-table th {
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      font-size: 11px;
+    }
+
+    .trace-replay {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .trace-replay input[type=\"range\"] {
+      width: 100%;
+    }
+
+    .trace-state {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 12px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    .footer-note {
+      padding: 10px 14px 14px;
+      color: var(--muted);
+      font-size: 11px;
+      border-top: 1px solid var(--line);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @keyframes fade-slide {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @media (max-width: 1100px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .editor-wrap,
+      .result-grid {
+        min-height: 480px;
+      }
+    }
+
+    @media (max-width: 700px) {
+      body { padding: 12px; }
+      .hero { padding: 14px; }
+      .hero h1 { font-size: 19px; }
+      .control-grid { grid-template-columns: 1fr; }
+      .status-pill { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="hero">
+      <div>
+        <h1>Tarsier Playground</h1>
+        <p>Model, verify, and prove BFT protocols from the browser.</p>
+      </div>
+      <div class="status-pill" id="health-pill">Connecting...</div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title">Protocol Model</h2>
+        </div>
+
+        <div class="control-grid">
+          <div class="field">
+            <label for="example-select">Example</label>
+            <select id="example-select"></select>
+          </div>
+          <div class="field">
+            <label for="workflow-select">Workflow</label>
+            <select id="workflow-select">
+              <option value="quick">quick bug scan</option>
+              <option value="standard" selected>standard analysis</option>
+              <option value="proof">proof run</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="advanced-toggle">Advanced</label>
+            <label class="inline-toggle">
+              <input id="advanced-toggle" type="checkbox" />
+              show internal knobs
+            </label>
+          </div>
+          <div class="field advanced-control">
+            <label for="check-select">Check</label>
+            <select id="check-select">
+              <option value="verify">verify</option>
+              <option value="liveness">liveness</option>
+              <option value="fair-liveness">fair-liveness</option>
+              <option value="prove">prove</option>
+              <option value="prove-fair">prove-fair</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="assist-kind-select">Scaffold</label>
+            <select id="assist-kind-select">
+              <option value="pbft">pbft</option>
+              <option value="hotstuff">hotstuff</option>
+              <option value="raft">raft</option>
+              <option value="tendermint">tendermint</option>
+              <option value="streamlet">streamlet</option>
+              <option value="casper">casper</option>
+            </select>
+          </div>
+          <div class="field advanced-control">
+            <label for="solver-select">Solver</label>
+            <select id="solver-select">
+              <option value="z3">z3</option>
+              <option value="cvc5">cvc5</option>
+            </select>
+          </div>
+          <div class="field advanced-control">
+            <label for="proof-engine-select">Proof Engine</label>
+            <select id="proof-engine-select">
+              <option value="kinduction">kinduction</option>
+              <option value="pdr">pdr</option>
+            </select>
+          </div>
+          <div class="field advanced-control">
+            <label for="fairness-select">Fairness</label>
+            <select id="fairness-select">
+              <option value="weak">weak</option>
+              <option value="strong">strong</option>
+            </select>
+          </div>
+          <div class="field advanced-control">
+            <label for="depth-input">Depth / k</label>
+            <input id="depth-input" type="number" value="12" min="0" step="1" />
+          </div>
+          <div class="field advanced-control">
+            <label for="timeout-input">Timeout (sec)</label>
+            <input id="timeout-input" type="number" value="60" min="1" step="1" />
+          </div>
+          <div class="field advanced-control">
+            <label for="soundness-select">Soundness</label>
+            <select id="soundness-select">
+              <option value="strict">strict</option>
+              <option value="permissive">permissive</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="editor-wrap">
+          <div class="editor-toolbar">
+            <div class="toolbar-actions">
+              <button id="load-example-btn">Load Example</button>
+              <button id="assist-btn">Insert Scaffold</button>
+              <button id="format-btn">Normalize Spacing</button>
+              <button id="lint-btn">Lint Model</button>
+            </div>
+            <button class="primary" id="run-btn">Run Analysis</button>
+          </div>
+          <textarea id="source-editor" spellcheck="false"></textarea>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title">Results</h2>
+          <span id="run-meta" class="status-pill">Idle</span>
+        </div>
+
+        <div id="result-summary" class="result-summary summary-unknown">No analysis run yet.</div>
+
+        <div class="result-toolbar">
+          <button id="export-json-btn">Download JSON</button>
+          <button id="export-markdown-btn">Download Markdown</button>
+          <button id="export-timeline-btn">Download Timeline</button>
+          <button id="export-mermaid-btn">Download Mermaid</button>
+          <button id="export-bundle-btn">Download Artifact Bundle</button>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-pane="output-pane">Output</button>
+          <button class="tab" data-pane="trace-pane">Trace</button>
+          <button class="tab" data-pane="cti-pane">CTI</button>
+          <button class="tab" data-pane="lint-pane">Lint</button>
+          <button class="tab" data-pane="json-pane">JSON</button>
+        </div>
+
+        <div class="result-grid">
+          <div id="output-pane" class="pane active"><pre id="output-pre"></pre></div>
+          <div id="trace-pane" class="pane"><div id="trace-view"></div></div>
+          <div id="cti-pane" class="pane"><div id="cti-view"></div></div>
+          <div id="lint-pane" class="pane"><pre id="lint-pre"></pre></div>
+          <div id="json-pane" class="pane"><pre id="json-pre"></pre></div>
+        </div>
+
+        <div class="footer-note">
+          CTI entries are counterexamples to induction and may be unreachable from initial states.
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: false, theme: "dark" });</script>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

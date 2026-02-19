@@ -1,0 +1,47 @@
+name: Release Certification
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-corpus-certification-gate:
+    runs-on: ubuntu-22.04
+    env:
+      EXPECTED_RUSTC: "1.92.0"
+      EXPECTED_Z3: "4.12.5"
+      EXPECTED_CVC5: "1.1.2"
+      EXPECTED_OS: "ubuntu-22.04"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (Pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+
+      - name: Setup Python (Pinned Minor)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Pinned Environment
+        run: ./.github/scripts/verify_pinned_env.sh
+
+      - name: Run Corpus Certification Gate
+        run: ./scripts/certify-corpus.sh
+
+      - name: Upload Certification Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-cert-suite-report
+          path: artifacts/cert-suite.json

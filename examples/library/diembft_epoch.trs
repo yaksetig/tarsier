@@ -1,0 +1,37 @@
+protocol DiemBftEpoch {
+    params n, t, f, gst;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        auth: signed;
+        equivocation: none;
+        values: sign;
+    }
+
+    message Vote(epoch: nat, round: nat);
+    threshold_signature LedgerQC from Vote threshold 2*t+1 signer Replica;
+
+    role Replica {
+        var committed: bool = false;
+        init execute;
+
+        phase execute {
+            when received distinct >= 2*t+1 Vote(epoch=0, round=0) => {
+                form LedgerQC(epoch=0, round=0) to Replica;
+                justify LedgerQC(epoch=0, round=0);
+                committed = true;
+                goto phase committed;
+            }
+        }
+
+        phase committed {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica. p.committed == q.committed
+    }
+}

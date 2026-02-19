@@ -1,0 +1,59 @@
+// Simplified PBFT (safety-focused)
+// NOTE: This model abstracts away view-change and value-carrying messages.
+// It checks agreement for a single decided value.
+
+protocol PBFTSimple {
+    params n, t, f;
+
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message PrePrepare;
+    message Prepare;
+    message Commit;
+
+    role Replica {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init start;
+
+        phase start {
+            // Primary pre-prepare assumed once; all replicas echo prepare.
+            when received >= 1 PrePrepare => {
+                send Prepare;
+                goto phase prepared;
+            }
+        }
+
+        phase prepared {
+            // Upon 2f+1 prepares, broadcast commit.
+            when received >= 2*t+1 Prepare => {
+                send Commit;
+                goto phase committed;
+            }
+        }
+
+        phase committed {
+            // Upon 2f+1 commits, decide.
+            when received >= 2*t+1 Commit => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    // Agreement on decided value (guarded agreement)
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

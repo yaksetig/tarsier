@@ -1,0 +1,27 @@
+# Canonical protocol benchmark list.
+# Kept aligned with examples/library/cert_suite.json.
+examples/library/algorand_vote_cert.trs
+examples/library/casper_ffg_like.trs
+examples/library/dls_partial_sync.trs
+examples/library/grandpa_finality.trs
+examples/library/hotstuff_chained.trs
+examples/library/jolteon_fast_hotstuff.trs
+examples/library/multi_paxos_round.trs
+examples/library/narwhal_bullshark_vote.trs
+examples/library/paxos_basic.trs
+examples/library/pbft_core.trs
+examples/library/pbft_view_change.trs
+examples/library/pbft_simple_safe.trs
+examples/library/raft_election_safety.trs
+examples/library/reliable_broadcast_buggy.trs
+examples/library/reliable_broadcast_safe.trs
+examples/library/qbft_round_change.trs
+examples/library/sbft_committee.trs
+examples/library/streamlet.trs
+examples/library/diembft_epoch.trs
+examples/library/hbbft_acs_like.trs
+examples/library/tendermint_locking.trs
+examples/library/temporal_liveness_counterexample.trs
+examples/library/trivial_live.trs
+examples/library/tusk_dag_cert.trs
+examples/library/zyzzyva_fastpath.trs

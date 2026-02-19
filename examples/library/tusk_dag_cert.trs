@@ -1,0 +1,34 @@
+protocol TuskDagCert {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        equivocation: none;
+        auth: signed;
+        values: sign;
+    }
+
+    message Vote(height: nat);
+    certificate DagCert from Vote threshold 2*t+1 signer Replica;
+
+    role Replica {
+        var finalized: bool = false;
+        init gather;
+
+        phase gather {
+            when received distinct >= 2*t+1 Vote(height=1) => {
+                form DagCert(height=1) to Replica;
+                finalized = true;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica. p.finalized == q.finalized
+    }
+}

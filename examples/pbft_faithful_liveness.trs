@@ -1,0 +1,76 @@
+// PBFT-faithful liveness kernel
+// Includes view-change and value-carrying NewView messages.
+// Designed to keep the model tractable while preserving PBFT-style control flow.
+
+protocol PBFTFaithfulLiveness {
+    params n, t, f, gst;
+    resilience: n = 4;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        auth: signed;
+        timing: partial_synchrony;
+        gst: gst;
+        values: sign;
+    }
+
+    pacemaker {
+        view: view;
+        start: active;
+    }
+
+    message Commit(view: int in 0..1);
+    message ViewChange(view: int in 0..1);
+    message NewView(view: int in 0..1, value: bool);
+
+    role Replica {
+        var view: int in 0..1 = 0;
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init active;
+
+        phase active {
+            // NewView carries the decided value for the next view.
+            when received >= 0 NewView(view=view, value=true) => {
+                send Commit(view=view);
+            }
+
+            when received distinct >= 3 Commit(view=view) => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+
+            // Timeout to view-change in the initial view.
+            when view == 0 => {
+                send ViewChange(view=view);
+                goto phase view_change;
+            }
+        }
+
+        phase view_change {
+            when received >= 3 ViewChange(view=view) => {
+                send NewView(view=view, value=true);
+                goto phase active;
+            }
+
+            when received >= 1 NewView(view=view, value=true) => {
+                goto phase active;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+
+    property term: liveness {
+        forall p: Replica. p.decided == true
+    }
+}

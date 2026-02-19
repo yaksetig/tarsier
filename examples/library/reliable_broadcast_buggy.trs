@@ -1,0 +1,55 @@
+protocol ReliableBroadcastBuggy {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message Vote;
+    message Commit;
+    message Abort;
+
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init propose;
+
+        phase propose {
+            when received >= 1 Vote => {
+                send Vote;
+                goto phase voted;
+            }
+            when received >= 1 Abort => {
+                decision = false;
+                decided = true;
+                goto phase done_no;
+            }
+        }
+
+        phase voted {
+            when received >= t+1 Vote => {
+                send Commit;
+                goto phase ready_yes;
+            }
+        }
+
+        phase ready_yes {
+            when received >= t+1 Commit => {
+                decision = true;
+                decided = true;
+                goto phase done_yes;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

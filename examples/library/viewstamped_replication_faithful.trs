@@ -1,0 +1,55 @@
+protocol ViewstampedReplicationFaithful {
+    params n, t, f;
+    resilience: n = 2*f + 1;
+
+    adversary {
+        model: crash;
+        bound: f;
+        auth: signed;
+        network: identity_selective;
+        delivery: per_recipient;
+        faults: per_recipient;
+        equivocation: none;
+        values: sign;
+    }
+
+    identity Replica: role key replica_key;
+
+    message StartView(view: nat);
+    message Prepare(view: nat, slot: nat);
+    message Commit(view: nat, slot: nat);
+
+    role Replica {
+        var decided: bool = false;
+        var decision: bool = false;
+        init start;
+
+        phase start {
+            when received distinct >= n-f StartView(view=0) => {
+                goto phase prepare;
+            }
+        }
+
+        phase prepare {
+            when received distinct >= n-f Prepare(view=0, slot=0) => {
+                goto phase commit;
+            }
+        }
+
+        phase commit {
+            when received distinct >= n-f Commit(view=0, slot=0) => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase decided;
+            }
+        }
+
+        phase decided {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

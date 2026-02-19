@@ -1,0 +1,43 @@
+protocol CryptoObjectsExample {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary {
+        model: byzantine;
+        bound: f;
+        auth: signed;
+        equivocation: none;
+    }
+
+    message Vote(view: nat in 0..4);
+
+    certificate QC from Vote threshold 2*t+1 signer Replica;
+    threshold_signature Sig from Vote threshold 2*t+1 signer Replica;
+
+    role Replica {
+        var view: nat in 0..4 = 0;
+        var decided: bool = false;
+        init pre;
+
+        phase pre {
+            when received distinct >= 2*t+1 Vote(view=view) => {
+                form QC(view=view);
+                lock QC(view=view);
+                justify QC(view=view);
+                goto phase commit;
+            }
+        }
+
+        phase commit {
+            when has QC(view=view) => {
+                decided = true;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property live: liveness {
+        forall p: Replica. <> (p.decided == true)
+    }
+}

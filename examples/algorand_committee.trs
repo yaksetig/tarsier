@@ -1,0 +1,68 @@
+// Algorand-style committee-based voting protocol
+//
+// A committee of 100 nodes is selected from a population of 1000,
+// of which 333 are Byzantine. Using hypergeometric analysis with
+// epsilon = 1e-9, the tool derives the maximum number of Byzantine
+// nodes in the committee (b_max) and verifies safety under that bound.
+
+protocol AlgorandCommittee {
+    parameters {
+        n: nat;    // committee size (treated as total processes)
+        t: nat;    // honest majority threshold
+        f: nat;    // adversary (fault tolerance)
+        b: nat;    // derived Byzantine bound from committee analysis
+    }
+
+    resilience {
+        n > 2*b;
+    }
+
+    adversary {
+        model: byzantine;
+        bound: b;
+    }
+
+    committee voters {
+        population: 1000;
+        byzantine: 333;
+        size: 100;
+        epsilon: 1.0e-9;
+        bound_param: b;
+    }
+
+    message SoftVote;
+    message CertVote;
+
+    role Voter {
+        var certified: bool = false;
+        var decided: bool = false;
+        var decision: bool = false;
+        init soft_vote;
+
+        phase soft_vote {
+            // When enough soft votes received, send cert vote
+            when received >= 2*b+1 SoftVote => {
+                send CertVote;
+                goto phase cert_vote;
+            }
+        }
+
+        phase cert_vote {
+            // When enough cert votes received, decide
+            when received >= 2*b+1 CertVote => {
+                decision = true;
+                decided = true;
+                certified = true;
+                decide true;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Voter. forall q: Voter.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

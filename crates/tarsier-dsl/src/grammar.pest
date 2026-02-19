@@ -1,0 +1,311 @@
+// Tarsier DSL PEG Grammar
+
+program = { SOI ~ protocol_decl ~ EOI }
+
+protocol_decl = {
+    "protocol" ~ ident ~ "{" ~
+        protocol_item* ~
+    "}"
+}
+
+protocol_item = _{
+    enum_decl
+    | parameters_decl
+    | resilience_decl
+    | pacemaker_decl
+    | adversary_decl
+    | identity_decl
+    | channel_decl
+    | equivocation_decl
+    | committee_decl
+    | message_decl
+    | crypto_object_decl
+    | role_decl
+    | property_decl
+}
+
+// --- Enums ---
+enum_decl = {
+    "enum" ~ ident ~ "{" ~ ident ~ ("," ~ ident)* ~ "}" ~ ";"?
+}
+
+// --- Parameters ---
+parameters_decl = {
+    ("parameters" ~ "{" ~
+        param_def* ~
+    "}")
+    | ("params" ~ param_list)
+}
+
+param_def = { ident ~ ":" ~ param_type ~ ";" }
+param_list = { param_list_item ~ ("," ~ param_list_item)* ~ ";"? }
+param_list_item = { ident ~ (":" ~ param_type)? }
+param_type = { "nat" | "int" }
+
+// --- Resilience ---
+resilience_decl = {
+    "resilience" ~ (
+        "{" ~ resilience_expr ~ ";" ~ "}"
+        | ":" ~ resilience_expr ~ ";"?
+    )
+}
+
+resilience_expr = { linear_expr ~ cmp_op ~ linear_expr }
+
+// --- Pacemaker ---
+pacemaker_decl = { "pacemaker" ~ "{" ~ pacemaker_item* ~ "}" }
+pacemaker_item = { ident ~ ":" ~ ident_list ~ ";" }
+
+// --- Adversary model ---
+adversary_decl = {
+    "adversary" ~ "{" ~
+        adversary_item* ~
+    "}"
+}
+
+adversary_item = { ident ~ ":" ~ ident ~ ";" }
+
+// --- Identity / key declarations ---
+identity_decl = {
+    "identity" ~ ident ~ ":" ~ identity_mode ~ ("key" ~ ident)? ~ ";"
+}
+
+identity_mode = {
+    "role"
+    | ("process" ~ "(" ~ ident ~ ")")
+}
+
+// --- Per-message channel/auth policy ---
+channel_decl = {
+    "channel" ~ ident ~ ":" ~ channel_auth_mode ~ ";"
+}
+
+channel_auth_mode = {
+    "authenticated"
+    | "unauthenticated"
+    | "signed"
+    | "unsigned"
+}
+
+// --- Per-message equivocation policy ---
+equivocation_decl = {
+    "equivocation" ~ ident ~ ":" ~ equivocation_policy_mode ~ ";"
+}
+
+equivocation_policy_mode = { "full" | "none" }
+
+// --- Committee selection ---
+committee_decl = {
+    "committee" ~ ident ~ "{" ~
+        committee_item* ~
+    "}"
+}
+
+committee_item = { ident ~ ":" ~ committee_value ~ ";" }
+committee_value = _{ float_literal | int_literal | ident }
+
+// --- Messages ---
+message_decl = {
+    "message" ~ ident ~ ("(" ~ field_list? ~ ")")? ~ ";"
+}
+
+field_list = { field ~ ("," ~ field)* }
+field = { ident ~ ":" ~ field_type ~ var_range? }
+field_type = { "bool" | "nat" | "int" | ident }
+
+// --- Cryptographic objects ---
+crypto_object_decl = {
+    crypto_object_kind ~ ident ~ "from" ~ ident ~ "threshold" ~ linear_expr_no_implicit ~ ("signer" ~ ident)? ~ ("conflicts" ~ crypto_conflict_policy)? ~ ";"
+}
+crypto_object_kind = { "certificate" | "threshold_signature" }
+crypto_conflict_policy = { "allow" | "exclusive" }
+
+// --- Roles ---
+role_decl = {
+    "role" ~ ident ~ "{" ~
+        role_item* ~
+    "}"
+}
+
+role_item = _{
+    var_decl
+    | init_decl
+    | phase_decl
+}
+
+var_decl = { "var" ~ ident ~ ":" ~ var_type ~ var_range? ~ ("=" ~ expr)? ~ ";" }
+var_type = { "bool" | "nat" | "int" | ident }
+var_range = { "in" ~ int_literal ~ ".." ~ int_literal }
+
+init_decl = { "init" ~ ident ~ ";" }
+
+phase_decl = {
+    "phase" ~ ident ~ "{" ~
+        transition_rule* ~
+    "}"
+}
+
+transition_rule = {
+    "when" ~ guard_expr ~ "=>" ~ "{" ~
+        action* ~
+    "}"
+}
+
+// --- Guards ---
+guard_expr = { guard_atom ~ (guard_op ~ guard_atom)* }
+
+guard_atom = _{
+    threshold_guard
+    | has_crypto_guard
+    | comparison_guard
+    | bool_guard
+    | "(" ~ guard_expr ~ ")"
+}
+
+threshold_guard = {
+    "received" ~ distinct_kw? ~ cmp_op ~ linear_expr_no_implicit ~ ident ~ msg_filter?
+}
+distinct_kw = { "distinct" }
+
+has_crypto_guard = { "has" ~ ident ~ msg_filter? }
+
+msg_filter = { "(" ~ msg_filter_list? ~ ")" }
+msg_filter_list = { msg_filter_item ~ ("," ~ msg_filter_item)* }
+msg_filter_item = { ident ~ "=" ~ expr }
+
+comparison_guard = {
+    expr ~ cmp_op ~ expr
+}
+
+bool_guard = { ident }
+
+guard_op = { "&&" | "||" }
+
+// --- Actions ---
+action = _{
+    send_action
+    | form_crypto_action
+    | lock_crypto_action
+    | justify_crypto_action
+    | assign_action
+    | goto_action
+    | decide_action
+}
+
+send_action = {
+    "send" ~ ident ~
+    ("(" ~ arg_list? ~ ")")? ~
+    ("to" ~ ident)? ~
+    ";"
+}
+form_crypto_action = {
+    "form" ~ ident ~
+    ("(" ~ arg_list? ~ ")")? ~
+    ("to" ~ ident)? ~
+    ";"
+}
+lock_crypto_action = {
+    "lock" ~ ident ~
+    ("(" ~ arg_list? ~ ")")? ~
+    ";"
+}
+justify_crypto_action = {
+    "justify" ~ ident ~
+    ("(" ~ arg_list? ~ ")")? ~
+    ";"
+}
+assign_action = { ident ~ "=" ~ expr ~ ";" }
+goto_action = { "goto" ~ "phase" ~ ident ~ ";" }
+decide_action = { "decide" ~ expr ~ ";" }
+
+arg_list = { arg ~ ("," ~ arg)* }
+arg = { named_arg | expr }
+named_arg = { ident ~ "=" ~ expr }
+
+// --- Expressions ---
+expr = { term ~ (add_op ~ term)* }
+term = { unary ~ (mul_op ~ unary)* }
+
+unary = {
+    not_op ~ unary_atom
+    | neg_op ~ unary_atom
+    | unary_atom
+}
+
+not_op = { "!" }
+neg_op = { "-" }
+
+unary_atom = _{
+    int_literal
+    | bool_literal
+    | ident
+    | "(" ~ expr ~ ")"
+}
+
+add_op = { "+" | "-" }
+mul_op = { "*" | "/" }
+
+// --- Linear expressions (for thresholds and resilience) ---
+linear_expr = { linear_term ~ (add_op ~ linear_term)* }
+linear_term = { (int_literal ~ "*"? ~ linear_atom) | linear_atom }
+linear_expr_no_implicit = { linear_term_no_implicit ~ (add_op ~ linear_term_no_implicit)* }
+linear_term_no_implicit = { (int_literal ~ "*" ~ linear_atom) | linear_atom }
+linear_atom = _{ int_literal | ident | "(" ~ linear_expr ~ ")" }
+
+// --- Comparison operators ---
+cmp_op = { ">=" | "<=" | "!=" | ">" | "<" | "==" | "=" }
+
+// --- Properties ---
+property_decl = {
+    "property" ~ ident ~ ":" ~ property_kind ~ "{" ~
+        quantified_formula ~
+    "}"
+}
+
+property_kind = { "agreement" | "validity" | "safety" | "invariant" | "liveness" }
+
+quantified_formula = {
+    (quantifier ~ ident ~ ":" ~ ident ~ ".")*  ~
+    formula_expr
+}
+
+quantifier = { "forall" | "exists" }
+
+formula_expr = { formula_atom ~ (formula_op ~ formula_atom)* }
+
+formula_atom = _{
+    formula_temporal_prefix
+    |
+    formula_comparison
+    | formula_not
+    | "(" ~ formula_expr ~ ")"
+}
+formula_temporal_prefix = { temporal_prefix_op ~ formula_atom }
+temporal_prefix_op = { "[]" | "<>" | "X" | "next" | "always" | "eventually" }
+
+formula_comparison = { formula_term ~ cmp_op ~ formula_term }
+
+formula_not = { "!" ~ formula_atom }
+
+formula_term = _{
+    int_literal
+    | bool_literal
+    | qualified_ident
+    | ident
+    | "(" ~ formula_expr ~ ")"
+}
+
+formula_op = { "&&" | "||" | "==>" | "<=>" | "U" | "W" | "R" | "~>" }
+
+qualified_ident = { ident ~ "." ~ ident }
+
+// --- Literals & identifiers ---
+float_literal = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ (("e" | "E") ~ ("-")? ~ ASCII_DIGIT+)? }
+int_literal = @{ ASCII_DIGIT+ }
+bool_literal = { "true" | "false" }
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+ident_list = { ident ~ ("," ~ ident)* }
+
+// --- Whitespace & comments ---
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

@@ -1,0 +1,91 @@
+// Buggy Consensus Protocol
+//
+// A simple flawed two-phase commit where processes can end up in
+// conflicting decision states. The design bug: processes that
+// gather enough votes commit (decide YES), while processes still
+// in the initial phase can be pushed to decide NO by adversary-
+// injected Abort messages.
+//
+// The thresholds are t+1 (too low). With n > 3t and f <= t
+// Byzantine faults:
+//   - Adversary injects Vote messages → some processes move to "voted"
+//   - Those processes see enough Votes (honest + adversary) → commit
+//   - Meanwhile, adversary also injects Abort → processes still in
+//     "propose" see Abort and decide NO
+//   - Result: some in done_yes, others in done_no → DISAGREEMENT
+//
+// Expected: UNSAFE with a counterexample.
+
+protocol BuggyConsensus {
+    parameters {
+        n: nat;     // total number of processes
+        t: nat;     // max number of faulty processes
+        f: nat;     // actual number of faulty processes
+    }
+
+    resilience {
+        n > 3*t;
+    }
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message Vote;
+    message Commit;
+    message Abort;
+
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init propose;
+
+        // Phase 1: on receiving a Vote, send own Vote and advance
+        phase propose {
+            // Normal path: got a vote, join the voting
+            when received >= 1 Vote => {
+                send Vote;
+                goto phase voted;
+            }
+            // BUG: processes can also abort if they see Abort messages
+            // This should NOT be possible with correct thresholds
+            when received >= 1 Abort => {
+                decision = false;
+                decided = true;
+                goto phase done_no;
+            }
+        }
+
+        // Phase 2: collect votes
+        phase voted {
+            when received >= t+1 Vote => {
+                send Commit;
+                goto phase ready_yes;
+            }
+        }
+
+        // Phase 3: collect commits → decide YES
+        phase ready_yes {
+            when received >= t+1 Commit => {
+                decision = true;
+                decided = true;
+                goto phase done_yes;
+            }
+        }
+
+        // Decision: YES
+        phase done_yes {
+        }
+
+        // Decision: NO
+        phase done_no {
+        }
+    }
+
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

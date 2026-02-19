@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "description": "CI quick library benchmark regression budget (baseline + significant-regression thresholds).",
+  "mode": "quick",
+  "statistics": {
+    "enabled": true,
+    "confidence": 0.95,
+    "bootstrap_samples": 2000,
+    "min_samples": 3,
+    "seed": 1337
+  },
+  "baseline": {
+    "source_report": "benchmarks/results/ci-library-smoke-local-samples3.json",
+    "total_elapsed_ms": 12183.539999999995,
+    "protocol_elapsed_ms": {
+      "examples/library/algorand_vote_cert.trs": 70.644,
+      "examples/library/casper_ffg_like.trs": 102.225,
+      "examples/library/diembft_epoch.trs": 296.736,
+      "examples/library/dls_partial_sync.trs": 42.172,
+      "examples/library/grandpa_finality.trs": 49.89,
+      "examples/library/hbbft_acs_like.trs": 44.349,
+      "examples/library/hotstuff_chained.trs": 96.201,
+      "examples/library/hotstuff_crypto_qc_bug_faithful.trs": 1665.803,
+      "examples/library/hotstuff_crypto_qc_safe_faithful.trs": 1017.337,
+      "examples/library/hotstuff_simple_safe_faithful.trs": 132.495,
+      "examples/library/jolteon_fast_hotstuff.trs": 1720.197,
+      "examples/library/multi_paxos_round.trs": 56.765,
+      "examples/library/narwhal_bullshark_vote.trs": 70.816,
+      "examples/library/paxos_basic.trs": 57.566,
+      "examples/library/pbft_core.trs": 50.056,
+      "examples/library/pbft_crypto_qc_bug_faithful.trs": 1333.562,
+      "examples/library/pbft_crypto_qc_safe_faithful.trs": 1039.924,
+      "examples/library/pbft_simple_safe.trs": 46.287,
+      "examples/library/pbft_simple_safe_faithful.trs": 108.744,
+      "examples/library/pbft_view_change.trs": 63.332,
+      "examples/library/qbft_round_change.trs": 62.108,
+      "examples/library/raft_election_safety.trs": 47.588,
+      "examples/library/reliable_broadcast_buggy.trs": 136.101,
+      "examples/library/reliable_broadcast_safe.trs": 70.835,
+      "examples/library/reliable_broadcast_safe_faithful.trs": 176.694,
+      "examples/library/sbft_committee.trs": 71.237,
+      "examples/library/streamlet.trs": 73.204,
+      "examples/library/temporal_liveness_counterexample.trs": 4.643,
+      "examples/library/tendermint_locking.trs": 96.017,
+      "examples/library/tendermint_crypto_qc_bug_faithful.trs": 1813.126,
+      "examples/library/tendermint_crypto_qc_safe_faithful.trs": 891.978,
+      "examples/library/trivial_live.trs": 14.538,
+      "examples/library/tusk_dag_cert.trs": 103.012,
+      "examples/library/viewstamped_replication.trs": 91.89,
+      "examples/library/viewstamped_replication_buggy.trs": 59.366,
+      "examples/library/viewstamped_replication_faithful.trs": 95.942,
+      "examples/library/zab_atomic_broadcast.trs": 78.708,
+      "examples/library/zab_atomic_broadcast_buggy.trs": 67.639,
+      "examples/library/zab_atomic_broadcast_faithful.trs": 89.722,
+      "examples/library/zyzzyva_fastpath.trs": 74.091
+    },
+    "protocol_elapsed_samples_ms": {
+      "examples/library/algorand_vote_cert.trs": [
+        1288.251,
+        70.644,
+        67.774
+      ],
+      "examples/library/casper_ffg_like.trs": [
+        104.044,
+        102.225,
+        101.681
+      ],
+      "examples/library/diembft_epoch.trs": [
+        296.582,
+        296.736,
+        301.305
+      ],
+      "examples/library/dls_partial_sync.trs": [
+        43.105,
+        40.101,
+        42.172
+      ],
+      "examples/library/grandpa_finality.trs": [
+        51.716,
+        49.89,
+        47.901
+      ],
+      "examples/library/hbbft_acs_like.trs": [
+        44.349,
+        44.422,
+        42.023
+      ],
+      "examples/library/hotstuff_chained.trs": [
+        96.201,
+        97.438,
+        94.191
+      ],
+      "examples/library/hotstuff_crypto_qc_bug_faithful.trs": [
+        1760.693,
+        1665.803,
+        1452.313
+      ],
+      "examples/library/hotstuff_crypto_qc_safe_faithful.trs": [
+        854.247,
+        1017.337,
+        1027.104
+      ],
+      "examples/library/hotstuff_simple_safe_faithful.trs": [
+        155.195,
+        128.585,
+        132.495
+      ],
+      "examples/library/jolteon_fast_hotstuff.trs": [
+        1691.551,
+        1720.879,
+        1720.197
+      ],
+      "examples/library/multi_paxos_round.trs": [
+        59.607,
+        56.765,
+        56.3
+      ],
+      "examples/library/narwhal_bullshark_vote.trs": [
+        70.645,
+        70.816,
+        74.014
+      ],
+      "examples/library/paxos_basic.trs": [
+        59.431,
+        56.816,
+        57.566
+      ],
+      "examples/library/pbft_core.trs": [
+        50.056,
+        48.073,
+        50.936
+      ],
+      "examples/library/pbft_crypto_qc_bug_faithful.trs": [
+        1240.683,
+        1389.134,
+        1333.562
+      ],
+      "examples/library/pbft_crypto_qc_safe_faithful.trs": [
+        1077.407,
+        1039.924,
+        989.148
+      ],
+      "examples/library/pbft_simple_safe.trs": [
+        49.28,
+        46.287,
+        46.212
+      ],
+      "examples/library/pbft_simple_safe_faithful.trs": [
+        109.045,
+        108.744,
+        104.229
+      ],
+      "examples/library/pbft_view_change.trs": [
+        65.741,
+        62.626,
+        63.332
+      ],
+      "examples/library/qbft_round_change.trs": [
+        62.108,
+        60.21,
+        62.553
+      ],
+      "examples/library/raft_election_safety.trs": [
+        48.672,
+        47.588,
+        46.767
+      ],
+      "examples/library/reliable_broadcast_buggy.trs": [
+        136.101,
+        150.887,
+        133.855
+      ],
+      "examples/library/reliable_broadcast_safe.trs": [
+        70.835,
+        70.819,
+        70.837
+      ],
+      "examples/library/reliable_broadcast_safe_faithful.trs": [
+        176.694,
+        176.204,
+        180.534
+      ],
+      "examples/library/sbft_committee.trs": [
+        73.174,
+        71.237,
+        70.479
+      ],
+      "examples/library/streamlet.trs": [
+        73.178,
+        73.204,
+        73.442
+      ],
+      "examples/library/temporal_liveness_counterexample.trs": [
+        9.24,
+        4.643,
+        4.577
+      ],
+      "examples/library/tendermint_locking.trs": [
+        96.017,
+        94.734,
+        96.972
+      ],
+      "examples/library/tendermint_crypto_qc_bug_faithful.trs": [
+        1743.509,
+        1865.235,
+        1813.126
+      ],
+      "examples/library/tendermint_crypto_qc_safe_faithful.trs": [
+        849.341,
+        930.827,
+        891.978
+      ],
+      "examples/library/trivial_live.trs": [
+        15.822,
+        14.001,
+        14.538
+      ],
+      "examples/library/tusk_dag_cert.trs": [
+        103.012,
+        99.792,
+        104.563
+      ],
+      "examples/library/viewstamped_replication.trs": [
+        125.379,
+        91.89,
+        90.636
+      ],
+      "examples/library/viewstamped_replication_buggy.trs": [
+        62.052,
+        59.324,
+        59.366
+      ],
+      "examples/library/viewstamped_replication_faithful.trs": [
+        96.573,
+        95.942,
+        95.706
+      ],
+      "examples/library/zab_atomic_broadcast.trs": [
+        81.239,
+        78.708,
+        78.546
+      ],
+      "examples/library/zab_atomic_broadcast_buggy.trs": [
+        70.225,
+        66.31,
+        67.639
+      ],
+      "examples/library/zab_atomic_broadcast_faithful.trs": [
+        89.722,
+        90.914,
+        89.707
+      ],
+      "examples/library/zyzzyva_fastpath.trs": [
+        82.08,
+        74.091,
+        72.31
+      ]
+    }
+  },
+  "thresholds": {
+    "per_protocol_regression_pct": 60.0,
+    "per_protocol_regression_ms": 150.0,
+    "min_regressed_protocols": 4,
+    "total_elapsed_regression_pct": 45.0,
+    "total_elapsed_regression_ms": 1500.0
+  },
+  "hard_limits": {
+    "max_protocol_elapsed_ms": 12000.0,
+    "max_total_elapsed_ms": 45000.0
+  }
+}

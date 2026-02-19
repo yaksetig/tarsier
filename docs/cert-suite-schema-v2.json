@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/cert-suite-schema-v2.json",
+  "title": "Tarsier Certification Suite Manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "enforce_library_coverage": {
+      "type": "boolean",
+      "default": false
+    },
+    "library_dir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "entries": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "class": {"const": "known_bug"}
+            },
+            "required": ["class"]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "family", "class", "notes", "model_sha256"],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\.trs$"
+        },
+        "verify": {
+          "type": "string",
+          "enum": ["safe", "probabilistically_safe", "unsafe", "unknown"]
+        },
+        "liveness": {
+          "type": "string",
+          "enum": ["live", "not_live", "unknown"]
+        },
+        "fair_liveness": {
+          "type": "string",
+          "enum": ["no_fair_cycle_up_to", "fair_cycle_found", "unknown"]
+        },
+        "prove": {
+          "type": "string",
+          "enum": ["safe", "probabilistically_safe", "unsafe", "not_proved", "unknown"]
+        },
+        "prove_fair": {
+          "type": "string",
+          "enum": ["live_proved", "fair_cycle_found", "not_proved", "unknown"]
+        },
+        "proof_engine": {
+          "type": "string",
+          "enum": ["kinduction", "pdr"]
+        },
+        "fairness": {
+          "type": "string",
+          "enum": ["weak", "strong"]
+        },
+        "cegar_iters": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "k": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "class": {
+          "type": "string",
+          "enum": ["expected_safe", "known_bug"]
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["minimal", "faithful"]
+        },
+        "variant_group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["variant"]
+          },
+          "then": {
+            "required": ["variant_group"]
+          }
+        },
+        {
+          "if": {
+            "required": ["variant_group"]
+          },
+          "then": {
+            "required": ["variant"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "class": {"const": "known_bug"}
+            },
+            "required": ["class"]
+          },
+          "then": {
+            "anyOf": [
+              {
+                "properties": {
+                  "verify": {"const": "unsafe"}
+                },
+                "required": ["verify"]
+              },
+              {
+                "properties": {
+                  "prove": {"const": "unsafe"}
+                },
+                "required": ["prove"]
+              },
+              {
+                "properties": {
+                  "liveness": {"const": "not_live"}
+                },
+                "required": ["liveness"]
+              },
+              {
+                "properties": {
+                  "fair_liveness": {"const": "fair_cycle_found"}
+                },
+                "required": ["fair_liveness"]
+              },
+              {
+                "properties": {
+                  "prove_fair": {"const": "fair_cycle_found"}
+                },
+                "required": ["prove_fair"]
+              }
+            ]
+          }
+        }
+      ],
+      "anyOf": [
+        {"required": ["verify"]},
+        {"required": ["liveness"]},
+        {"required": ["fair_liveness"]},
+        {"required": ["prove"]},
+        {"required": ["prove_fair"]}
+      ]
+    }
+  }
+}

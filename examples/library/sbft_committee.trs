@@ -1,0 +1,32 @@
+protocol SbftCommittee {
+    params n, t, f, gst;
+    resilience: n > 3*t;
+    adversary {
+        model: byzantine;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        values: sign;
+    }
+
+    message Prepare(view: nat, value: int);
+    message Commit(view: nat, value: int);
+
+    role Replica {
+        var decided: bool = false;
+        init pre;
+
+        phase pre {
+            when received >= 2*t+1 Commit(view=0, value=0) => {
+                decided = true;
+                goto phase decided;
+            }
+        }
+
+        phase decided {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica. p.decided == q.decided
+    }
+}

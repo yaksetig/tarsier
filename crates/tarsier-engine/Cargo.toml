@@ -1,0 +1,15 @@
+[package]
+name = "tarsier-engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tarsier-dsl = { path = "../tarsier-dsl" }
+tarsier-ir = { path = "../tarsier-ir" }
+tarsier-smt = { path = "../tarsier-smt" }
+tarsier-prob = { path = "../tarsier-prob" }
+thiserror.workspace = true
+miette.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,60 @@
+protocol HotstuffCryptoQCSafeFaithful {
+    params n, t, f, gst;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        auth: signed;
+        network: identity_selective;
+        delivery: per_recipient;
+        faults: per_recipient;
+        equivocation: none;
+        values: sign;
+    }
+
+    identity Replica: role key replica_key;
+    channel Vote: authenticated;
+
+    message Vote(view: nat in 0..0, value: bool);
+    certificate HighQC from Vote threshold 1 signer Replica conflicts exclusive;
+
+    role Replica {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init collect;
+
+        phase collect {
+            when received >= 1 Vote(view=0, value=true) => {
+                form HighQC(view=0, value=true) to Replica;
+            }
+            when received >= 1 Vote(view=0, value=false) => {
+                form HighQC(view=0, value=false) to Replica;
+            }
+            when has HighQC(view=0, value=true) => {
+                justify HighQC(view=0, value=true);
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+            when has HighQC(view=0, value=false) => {
+                justify HighQC(view=0, value=false);
+                decision = false;
+                decided = true;
+                decide false;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

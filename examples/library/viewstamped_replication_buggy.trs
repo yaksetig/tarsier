@@ -1,0 +1,44 @@
+protocol ViewstampedReplicationBuggy {
+    params n, t, f;
+    resilience: n = 2*f + 1;
+
+    adversary {
+        model: crash;
+        bound: f;
+        values: sign;
+    }
+
+    message StartView(view: nat);
+    message Prepare(view: nat, slot: nat);
+    message Commit(view: nat, slot: nat);
+
+    role Replica {
+        var decided: bool = false;
+        init start;
+
+        phase start {
+            when received >= 0 StartView(view=0) => {
+                goto phase prepare;
+            }
+        }
+
+        phase prepare {
+            when received >= 0 Prepare(view=0, slot=0) => {
+                goto phase commit;
+            }
+        }
+
+        phase commit {
+            when received >= 0 Commit(view=0, slot=0) => {
+                decided = true;
+                goto phase decided;
+            }
+        }
+
+        phase decided {}
+    }
+
+    property no_early_decide: safety {
+        forall p: Replica. p.decided == false
+    }
+}

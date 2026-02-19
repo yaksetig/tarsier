@@ -1,0 +1,58 @@
+protocol PBFTCryptoQCBugFaithful {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        auth: signed;
+        network: identity_selective;
+        delivery: per_recipient;
+        faults: per_recipient;
+        equivocation: full;
+        values: sign;
+    }
+
+    identity Replica: role key replica_key;
+    channel Prepare: authenticated;
+
+    message Prepare(value: bool);
+    certificate PrepareQC from Prepare threshold 1 signer Replica;
+
+    role Replica {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init collect;
+
+        phase collect {
+            when received >= 1 Prepare(value=true) => {
+                form PrepareQC(value=true) to Replica;
+            }
+            when received >= 1 Prepare(value=false) => {
+                form PrepareQC(value=false) to Replica;
+            }
+            when has PrepareQC(value=true) => {
+                lock PrepareQC(value=true);
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+            when has PrepareQC(value=false) => {
+                lock PrepareQC(value=false);
+                decision = false;
+                decided = true;
+                decide false;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

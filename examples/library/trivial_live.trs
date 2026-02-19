@@ -1,0 +1,23 @@
+protocol TrivialLive {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    role R {
+        var decided: bool = true;
+        init done;
+        phase done {}
+    }
+
+    property inv: safety {
+        forall p: R. p.decided == true
+    }
+
+    property live: liveness {
+        forall p: R. p.decided == true
+    }
+}

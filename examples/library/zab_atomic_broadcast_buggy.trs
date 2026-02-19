@@ -1,0 +1,46 @@
+protocol ZabAtomicBroadcastBuggy {
+    params n, t, f, gst;
+    resilience: n = 2*f + 1;
+
+    adversary {
+        model: omission;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        values: sign;
+    }
+
+    message Proposal(epoch: nat, zxid: nat);
+    message Ack(epoch: nat, zxid: nat);
+    message Commit(epoch: nat, zxid: nat);
+
+    role Replica {
+        var decided: bool = false;
+        init propose;
+
+        phase propose {
+            when received >= 0 Proposal(epoch=0, zxid=0) => {
+                goto phase acked;
+            }
+        }
+
+        phase acked {
+            when received >= 0 Ack(epoch=0, zxid=0) => {
+                goto phase commit;
+            }
+        }
+
+        phase commit {
+            when received >= 0 Commit(epoch=0, zxid=0) => {
+                decided = true;
+                goto phase decided;
+            }
+        }
+
+        phase decided {}
+    }
+
+    property no_early_decide: safety {
+        forall p: Replica. p.decided == false
+    }
+}

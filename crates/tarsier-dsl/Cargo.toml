@@ -1,0 +1,11 @@
+[package]
+name = "tarsier-dsl"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+pest = "2"
+pest_derive = "2"
+thiserror.workspace = true
+miette.workspace = true
+tracing.workspace = true

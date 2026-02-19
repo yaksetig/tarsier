@@ -1,0 +1,23 @@
+protocol TemporalLivenessExample {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    message Tick;
+
+    role Replica {
+        var progressed: bool = false;
+        init start;
+        phase start {
+            when received >= 0 Tick => {
+                progressed = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+
+    property progress: liveness {
+        forall p: Replica. (p.progressed == false) ~> <> (p.progressed == true)
+    }
+}

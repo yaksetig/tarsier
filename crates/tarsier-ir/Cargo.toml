@@ -1,0 +1,11 @@
+[package]
+name = "tarsier-ir"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tarsier-dsl = { path = "../tarsier-dsl" }
+thiserror.workspace = true
+indexmap.workspace = true
+tracing.workspace = true
+miette.workspace = true

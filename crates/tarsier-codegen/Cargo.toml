@@ -1,0 +1,10 @@
+[package]
+name = "tarsier-codegen"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tarsier-dsl = { path = "../tarsier-dsl" }
+thiserror.workspace = true
+
+[dev-dependencies]

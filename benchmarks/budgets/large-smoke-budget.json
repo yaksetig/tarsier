@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "description": "Large-model faithful benchmark regression budget (median + bootstrap significance).",
+  "mode": "quick",
+  "statistics": {
+    "enabled": true,
+    "confidence": 0.95,
+    "bootstrap_samples": 2000,
+    "min_samples": 3,
+    "seed": 1337
+  },
+  "baseline": {
+    "source_report": "benchmarks/results/large-smoke-local-baseline.json",
+    "total_elapsed_ms": 9736.575,
+    "protocol_elapsed_ms": {
+      "examples/library/diembft_epoch.trs": 282.375,
+      "examples/library/hotstuff_crypto_qc_bug_faithful.trs": 1563.378,
+      "examples/library/hotstuff_crypto_qc_safe_faithful.trs": 968.859,
+      "examples/library/jolteon_fast_hotstuff.trs": 1642.598,
+      "examples/library/narwhal_bullshark_vote.trs": 71.514,
+      "examples/library/pbft_crypto_qc_bug_faithful.trs": 1279.178,
+      "examples/library/pbft_crypto_qc_safe_faithful.trs": 963.736,
+      "examples/library/pbft_simple_safe_faithful.trs": 102.49,
+      "examples/library/reliable_broadcast_safe_faithful.trs": 172.728,
+      "examples/library/tendermint_crypto_qc_bug_faithful.trs": 1733.261,
+      "examples/library/tendermint_crypto_qc_safe_faithful.trs": 855.588,
+      "examples/library/viewstamped_replication_faithful.trs": 100.87
+    },
+    "protocol_elapsed_samples_ms": {
+      "examples/library/diembft_epoch.trs": [
+        1612.535,
+        267.162,
+        282.375
+      ],
+      "examples/library/hotstuff_crypto_qc_bug_faithful.trs": [
+        1552.306,
+        1627.378,
+        1563.378
+      ],
+      "examples/library/hotstuff_crypto_qc_safe_faithful.trs": [
+        968.859,
+        963.834,
+        1000.201
+      ],
+      "examples/library/jolteon_fast_hotstuff.trs": [
+        1642.598,
+        1367.923,
+        1674.805
+      ],
+      "examples/library/narwhal_bullshark_vote.trs": [
+        77.221,
+        71.514,
+        68.744
+      ],
+      "examples/library/pbft_crypto_qc_bug_faithful.trs": [
+        1302.319,
+        1279.178,
+        1226.89
+      ],
+      "examples/library/pbft_crypto_qc_safe_faithful.trs": [
+        955.79,
+        1015.588,
+        963.736
+      ],
+      "examples/library/pbft_simple_safe_faithful.trs": [
+        102.49,
+        101.743,
+        102.898
+      ],
+      "examples/library/reliable_broadcast_safe_faithful.trs": [
+        171.316,
+        172.728,
+        178.584
+      ],
+      "examples/library/tendermint_crypto_qc_bug_faithful.trs": [
+        1733.261,
+        1584.115,
+        1803.756
+      ],
+      "examples/library/tendermint_crypto_qc_safe_faithful.trs": [
+        855.588,
+        848.947,
+        864.994
+      ],
+      "examples/library/viewstamped_replication_faithful.trs": [
+        101.375,
+        100.87,
+        98.374
+      ]
+    }
+  },
+  "thresholds": {
+    "per_protocol_regression_pct": 50.0,
+    "per_protocol_regression_ms": 300.0,
+    "min_regressed_protocols": 2,
+    "total_elapsed_regression_pct": 35.0,
+    "total_elapsed_regression_ms": 2500.0
+  },
+  "hard_limits": {
+    "max_protocol_elapsed_ms": 15000.0,
+    "max_total_elapsed_ms": 90000.0
+  }
+}

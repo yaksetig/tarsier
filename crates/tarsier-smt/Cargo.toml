@@ -1,0 +1,13 @@
+[package]
+name = "tarsier-smt"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tarsier-ir = { path = "../tarsier-ir" }
+z3 = { version = "0.19", features = ["static-link-z3"] }
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+indexmap.workspace = true

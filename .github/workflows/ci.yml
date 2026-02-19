@@ -1,0 +1,442 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rustfmt
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --all-targets
+
+  ux-usability-regression:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Solver Versions
+        run: |
+          z3 --version
+          cvc5 --version
+
+      - name: Playground + CLI Usability Smoke
+        run: ./scripts/ux-regression-smoke.sh
+
+  proof-mode-independent-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Solver Versions
+        run: |
+          z3 --version
+          cvc5 --version
+
+      - name: Enable Proof Checker Script
+        run: chmod +x ./.github/scripts/check_proof_object.py
+
+      - name: Run Proof-Mode Analysis
+        run: |
+          mkdir -p artifacts
+          cargo run -p tarsier-cli -- analyze examples/trivial_live.trs \
+            --mode proof \
+            --solver z3 \
+            --depth 6 \
+            --k 8 \
+            --timeout 120 \
+            --soundness strict \
+            --fairness weak \
+            --format json \
+            --report-out artifacts/proof-mode-live-report.json
+
+      - name: Generate Proof Bundles From Prove Commands
+        run: |
+          cargo run -p tarsier-cli -- prove examples/reliable_broadcast.trs \
+            --solver z3 \
+            --k 12 \
+            --timeout 120 \
+            --soundness strict \
+            --engine kinduction \
+            --cert-out certs/proof-gate/safety
+
+          cargo run -p tarsier-cli -- prove-fair examples/trivial_live.trs \
+            --solver z3 \
+            --k 8 \
+            --timeout 120 \
+            --soundness strict \
+            --fairness weak \
+            --cert-out certs/proof-gate/live
+
+      - name: Independent Checker Gate (Safety)
+        run: |
+          cargo run -p tarsier-certcheck -- certs/proof-gate/safety \
+            --solvers z3,cvc5 \
+            --require-two-solvers \
+            --emit-proofs certs/proof-gate/safety/proofs \
+            --require-proofs \
+            --proof-checker ./.github/scripts/check_proof_object.py \
+            --json-report certs/proof-gate/safety/certcheck-report.json
+
+      - name: Independent Checker Gate (Fair-Liveness)
+        run: |
+          cargo run -p tarsier-certcheck -- certs/proof-gate/live \
+            --solvers z3,cvc5 \
+            --require-two-solvers \
+            --emit-proofs certs/proof-gate/live/proofs \
+            --require-proofs \
+            --proof-checker ./.github/scripts/check_proof_object.py \
+            --json-report certs/proof-gate/live/certcheck-report.json
+
+      - name: Upload Proof-Mode Gate Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: proof-mode-independent-gate
+          path: |
+            artifacts/proof-mode-live-report.json
+            certs/proof-gate/safety/certcheck-report.json
+            certs/proof-gate/live/certcheck-report.json
+
+  certificate-check:
+    runs-on: ubuntu-latest
+    needs:
+      - build-test
+      - proof-mode-independent-gate
+      - corpus-certification-gate
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [kinduction, pdr]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Solver Versions
+        run: |
+          z3 --version
+          cvc5 --version
+
+      - name: Generate Certificate Bundle
+        run: |
+          out_dir="certs/${{ matrix.engine }}"
+          cargo run -p tarsier-cli -- certify-safety examples/reliable_broadcast.trs \
+            --engine "${{ matrix.engine }}" \
+            --k 12 \
+            --timeout 120 \
+            --out "${out_dir}"
+
+      - name: Independently Check Certificate
+        run: |
+          out_dir="certs/${{ matrix.engine }}"
+          cargo run -p tarsier-certcheck -- "${out_dir}" \
+            --solvers z3,cvc5 \
+            --require-two-solvers \
+            --json-report "${out_dir}/certcheck-report.json"
+
+  certificate-check-fair-liveness:
+    runs-on: ubuntu-latest
+    needs:
+      - build-test
+      - proof-mode-independent-gate
+      - corpus-certification-gate
+    strategy:
+      fail-fast: false
+      matrix:
+        fairness: [weak, strong]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Solver Versions
+        run: |
+          z3 --version
+          cvc5 --version
+
+      - name: Generate Fair-Liveness Certificate Bundle
+        run: |
+          out_dir="certs/fair-${{ matrix.fairness }}"
+          cargo run -p tarsier-cli -- certify-fair-liveness examples/trivial_live.trs \
+            --fairness "${{ matrix.fairness }}" \
+            --k 8 \
+            --timeout 120 \
+            --out "${out_dir}"
+
+      - name: Independently Check Certificate
+        run: |
+          out_dir="certs/fair-${{ matrix.fairness }}"
+          cargo run -p tarsier-certcheck -- "${out_dir}" \
+            --solvers z3,cvc5 \
+            --require-two-solvers \
+            --json-report "${out_dir}/certcheck-report.json"
+
+  certificate-proof-object-validation:
+    runs-on: ubuntu-latest
+    needs:
+      - build-test
+      - proof-mode-independent-gate
+      - corpus-certification-gate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Solver Versions
+        run: |
+          z3 --version
+          cvc5 --version
+
+      - name: Enable Proof Checker Script
+        run: chmod +x ./.github/scripts/check_proof_object.py
+
+      - name: Generate Certificate Bundle
+        run: |
+          out_dir="certs/proof-validation"
+          cargo run -p tarsier-cli -- certify-safety examples/reliable_broadcast.trs \
+            --engine kinduction \
+            --k 12 \
+            --timeout 120 \
+            --out "${out_dir}"
+
+      - name: Replay With Proof-Object Validation
+        run: |
+          out_dir="certs/proof-validation"
+          cargo run -p tarsier-certcheck -- "${out_dir}" \
+            --solvers z3,cvc5 \
+            --require-two-solvers \
+            --emit-proofs "${out_dir}/proofs" \
+            --require-proofs \
+            --proof-checker ./.github/scripts/check_proof_object.py \
+            --json-report "${out_dir}/certcheck-report.json"
+
+      - name: Upload Proof Validation Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: certcheck-proof-validation-report
+          path: certs/proof-validation/certcheck-report.json
+
+  corpus-certification-gate:
+    runs-on: ubuntu-22.04
+    needs:
+      - build-test
+      - proof-mode-independent-gate
+    env:
+      EXPECTED_RUSTC: "1.92.0"
+      EXPECTED_Z3: "4.12.5"
+      EXPECTED_CVC5: "1.1.2"
+      EXPECTED_OS: "ubuntu-22.04"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Pinned Environment
+        run: ./.github/scripts/verify_pinned_env.sh
+
+      - name: Run Protocol Certification Suite
+        run: |
+          ./scripts/certify-corpus.sh
+
+      - name: Upload Certification Suite Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cert-suite-report
+          path: artifacts/cert-suite.json
+
+  corpus-certification-matrix:
+    runs-on: ubuntu-22.04
+    needs:
+      - build-test
+      - corpus-certification-gate
+    strategy:
+      fail-fast: false
+      matrix:
+        solver: [z3, cvc5]
+        engine: [kinduction, pdr]
+        exclude:
+          - solver: z3
+            engine: kinduction
+    env:
+      EXPECTED_RUSTC: "1.92.0"
+      EXPECTED_Z3: "4.12.5"
+      EXPECTED_CVC5: "1.1.2"
+      EXPECTED_OS: "ubuntu-22.04"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Pinned Environment
+        run: ./.github/scripts/verify_pinned_env.sh
+
+      - name: Run Corpus Certification (${{ matrix.solver }} + ${{ matrix.engine }})
+        run: |
+          ./scripts/certify-corpus.sh
+        env:
+          SOLVER: ${{ matrix.solver }}
+          ENGINE: ${{ matrix.engine }}
+          OUT: artifacts/cert-suite-${{ matrix.solver }}-${{ matrix.engine }}.json
+          ARTIFACTS_DIR: artifacts/cert-suite-${{ matrix.solver }}-${{ matrix.engine }}
+
+      - name: Upload Certification Suite Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cert-suite-report-${{ matrix.solver }}-${{ matrix.engine }}
+          path: artifacts/cert-suite-${{ matrix.solver }}-${{ matrix.engine }}.json
+
+  library-benchmark-smoke:
+    runs-on: ubuntu-latest
+    needs:
+      - build-test
+      - proof-mode-independent-gate
+      - corpus-certification-gate
+      - corpus-certification-matrix
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run Library Benchmark Smoke
+        run: |
+          python3 benchmarks/run_library_bench.py \
+            --mode quick \
+            --depth 4 \
+            --timeout 90 \
+            --samples 3 \
+            --perf-budget benchmarks/budgets/ci-quick-smoke-budget.json \
+            --out benchmarks/results/ci-library-smoke.json
+
+      - name: Upload Library Benchmark Smoke Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: library-benchmark-smoke
+          path: benchmarks/results/ci-library-smoke.json
+
+  library-benchmark-large:
+    runs-on: ubuntu-latest
+    needs:
+      - build-test
+      - proof-mode-independent-gate
+      - corpus-certification-gate
+      - corpus-certification-matrix
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run Large-Model Library Benchmark
+        run: |
+          python3 benchmarks/run_library_bench.py \
+            --mode quick \
+            --depth 4 \
+            --timeout 120 \
+            --samples 3 \
+            --protocols benchmarks/protocols-large.txt \
+            --perf-budget benchmarks/budgets/large-smoke-budget.json \
+            --out benchmarks/results/ci-library-large-smoke.json
+
+      - name: Upload Large-Model Benchmark Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: library-benchmark-large
+          path: benchmarks/results/ci-library-large-smoke.json

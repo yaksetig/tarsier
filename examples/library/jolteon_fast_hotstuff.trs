@@ -1,0 +1,37 @@
+protocol JolteonFastHotstuff {
+    params n, t, f, gst;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        equivocation: none;
+        auth: signed;
+        values: sign;
+    }
+
+    message NewView(view: nat, qc: int);
+    certificate HighQC from NewView threshold 2*t+1 signer Replica;
+
+    role Replica {
+        var decided: bool = false;
+        init prepare;
+
+        phase prepare {
+            when received distinct >= 2*t+1 NewView(view=0, qc=0) => {
+                form HighQC(view=0, qc=0) to Replica;
+                lock HighQC(view=0, qc=0);
+                decided = true;
+                goto phase commit;
+            }
+        }
+
+        phase commit {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica. p.decided == q.decided
+    }
+}

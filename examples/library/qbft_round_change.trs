@@ -1,0 +1,43 @@
+protocol QBFTRoundChange {
+    params n, t, f;
+    resilience: n = 3*f + 1;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        equivocation: none;
+        auth: signed;
+        values: sign;
+    }
+
+    message Prepare(round: nat);
+    message RoundChange(round: nat);
+
+    role Validator {
+        var decided: bool = false;
+        init preprepare;
+
+        phase preprepare {
+            when received distinct >= 2*f+1 Prepare(round=0) => {
+                decided = true;
+                goto phase decided;
+            }
+            when received >= f+1 RoundChange(round=1) => {
+                goto phase round_change;
+            }
+        }
+
+        phase round_change {
+            when received distinct >= 2*f+1 Prepare(round=1) => {
+                decided = true;
+                goto phase decided;
+            }
+        }
+
+        phase decided {}
+    }
+
+    property agreement: agreement {
+        forall p: Validator. forall q: Validator. p.decided == q.decided
+    }
+}

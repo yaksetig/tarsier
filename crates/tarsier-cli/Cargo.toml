@@ -1,0 +1,22 @@
+[package]
+name = "tarsier-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "tarsier"
+path = "src/main.rs"
+
+[dependencies]
+tarsier-dsl = { path = "../tarsier-dsl" }
+tarsier-ir = { path = "../tarsier-ir" }
+tarsier-engine = { path = "../tarsier-engine" }
+tarsier-codegen = { path = "../tarsier-codegen" }
+tarsier-prob = { path = "../tarsier-prob" }
+tarsier-proof-kernel = { path = "../tarsier-proof-kernel" }
+clap = { version = "4", features = ["derive"] }
+miette = { version = "7", features = ["fancy"] }
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde.workspace = true
+serde_json.workspace = true

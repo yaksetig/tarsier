@@ -1,0 +1,37 @@
+protocol HbbftAcsLike {
+    params n, t, f;
+    resilience: n = 3*f + 1;
+
+    adversary {
+        model: omission;
+        bound: f;
+        values: sign;
+    }
+
+    message RBCDone(round: nat);
+    message BACommit(round: nat);
+
+    role Node {
+        var decided: bool = false;
+        init rbc;
+
+        phase rbc {
+            when received >= n-f RBCDone(round=0) => {
+                goto phase ba;
+            }
+        }
+
+        phase ba {
+            when received >= n-f BACommit(round=0) => {
+                decided = true;
+                goto phase decided;
+            }
+        }
+
+        phase decided {}
+    }
+
+    property agreement: agreement {
+        forall p: Node. forall q: Node. p.decided == q.decided
+    }
+}
