@@ -689,4 +689,3 @@ protocol AsyncCheck {
         "Should warn about finality under pure asynchrony"
     );
 }
-

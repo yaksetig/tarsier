@@ -38,6 +38,39 @@ def check_json_valid(path: Path, label: str) -> dict | None:
         return None
 
 
+def check_tool_model_file(sid: str, tool: str, model_file: object, manifest_label: str) -> None:
+    if not isinstance(model_file, str) or not model_file:
+        ERRORS.append(
+            f"{manifest_label}: scenario '{sid}' tool '{tool}' missing non-empty file path"
+        )
+        return
+    file_path = ROOT / model_file
+    if not file_path.exists():
+        ERRORS.append(
+            f"{manifest_label}: scenario '{sid}' tool '{tool}' file does not exist: {model_file}"
+        )
+
+
+def check_tool_command_template(
+    sid: str,
+    tool: str,
+    cfg: dict,
+    manifest_label: str,
+    *,
+    required_key: str = "command_template",
+) -> None:
+    template = cfg.get(required_key)
+    if not isinstance(template, str) or not template:
+        ERRORS.append(
+            f"{manifest_label}: scenario '{sid}' tool '{tool}' missing non-empty {required_key}"
+        )
+        return
+    if "{binary}" not in template:
+        ERRORS.append(
+            f"{manifest_label}: scenario '{sid}' tool '{tool}' {required_key} must include '{{binary}}'"
+        )
+
+
 def check_manifest() -> None:
     manifest = check_json_valid(
         ROOT / "benchmarks" / "cross_tool_scenarios" / "scenario_manifest.json",
@@ -66,26 +99,18 @@ def check_manifest() -> None:
                 )
                 continue
             ext_cfg = tool_inputs.get(external_tool, {})
-            ext_file = ext_cfg.get("file")
-            ext_tpl = ext_cfg.get("command_template")
-            if not isinstance(ext_file, str) or not ext_file:
-                ERRORS.append(
-                    f"Scenario '{sid}' external tool '{external_tool}' missing non-empty file path"
-                )
-            else:
-                file_path = ROOT / ext_file
-                if not file_path.exists():
-                    ERRORS.append(
-                        f"Scenario '{sid}' external tool '{external_tool}' file does not exist: {ext_file}"
-                    )
-            if not isinstance(ext_tpl, str) or not ext_tpl:
-                ERRORS.append(
-                    f"Scenario '{sid}' external tool '{external_tool}' missing non-empty command_template"
-                )
-            elif "{binary}" not in ext_tpl:
-                ERRORS.append(
-                    f"Scenario '{sid}' external tool '{external_tool}' command_template must include '{{binary}}'"
-                )
+            check_tool_model_file(
+                sid,
+                external_tool,
+                ext_cfg.get("file"),
+                "scenario manifest",
+            )
+            check_tool_command_template(
+                sid,
+                external_tool,
+                ext_cfg,
+                "scenario manifest",
+            )
             # Optional: validate command_template_real if present
             ext_tpl_real = ext_cfg.get("command_template_real")
             if ext_tpl_real is not None:
@@ -97,6 +122,81 @@ def check_manifest() -> None:
                     ERRORS.append(
                         f"Scenario '{sid}' external tool '{external_tool}' command_template_real must include '{{binary}}'"
                     )
+
+
+def check_real_smoke_manifests() -> None:
+    smoke_contracts = [
+        ("scenario_manifest_real_bymc_smoke.json", "bymc", True),
+        ("scenario_manifest_real_spin_smoke.json", "spin", False),
+    ]
+    for filename, external_tool, require_real_template in smoke_contracts:
+        manifest_label = f"{external_tool} real smoke manifest"
+        manifest = check_json_valid(
+            ROOT / "benchmarks" / "cross_tool_scenarios" / filename,
+            manifest_label,
+        )
+        if manifest is None:
+            continue
+
+        if manifest.get("schema_version") != 1:
+            ERRORS.append(f"{manifest_label}: schema_version must be 1")
+
+        scenarios = manifest.get("scenarios")
+        if not isinstance(scenarios, list) or not scenarios:
+            ERRORS.append(f"{manifest_label}: scenarios must be a non-empty list")
+            continue
+
+        for scenario in scenarios:
+            sid = scenario.get("id", "<unknown>")
+            for key in ("id", "property", "expected_verdict", "assumptions", "tool_inputs"):
+                if key not in scenario:
+                    ERRORS.append(f"{manifest_label}: scenario '{sid}' missing required key '{key}'")
+
+            tool_inputs = scenario.get("tool_inputs", {})
+            tarsier_cfg = tool_inputs.get("tarsier")
+            if not isinstance(tarsier_cfg, dict):
+                ERRORS.append(f"{manifest_label}: scenario '{sid}' missing tool_inputs.tarsier")
+            else:
+                check_tool_model_file(
+                    sid,
+                    "tarsier",
+                    tarsier_cfg.get("file"),
+                    manifest_label,
+                )
+
+            ext_cfg = tool_inputs.get(external_tool)
+            if not isinstance(ext_cfg, dict):
+                ERRORS.append(
+                    f"{manifest_label}: scenario '{sid}' missing tool_inputs.{external_tool}"
+                )
+                continue
+
+            check_tool_model_file(
+                sid,
+                external_tool,
+                ext_cfg.get("file"),
+                manifest_label,
+            )
+            check_tool_command_template(
+                sid,
+                external_tool,
+                ext_cfg,
+                manifest_label,
+            )
+
+            if ext_cfg.get("execution_mode") != "real":
+                ERRORS.append(
+                    f"{manifest_label}: scenario '{sid}' tool '{external_tool}' must set execution_mode='real'"
+                )
+
+            if require_real_template:
+                check_tool_command_template(
+                    sid,
+                    external_tool,
+                    ext_cfg,
+                    manifest_label,
+                    required_key="command_template_real",
+                )
 
 
 def check_schema() -> None:
@@ -141,39 +241,43 @@ def check_tests() -> None:
 def check_no_placeholder_models() -> None:
     """T1-CI-1: Verify that all .ta model files in the manifest are real models,
     not placeholders."""
-    manifest_path = ROOT / "benchmarks" / "cross_tool_scenarios" / "scenario_manifest.json"
-    if not manifest_path.exists():
-        return  # checked elsewhere
-    with open(manifest_path) as f:
-        manifest = json.load(f)
-    for s in manifest.get("scenarios", []):
-        sid = s.get("id", "<unknown>")
-        for tool in ("bymc",):
-            cfg = s.get("tool_inputs", {}).get(tool, {})
-            model_file = cfg.get("file")
-            if not model_file or not model_file.endswith(".ta"):
-                continue
-            file_path = ROOT / model_file
-            if not file_path.exists():
-                continue  # file-existence already checked by check_manifest()
-            content = file_path.read_text()
-            non_empty_lines = [l for l in content.splitlines() if l.strip()]
-            if len(non_empty_lines) < 5:
-                ERRORS.append(
-                    f"Scenario '{sid}' tool '{tool}' model {model_file} has only "
-                    f"{len(non_empty_lines)} non-empty lines (placeholder?)"
-                )
-            lower = content.lower()
-            if "mock" in lower.split("/*")[0] and "placeholder" in lower:
-                ERRORS.append(
-                    f"Scenario '{sid}' tool '{tool}' model {model_file} "
-                    f"contains 'Mock/Placeholder' comment (still a stub?)"
-                )
-            if "specifications (0)" in content:
-                ERRORS.append(
-                    f"Scenario '{sid}' tool '{tool}' model {model_file} "
-                    f"has empty 'specifications (0)' (no properties exported)"
-                )
+    manifest_paths = [
+        ROOT / "benchmarks" / "cross_tool_scenarios" / "scenario_manifest.json",
+        ROOT / "benchmarks" / "cross_tool_scenarios" / "scenario_manifest_real_bymc_smoke.json",
+    ]
+    for manifest_path in manifest_paths:
+        if not manifest_path.exists():
+            continue
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        for s in manifest.get("scenarios", []):
+            sid = s.get("id", "<unknown>")
+            for tool in ("bymc",):
+                cfg = s.get("tool_inputs", {}).get(tool, {})
+                model_file = cfg.get("file")
+                if not model_file or not model_file.endswith(".ta"):
+                    continue
+                file_path = ROOT / model_file
+                if not file_path.exists():
+                    continue  # file-existence checked in manifest checks
+                content = file_path.read_text()
+                non_empty_lines = [l for l in content.splitlines() if l.strip()]
+                if len(non_empty_lines) < 5:
+                    ERRORS.append(
+                        f"Scenario '{sid}' tool '{tool}' model {model_file} has only "
+                        f"{len(non_empty_lines)} non-empty lines (placeholder?)"
+                    )
+                lower = content.lower()
+                if "mock" in lower.split("/*")[0] and "placeholder" in lower:
+                    ERRORS.append(
+                        f"Scenario '{sid}' tool '{tool}' model {model_file} "
+                        f"contains 'Mock/Placeholder' comment (still a stub?)"
+                    )
+                if "specifications (0)" in content:
+                    ERRORS.append(
+                        f"Scenario '{sid}' tool '{tool}' model {model_file} "
+                        f"has empty 'specifications (0)' (no properties exported)"
+                    )
 
 
 def check_readme() -> None:
@@ -187,6 +291,7 @@ def check_readme() -> None:
 
 def main() -> None:
     check_manifest()
+    check_real_smoke_manifests()
     check_schema()
     check_runner()
     check_tests()

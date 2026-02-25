@@ -834,4 +834,3 @@ protocol MixedProps {
         other => panic!("Expected SAFE verification, got: {other}"),
     }
 }
-

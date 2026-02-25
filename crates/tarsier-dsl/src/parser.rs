@@ -3241,12 +3241,16 @@ protocol P {
 
         // Check goto in first phase
         let actions = &role.phases[0].node.transitions[0].node.actions;
-        assert!(actions.iter().any(|a| matches!(a, Action::GotoPhase { phase } if phase == "ready")));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, Action::GotoPhase { phase } if phase == "ready")));
 
         // Check decide in second phase
         let actions2 = &role.phases[1].node.transitions[0].node.actions;
         assert!(actions2.iter().any(|a| matches!(a, Action::Decide { .. })));
-        assert!(actions2.iter().any(|a| matches!(a, Action::GotoPhase { phase } if phase == "done")));
+        assert!(actions2
+            .iter()
+            .any(|a| matches!(a, Action::GotoPhase { phase } if phase == "done")));
     }
 
     // ---------------------------------------------------------------
@@ -3414,9 +3418,13 @@ protocol P {
 }
 "#;
         let prog = parse(src, "send_named.trs").expect("parse should succeed");
-        let actions = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0].node.actions;
+        let actions = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0]
+            .node
+            .actions;
         match &actions[0] {
-            Action::Send { message_type, args, .. } => {
+            Action::Send {
+                message_type, args, ..
+            } => {
                 assert_eq!(message_type, "Vote");
                 assert_eq!(args.len(), 2);
                 match &args[0] {
@@ -3458,7 +3466,9 @@ protocol P {
 }
 "#;
         let prog = parse(src, "send_pos.trs").expect("parse should succeed");
-        let actions = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0].node.actions;
+        let actions = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0]
+            .node
+            .actions;
         match &actions[0] {
             Action::Send { args, .. } => {
                 assert_eq!(args.len(), 1);
@@ -3500,7 +3510,9 @@ protocol P {
 }
 "#;
         let prog = parse(src, "assign_arith.trs").expect("parse should succeed");
-        let actions = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0].node.actions;
+        let actions = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0]
+            .node
+            .actions;
 
         // x = x + 1
         match &actions[0] {
@@ -3595,7 +3607,9 @@ protocol P {
 }
 "#;
         let prog = parse(src, "n_minus_t.trs").expect("parse should succeed");
-        let guard = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0].node.guard;
+        let guard = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0]
+            .node
+            .guard;
         match guard {
             GuardExpr::Threshold(tg) => {
                 // n-t should be Sub(Var("n"), Var("t"))
@@ -3629,7 +3643,9 @@ protocol P {
 }
 "#;
         let prog = parse(src, "2t_plus_1.trs").expect("parse should succeed");
-        let guard = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0].node.guard;
+        let guard = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0]
+            .node
+            .guard;
         match guard {
             GuardExpr::Threshold(tg) => {
                 // 2*t+1 should be Add(Mul(2, Var("t")), Const(1))
@@ -3637,7 +3653,8 @@ protocol P {
                     LinearExpr::Add(l, r) => {
                         assert!(
                             matches!(l.as_ref(), LinearExpr::Mul(2, inner) if matches!(inner.as_ref(), LinearExpr::Var(v) if v == "t")),
-                            "Expected Mul(2, Var(t)), got: {:?}", l
+                            "Expected Mul(2, Var(t)), got: {:?}",
+                            l
                         );
                         assert_eq!(**r, LinearExpr::Const(1));
                     }
@@ -3663,7 +3680,12 @@ protocol P {
 }
 "#;
         let prog = parse(src, "resil.trs").expect("parse should succeed");
-        let resil = prog.protocol.node.resilience.as_ref().expect("should have resilience");
+        let resil = prog
+            .protocol
+            .node
+            .resilience
+            .as_ref()
+            .expect("should have resilience");
         let cond = &resil.condition;
         assert!(matches!(&cond.lhs, LinearExpr::Var(v) if v == "n"));
         assert_eq!(cond.op, CmpOp::Gt);
@@ -3757,7 +3779,9 @@ protocol P {
 }
 "#;
         let prog = parse(src, "msg_args.trs").expect("parse should succeed");
-        let guard = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0].node.guard;
+        let guard = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0]
+            .node
+            .guard;
         match guard {
             GuardExpr::Threshold(tg) => {
                 assert_eq!(tg.message_type, "Vote");
@@ -3793,7 +3817,9 @@ protocol P {
 }
 "#;
         let prog = parse(src, "compound_guard.trs").expect("parse should succeed");
-        let guard = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0].node.guard;
+        let guard = &prog.protocol.node.roles[0].node.phases[0].node.transitions[0]
+            .node
+            .guard;
         match guard {
             GuardExpr::And(lhs, rhs) => {
                 assert!(matches!(lhs.as_ref(), GuardExpr::Threshold(_)));

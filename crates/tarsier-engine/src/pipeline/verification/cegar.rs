@@ -1130,7 +1130,11 @@ impl<T: Clone> CegarStageEvalCache<T> {
         }
     }
 
-    pub(crate) fn eval<F>(&mut self, refinement: &CegarRefinement, compute: F) -> Result<T, PipelineError>
+    pub(crate) fn eval<F>(
+        &mut self,
+        refinement: &CegarRefinement,
+        compute: F,
+    ) -> Result<T, PipelineError>
     where
         F: FnOnce() -> Result<T, PipelineError>,
     {

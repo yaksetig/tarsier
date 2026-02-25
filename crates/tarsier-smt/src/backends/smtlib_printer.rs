@@ -197,10 +197,7 @@ mod tests {
         let inner_and = SmtTerm::and(vec![SmtTerm::var("a"), SmtTerm::var("b")]);
         let inner_and2 = SmtTerm::and(vec![SmtTerm::var("c"), SmtTerm::var("d")]);
         let outer_or = SmtTerm::or(vec![inner_and, inner_and2]);
-        assert_eq!(
-            to_smtlib(&outer_or),
-            "(or (and a b) (and c d))"
-        );
+        assert_eq!(to_smtlib(&outer_or), "(or (and a b) (and c d))");
     }
 
     #[test]
@@ -222,10 +219,7 @@ mod tests {
         let antecedent = SmtTerm::and(vec![SmtTerm::var("a"), SmtTerm::var("b")]);
         let consequent = SmtTerm::or(vec![SmtTerm::var("c"), SmtTerm::var("d")]);
         let imp = antecedent.implies(consequent);
-        assert_eq!(
-            to_smtlib(&imp),
-            "(=> (and a b) (or c d))"
-        );
+        assert_eq!(to_smtlib(&imp), "(=> (and a b) (or c d))");
     }
 
     #[test]
@@ -287,11 +281,7 @@ mod tests {
                 ("y".to_string(), SmtSort::Int),
                 ("b".to_string(), SmtSort::Bool),
             ],
-            Box::new(
-                SmtTerm::var("x")
-                    .add(SmtTerm::var("y"))
-                    .ge(SmtTerm::int(0)),
-            ),
+            Box::new(SmtTerm::var("x").add(SmtTerm::var("y")).ge(SmtTerm::int(0))),
         );
         assert_eq!(
             to_smtlib(&forall),
@@ -326,10 +316,7 @@ mod tests {
         let rhs = SmtTerm::var("a").sub(SmtTerm::var("b"));
         let product = lhs.mul(rhs);
         let comparison = product.ge(SmtTerm::int(0));
-        assert_eq!(
-            to_smtlib(&comparison),
-            "(>= (* (+ x y) (- a b)) 0)"
-        );
+        assert_eq!(to_smtlib(&comparison), "(>= (* (+ x y) (- a b)) 0)");
     }
 
     #[test]
@@ -361,10 +348,7 @@ mod tests {
             Box::new(SmtTerm::var("x").add(SmtTerm::int(1))),
             Box::new(SmtTerm::var("x").sub(SmtTerm::int(1))),
         );
-        assert_eq!(
-            to_smtlib(&term),
-            "(ite (not flag) (+ x 1) (- x 1))"
-        );
+        assert_eq!(to_smtlib(&term), "(ite (not flag) (+ x 1) (- x 1))");
     }
 
     #[test]
@@ -381,10 +365,7 @@ mod tests {
             vec![("y".to_string(), SmtSort::Int)],
             Box::new(SmtTerm::var("x").eq(SmtTerm::var("y"))),
         );
-        let outer = SmtTerm::ForAll(
-            vec![("x".to_string(), SmtSort::Int)],
-            Box::new(inner),
-        );
+        let outer = SmtTerm::ForAll(vec![("x".to_string(), SmtSort::Int)], Box::new(inner));
         assert_eq!(
             to_smtlib(&outer),
             "(forall ((x Int)) (exists ((y Int)) (= x y)))"

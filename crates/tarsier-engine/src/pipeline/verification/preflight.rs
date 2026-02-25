@@ -744,12 +744,8 @@ mod tests {
 
     #[test]
     fn guard_uses_threshold_on_threshold_guard() {
-        let guard = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Vote",
-            ast::CmpOp::Ge,
-            false,
-            None,
-        ));
+        let guard =
+            ast::GuardExpr::Threshold(make_threshold_guard("Vote", ast::CmpOp::Ge, false, None));
         assert!(guard_uses_threshold(&guard));
     }
 
@@ -761,12 +757,8 @@ mod tests {
 
     #[test]
     fn guard_uses_threshold_nested_and() {
-        let inner = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Vote",
-            ast::CmpOp::Ge,
-            false,
-            None,
-        ));
+        let inner =
+            ast::GuardExpr::Threshold(make_threshold_guard("Vote", ast::CmpOp::Ge, false, None));
         let guard = ast::GuardExpr::And(
             Box::new(ast::GuardExpr::BoolVar("x".into())),
             Box::new(inner),
@@ -787,12 +779,8 @@ mod tests {
 
     #[test]
     fn guard_uses_distinct_threshold_false_when_not_distinct() {
-        let guard = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Vote",
-            ast::CmpOp::Ge,
-            false,
-            None,
-        ));
+        let guard =
+            ast::GuardExpr::Threshold(make_threshold_guard("Vote", ast::CmpOp::Ge, false, None));
         assert!(!guard_uses_distinct_threshold(&guard));
     }
 
@@ -812,12 +800,8 @@ mod tests {
 
     #[test]
     fn collect_distinct_roles_empty_when_not_distinct() {
-        let guard = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Vote",
-            ast::CmpOp::Ge,
-            false,
-            None,
-        ));
+        let guard =
+            ast::GuardExpr::Threshold(make_threshold_guard("Vote", ast::CmpOp::Ge, false, None));
         let mut roles = HashSet::new();
         collect_distinct_roles_from_guard(&guard, &mut roles);
         assert!(roles.is_empty());
@@ -825,12 +809,8 @@ mod tests {
 
     #[test]
     fn collect_distinct_messages_from_guard_collects_msg() {
-        let guard = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Prepare",
-            ast::CmpOp::Ge,
-            true,
-            None,
-        ));
+        let guard =
+            ast::GuardExpr::Threshold(make_threshold_guard("Prepare", ast::CmpOp::Ge, true, None));
         let mut messages = HashSet::new();
         collect_distinct_messages_from_guard(&guard, &mut messages);
         assert!(messages.contains("Prepare"));
@@ -838,12 +818,8 @@ mod tests {
 
     #[test]
     fn collect_distinct_messages_empty_when_not_distinct() {
-        let guard = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Prepare",
-            ast::CmpOp::Ge,
-            false,
-            None,
-        ));
+        let guard =
+            ast::GuardExpr::Threshold(make_threshold_guard("Prepare", ast::CmpOp::Ge, false, None));
         let mut messages = HashSet::new();
         collect_distinct_messages_from_guard(&guard, &mut messages);
         assert!(messages.is_empty());
@@ -851,45 +827,29 @@ mod tests {
 
     #[test]
     fn guard_has_non_monotone_threshold_le_is_non_monotone() {
-        let guard = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Vote",
-            ast::CmpOp::Le,
-            false,
-            None,
-        ));
+        let guard =
+            ast::GuardExpr::Threshold(make_threshold_guard("Vote", ast::CmpOp::Le, false, None));
         assert!(guard_has_non_monotone_threshold(&guard));
     }
 
     #[test]
     fn guard_has_non_monotone_threshold_ge_is_monotone() {
-        let guard = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Vote",
-            ast::CmpOp::Ge,
-            false,
-            None,
-        ));
+        let guard =
+            ast::GuardExpr::Threshold(make_threshold_guard("Vote", ast::CmpOp::Ge, false, None));
         assert!(!guard_has_non_monotone_threshold(&guard));
     }
 
     #[test]
     fn guard_has_non_monotone_threshold_gt_is_monotone() {
-        let guard = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Vote",
-            ast::CmpOp::Gt,
-            false,
-            None,
-        ));
+        let guard =
+            ast::GuardExpr::Threshold(make_threshold_guard("Vote", ast::CmpOp::Gt, false, None));
         assert!(!guard_has_non_monotone_threshold(&guard));
     }
 
     #[test]
     fn guard_has_non_monotone_eq_is_non_monotone() {
-        let guard = ast::GuardExpr::Threshold(make_threshold_guard(
-            "Vote",
-            ast::CmpOp::Eq,
-            false,
-            None,
-        ));
+        let guard =
+            ast::GuardExpr::Threshold(make_threshold_guard("Vote", ast::CmpOp::Eq, false, None));
         assert!(guard_has_non_monotone_threshold(&guard));
     }
 
@@ -1009,13 +969,9 @@ mod tests {
             roles: vec![],
             properties: vec![],
         };
-        assert!(effective_message_non_equivocating(
-            &proto, "Vote", "full"
-        ));
+        assert!(effective_message_non_equivocating(&proto, "Vote", "full"));
         // Message not covered by policy falls back to global
-        assert!(!effective_message_non_equivocating(
-            &proto, "Other", "full"
-        ));
+        assert!(!effective_message_non_equivocating(&proto, "Other", "full"));
     }
 
     #[test]
@@ -1038,12 +994,8 @@ mod tests {
             roles: vec![],
             properties: vec![],
         };
-        assert!(effective_message_non_equivocating(
-            &proto, "Vote", "none"
-        ));
-        assert!(!effective_message_non_equivocating(
-            &proto, "Vote", "full"
-        ));
+        assert!(effective_message_non_equivocating(&proto, "Vote", "none"));
+        assert!(!effective_message_non_equivocating(&proto, "Vote", "full"));
     }
 
     #[test]
@@ -1051,8 +1003,6 @@ mod tests {
         assert!(PipelineCommand::Verify == PipelineCommand::Verify);
         assert!(PipelineCommand::Verify != PipelineCommand::Liveness);
         assert!(PipelineCommand::Liveness == PipelineCommand::Liveness);
-        assert!(
-            PipelineCommand::VerifyAllProperties != PipelineCommand::Verify
-        );
+        assert!(PipelineCommand::VerifyAllProperties != PipelineCommand::Verify);
     }
 }

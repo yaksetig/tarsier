@@ -7,7 +7,7 @@ pub(crate) use timeout::*;
 
 mod preflight;
 pub(crate) use preflight::*;
-pub use preflight::{CompletenessWarning, completeness_preflight};
+pub use preflight::{completeness_preflight, CompletenessWarning};
 
 mod smt_helpers;
 pub(crate) use smt_helpers::*;
@@ -31,8 +31,7 @@ pub use orchestration::{
     prove_fair_liveness_with_cegar, prove_fair_liveness_with_cegar_report,
     prove_fair_liveness_with_mode, prove_fair_liveness_with_round_abstraction, prove_safety,
     prove_safety_with_cegar, prove_safety_with_cegar_report, prove_safety_with_round_abstraction,
-    verify, verify_all_properties, verify_program_ast, verify_with_cegar,
-    verify_with_cegar_report,
+    verify, verify_all_properties, verify_program_ast, verify_with_cegar, verify_with_cegar_report,
 };
 
 #[cfg(test)]
@@ -88,13 +87,14 @@ use super::diagnostics::{
     record_property_compilation, sha256_hex_text,
 };
 use super::property::{
-    build_universal_state_predicate_term, classify_property_fragment, collect_decided_goal_locs,
+    build_quantified_state_predicate_term, classify_property_fragment, collect_decided_goal_locs,
     collect_non_goal_reachable_locs, compile_temporal_buchi_automaton,
-    encode_temporal_formula_term, eval_formula_expr_on_location, extract_liveness_spec,
+    encode_quantified_temporal_formula_term, eval_formula_expr_on_location, extract_liveness_spec,
     extract_liveness_spec_from_decl, extract_property, extract_property_from_decl,
     fair_liveness_target_from_spec, formula_contains_temporal, has_liveness_properties,
     has_safety_properties, is_liveness_property_kind, is_safety_property_kind,
-    temporal_buchi_monitor_canonical, validate_property_fragments, FairLivenessTarget,
-    LivenessSpec, QuantifiedFragment, TemporalAtomLit, TemporalBuchiAutomaton, TemporalBuchiState,
+    select_single_safety_property_decl, temporal_buchi_monitor_canonical,
+    validate_property_fragments, FairLivenessTarget, LivenessSpec, QuantifiedFragment,
+    TemporalAtomLit, TemporalBuchiAutomaton, TemporalBuchiState,
 };
 use super::*;

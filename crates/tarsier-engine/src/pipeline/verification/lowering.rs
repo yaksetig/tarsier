@@ -751,9 +751,7 @@ pub(crate) fn lower_with_active_controls(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tarsier_ir::threshold_automaton::{
-        Guard, LinearCombination, Rule, Update, UpdateKind,
-    };
+    use tarsier_ir::threshold_automaton::{Guard, LinearCombination, Rule, Update, UpdateKind};
 
     // Helper: create a minimal ProtocolDecl for testing
     fn empty_proto() -> ast::ProtocolDecl {
@@ -967,10 +965,7 @@ mod tests {
     #[test]
     fn next_coarser_network_mode_classic_is_bottom() {
         assert_eq!(
-            next_coarser_network_mode(
-                NetworkSemantics::Classic,
-                FaithfulFallbackFloor::Classic
-            ),
+            next_coarser_network_mode(NetworkSemantics::Classic, FaithfulFallbackFloor::Classic),
             None
         );
     }
@@ -1194,17 +1189,10 @@ mod tests {
     #[test]
     fn upsert_message_channel_policy_inserts_new() {
         let mut proto = empty_proto();
-        upsert_message_channel_policy(
-            &mut proto,
-            "Vote",
-            ast::ChannelAuthMode::Authenticated,
-        );
+        upsert_message_channel_policy(&mut proto, "Vote", ast::ChannelAuthMode::Authenticated);
         assert_eq!(proto.channels.len(), 1);
         assert_eq!(proto.channels[0].message, "Vote");
-        assert_eq!(
-            proto.channels[0].auth,
-            ast::ChannelAuthMode::Authenticated
-        );
+        assert_eq!(proto.channels[0].auth, ast::ChannelAuthMode::Authenticated);
     }
 
     #[test]
@@ -1215,26 +1203,15 @@ mod tests {
             auth: ast::ChannelAuthMode::Unauthenticated,
             span: ast::Span::new(0, 0),
         });
-        upsert_message_channel_policy(
-            &mut proto,
-            "Vote",
-            ast::ChannelAuthMode::Authenticated,
-        );
+        upsert_message_channel_policy(&mut proto, "Vote", ast::ChannelAuthMode::Authenticated);
         assert_eq!(proto.channels.len(), 1);
-        assert_eq!(
-            proto.channels[0].auth,
-            ast::ChannelAuthMode::Authenticated
-        );
+        assert_eq!(proto.channels[0].auth, ast::ChannelAuthMode::Authenticated);
     }
 
     #[test]
     fn upsert_message_equivocation_policy_inserts_new() {
         let mut proto = empty_proto();
-        upsert_message_equivocation_policy(
-            &mut proto,
-            "Vote",
-            ast::EquivocationPolicyMode::None,
-        );
+        upsert_message_equivocation_policy(&mut proto, "Vote", ast::EquivocationPolicyMode::None);
         assert_eq!(proto.equivocation_policies.len(), 1);
         assert_eq!(proto.equivocation_policies[0].message, "Vote");
         assert_eq!(
@@ -1251,11 +1228,7 @@ mod tests {
             mode: ast::EquivocationPolicyMode::Full,
             span: ast::Span::new(0, 0),
         });
-        upsert_message_equivocation_policy(
-            &mut proto,
-            "Vote",
-            ast::EquivocationPolicyMode::None,
-        );
+        upsert_message_equivocation_policy(&mut proto, "Vote", ast::EquivocationPolicyMode::None);
         assert_eq!(proto.equivocation_policies.len(), 1);
         assert_eq!(
             proto.equivocation_policies[0].mode,

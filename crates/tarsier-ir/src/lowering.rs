@@ -2140,7 +2140,9 @@ fn lower_guard(
             Ok(Guard::trivial())
         }
         ast::GuardExpr::Or(_, _) => Err(LoweringError::Unsupported(
-            "OR guards not yet supported in threshold automata".into(),
+            "Internal lowering invariant violated: OR guards should be split into DNF clauses \
+             before threshold-guard lowering"
+                .into(),
         )),
     }
 }
@@ -2175,16 +2177,86 @@ fn lower_linear_expr_to_lc(
     }
 }
 
-fn guard_to_dnf_clauses(guard: &ast::GuardExpr) -> Vec<ast::GuardExpr> {
+fn guard_expr_sort_key(guard: &ast::GuardExpr) -> String {
+    match guard {
+        ast::GuardExpr::And(lhs, rhs) => {
+            let mut keys = [guard_expr_sort_key(lhs), guard_expr_sort_key(rhs)];
+            keys.sort();
+            format!("and({}, {})", keys[0], keys[1])
+        }
+        ast::GuardExpr::Or(lhs, rhs) => {
+            let mut keys = [guard_expr_sort_key(lhs), guard_expr_sort_key(rhs)];
+            keys.sort();
+            format!("or({}, {})", keys[0], keys[1])
+        }
+        _ => format!("{guard:?}"),
+    }
+}
+
+fn collect_guard_conjuncts(guard: &ast::GuardExpr, out: &mut Vec<ast::GuardExpr>) {
+    match guard {
+        ast::GuardExpr::And(lhs, rhs) => {
+            collect_guard_conjuncts(lhs, out);
+            collect_guard_conjuncts(rhs, out);
+        }
+        _ => out.push(guard.clone()),
+    }
+}
+
+fn normalize_guard_clause(guard: &ast::GuardExpr) -> Vec<(String, ast::GuardExpr)> {
+    let mut conjuncts = Vec::new();
+    collect_guard_conjuncts(guard, &mut conjuncts);
+    let mut keyed: Vec<(String, ast::GuardExpr)> = conjuncts
+        .into_iter()
+        .map(|expr| (guard_expr_sort_key(&expr), expr))
+        .collect();
+    keyed.sort_by(|a, b| a.0.cmp(&b.0));
+    keyed.dedup_by(|a, b| a.0 == b.0);
+    keyed
+}
+
+fn rebuild_guard_clause(conjuncts: Vec<(String, ast::GuardExpr)>) -> ast::GuardExpr {
+    let mut iter = conjuncts.into_iter().map(|(_, expr)| expr);
+    let mut clause = iter
+        .next()
+        .expect("normalized DNF guard clause should contain at least one conjunct");
+    for expr in iter {
+        clause = ast::GuardExpr::And(Box::new(clause), Box::new(expr));
+    }
+    clause
+}
+
+fn sorted_guard_keys_subset(subset: &[String], superset: &[String]) -> bool {
+    if subset.len() > superset.len() {
+        return false;
+    }
+    let mut i = 0usize;
+    let mut j = 0usize;
+    while i < subset.len() && j < superset.len() {
+        match subset[i].cmp(&superset[j]) {
+            std::cmp::Ordering::Less => return false,
+            std::cmp::Ordering::Equal => {
+                i += 1;
+                j += 1;
+            }
+            std::cmp::Ordering::Greater => {
+                j += 1;
+            }
+        }
+    }
+    i == subset.len()
+}
+
+fn guard_to_dnf_raw_clauses(guard: &ast::GuardExpr) -> Vec<ast::GuardExpr> {
     match guard {
         ast::GuardExpr::Or(lhs, rhs) => {
-            let mut clauses = guard_to_dnf_clauses(lhs);
-            clauses.extend(guard_to_dnf_clauses(rhs));
+            let mut clauses = guard_to_dnf_raw_clauses(lhs);
+            clauses.extend(guard_to_dnf_raw_clauses(rhs));
             clauses
         }
         ast::GuardExpr::And(lhs, rhs) => {
-            let left = guard_to_dnf_clauses(lhs);
-            let right = guard_to_dnf_clauses(rhs);
+            let left = guard_to_dnf_raw_clauses(lhs);
+            let right = guard_to_dnf_raw_clauses(rhs);
             let mut out = Vec::new();
             for l in &left {
                 for r in &right {
@@ -2198,6 +2270,52 @@ fn guard_to_dnf_clauses(guard: &ast::GuardExpr) -> Vec<ast::GuardExpr> {
         }
         _ => vec![guard.clone()],
     }
+}
+
+fn guard_to_dnf_clauses(guard: &ast::GuardExpr) -> Vec<ast::GuardExpr> {
+    // Normalize DNF clauses to keep lowering robust:
+    // - canonicalize conjunction ordering
+    // - remove duplicate conjuncts inside a clause
+    // - remove duplicate clauses
+    // - prune subsumed clauses (`A || (A && B)` => `A`)
+    let raw_clauses = guard_to_dnf_raw_clauses(guard);
+    let mut normalized_clauses: Vec<(Vec<String>, Vec<(String, ast::GuardExpr)>)> = Vec::new();
+    let mut seen_keys: HashSet<String> = HashSet::new();
+
+    for clause in raw_clauses {
+        let normalized = normalize_guard_clause(&clause);
+        let key_vec: Vec<String> = normalized.iter().map(|(k, _)| k.clone()).collect();
+        let key = key_vec.join(" && ");
+        if seen_keys.insert(key) {
+            normalized_clauses.push((key_vec, normalized));
+        }
+    }
+
+    let mut subsumed = vec![false; normalized_clauses.len()];
+    for i in 0..normalized_clauses.len() {
+        if subsumed[i] {
+            continue;
+        }
+        for j in 0..normalized_clauses.len() {
+            if i == j || subsumed[j] {
+                continue;
+            }
+            let keys_i = &normalized_clauses[i].0;
+            let keys_j = &normalized_clauses[j].0;
+            if sorted_guard_keys_subset(keys_j, keys_i) {
+                subsumed[i] = true;
+                break;
+            }
+        }
+    }
+
+    normalized_clauses
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, (_keys, conjuncts))| {
+            (!subsumed[idx]).then(|| rebuild_guard_clause(conjuncts))
+        })
+        .collect()
 }
 
 fn lower_committee_value(
@@ -4133,6 +4251,164 @@ protocol OrGuard {
     }
 
     #[test]
+    fn lower_or_guard_mixed_local_and_threshold_is_supported() {
+        let src = r#"
+protocol OrGuardMixed {
+    params n, t;
+    resilience: n > 3*t;
+    message A;
+    role P {
+        var ready: bool = false;
+        init s;
+        phase s {
+            when ready || received >= 1 A => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "or_guard_mixed.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+
+        assert!(
+            ta.rules.iter().any(|r| r.guard.atoms.is_empty()),
+            "expected at least one rule for local disjunct (trivial TA guard)"
+        );
+        assert!(
+            ta.rules.iter().any(|r| !r.guard.atoms.is_empty()),
+            "expected at least one threshold-guarded rule for message disjunct"
+        );
+    }
+
+    #[test]
+    fn lower_or_and_guard_expands_to_dnf_rules() {
+        let src = r#"
+protocol OrAndGuard {
+    params n, t;
+    resilience: n > 3*t;
+    message A;
+    message B;
+    message C;
+    role P {
+        init s;
+        phase s {
+            when (received >= 1 A || received >= 1 B) && received >= 1 C => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "or_and_guard.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+
+        assert_eq!(
+            ta.rules.len(),
+            2,
+            "expected two DNF-expanded rules: (A && C) and (B && C)"
+        );
+        assert!(
+            ta.rules.iter().all(|r| r.guard.atoms.len() == 2),
+            "each expanded rule should have two threshold atoms"
+        );
+    }
+
+    #[test]
+    fn lower_or_guard_duplicate_disjuncts_are_deduplicated() {
+        let src = r#"
+protocol OrGuardDuplicate {
+    params n, t;
+    resilience: n > 3*t;
+    message A;
+    role P {
+        init s;
+        phase s {
+            when received >= 1 A || received >= 1 A => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "or_guard_duplicate.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(
+            ta.rules.len(),
+            1,
+            "duplicate disjunct should produce one rule"
+        );
+    }
+
+    #[test]
+    fn lower_or_guard_subsumed_conjunctive_clause_is_pruned() {
+        let src = r#"
+protocol OrGuardSubsumed {
+    params n, t;
+    resilience: n > 3*t;
+    message A;
+    message B;
+    role P {
+        init s;
+        phase s {
+            when received >= 1 A || (received >= 1 A && received >= 1 B) => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "or_guard_subsumed.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(
+            ta.rules.len(),
+            1,
+            "subsumed disjunct `(A && B)` should be pruned when `A` exists"
+        );
+        assert_eq!(
+            ta.rules[0].guard.atoms.len(),
+            1,
+            "remaining rule should keep only the minimal `A` guard atom"
+        );
+    }
+
+    #[test]
+    fn lower_or_and_commuted_disjuncts_are_canonicalized() {
+        let src = r#"
+protocol OrAndCommuted {
+    params n, t;
+    resilience: n > 3*t;
+    message A;
+    message B;
+    role P {
+        init s;
+        phase s {
+            when (received >= 1 A || received >= 1 B) && (received >= 1 B || received >= 1 A) => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "or_and_commuted.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(
+            ta.rules.len(),
+            2,
+            "commuted disjunctive terms should reduce to two minimal rules (A or B)"
+        );
+        assert!(
+            ta.rules.iter().all(|r| r.guard.atoms.len() == 1),
+            "canonicalization should remove redundant two-atom conjunction clauses"
+        );
+    }
+
+    #[test]
     fn lower_decide_maps_to_decision_and_decided() {
         let src = r#"
 protocol DecideSemantics {
@@ -5332,7 +5608,9 @@ protocol SpannedErr {
         let prog = parse(src, "spanned.trs").unwrap();
         let err =
             lower_with_source(&prog, src, "spanned.trs").expect_err("should produce spanned error");
-        assert!(matches!(err.inner, LoweringError::UnknownPhase(ref name) if name == "nonexistent"));
+        assert!(
+            matches!(err.inner, LoweringError::UnknownPhase(ref name) if name == "nonexistent")
+        );
         assert_eq!(
             err.src.name(),
             "spanned.trs",
@@ -5384,10 +5662,7 @@ protocol AgreementProp {
                 for (l, r) in &conflicting_pairs {
                     let lp = &ta.locations[*l].phase;
                     let rp = &ta.locations[*r].phase;
-                    assert_ne!(
-                        lp, rp,
-                        "conflicting pairs must be in different phases"
-                    );
+                    assert_ne!(lp, rp, "conflicting pairs must be in different phases");
                 }
             }
             other => panic!("expected Agreement property, got: {other:?}"),

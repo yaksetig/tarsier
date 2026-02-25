@@ -4,6 +4,7 @@
 //! specified in a custom `.ta` text format. This module converts Tarsier's
 //! internal representation into that format for cross-tool comparison.
 
+use tarsier_dsl::ast;
 use tarsier_ir::properties::{extract_agreement_property, SafetyProperty};
 use tarsier_ir::threshold_automaton::{
     CmpOp, GuardAtom, LinearCombination, ThresholdAutomaton, UpdateKind,
@@ -15,6 +16,18 @@ use tarsier_ir::threshold_automaton::{
 /// encodes it in the specifications section.
 pub fn export_ta(ta: &ThresholdAutomaton) -> String {
     let prop = extract_agreement_property(ta);
+    export_ta_with_property(ta, Some(&prop))
+}
+
+/// Convert a `ThresholdAutomaton` into ByMC `.ta` format text, selecting
+/// the export property from the original program declarations.
+///
+/// Selection policy is delegated to `pipeline::select_property_for_ta_export`:
+/// - safety property if declared;
+/// - otherwise non-temporal liveness-as-termination when representable;
+/// - otherwise fallback to structural agreement.
+pub fn export_ta_for_program(ta: &ThresholdAutomaton, program: &ast::Program) -> String {
+    let prop = crate::pipeline::select_property_for_ta_export(ta, program);
     export_ta_with_property(ta, Some(&prop))
 }
 
@@ -217,12 +230,27 @@ fn emit_specifications(out: &mut String, prop: Option<&SafetyProperty>, ta: &Thr
             }
             out.push_str("  }\n");
         }
-        Some(SafetyProperty::Termination { .. }) => {
-            out.push_str(
-                "  /* unsupported: Termination properties cannot be encoded in ByMC .ta specifications */\n",
-            );
-            out.push_str("  specifications (0) {\n");
-            out.push_str("  }\n");
+        Some(SafetyProperty::Termination { goal_locs }) => {
+            if goal_locs.is_empty() {
+                out.push_str(
+                    "  /* termination property has no goal locations; exported as empty specs */\n",
+                );
+                out.push_str("  specifications (0) {\n");
+                out.push_str("  }\n");
+            } else {
+                let n_param = ta
+                    .find_param_by_name("n")
+                    .map(|_| "N".to_string())
+                    .unwrap_or_else(|| "N".to_string());
+                let lhs = goal_locs
+                    .iter()
+                    .map(|loc| format!("loc{loc}"))
+                    .collect::<Vec<_>>()
+                    .join(" + ");
+                out.push_str("  specifications (1) {\n");
+                out.push_str(&format!("    termination: <>(({lhs}) == {n_param});\n"));
+                out.push_str("  }\n");
+            }
         }
         None => {
             out.push_str("  /* no property provided */\n");
@@ -496,6 +524,128 @@ mod tests {
         assert!(
             output.contains("no property provided"),
             "None property should have explanatory comment:\n{output}"
+        );
+    }
+
+    #[test]
+    fn export_includes_termination_spec_when_property_is_termination() {
+        let source = include_str!("../../../examples/library/reliable_broadcast_safe_live.trs");
+        let program = tarsier_dsl::parse(source, "test.trs").expect("parse failed");
+        let ta = tarsier_ir::lowering::lower(&program).expect("lower failed");
+        let goal_locs: Vec<usize> = ta
+            .locations
+            .iter()
+            .enumerate()
+            .filter(|(_, loc)| loc.phase == "done")
+            .map(|(id, _)| id)
+            .collect();
+        assert!(!goal_locs.is_empty(), "expected at least one done location");
+
+        let output = export_ta_with_property(&ta, Some(&SafetyProperty::Termination { goal_locs }));
+        assert!(
+            output.contains("termination:"),
+            "termination label should be present:\n{output}"
+        );
+        assert!(
+            output.contains("<>"),
+            "termination spec should use eventuality operator:\n{output}"
+        );
+        assert!(
+            output.contains("specifications (1)"),
+            "termination export should emit one specification:\n{output}"
+        );
+    }
+
+    #[test]
+    fn export_termination_with_empty_goals_emits_empty_specs_with_comment() {
+        let source = include_str!("../../../examples/library/reliable_broadcast_safe.trs");
+        let program = tarsier_dsl::parse(source, "test.trs").expect("parse failed");
+        let ta = tarsier_ir::lowering::lower(&program).expect("lower failed");
+        let output = export_ta_with_property(
+            &ta,
+            Some(&SafetyProperty::Termination { goal_locs: vec![] }),
+        );
+        assert!(
+            output.contains("termination property has no goal locations"),
+            "empty-goal termination export should explain fallback:\n{output}"
+        );
+        assert!(
+            output.contains("specifications (0)"),
+            "empty-goal termination export should emit empty specs:\n{output}"
+        );
+    }
+
+    #[test]
+    fn export_ta_for_program_includes_termination_spec_when_declared() {
+        let source = r#"
+protocol ExportTerminationOnly {
+    params n, t;
+    resilience: n > 3*t;
+    message Vote;
+    role Replica {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Vote => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property termination: liveness {
+        forall p: Replica. p.decided == true
+    }
+}
+"#;
+        let program = tarsier_dsl::parse(source, "export_term_only.trs").expect("parse");
+        let ta = tarsier_ir::lowering::lower(&program).expect("lower failed");
+        let output = export_ta_for_program(&ta, &program);
+
+        assert!(
+            output.contains("termination:"),
+            "program-aware export should emit termination spec label:\n{output}"
+        );
+        assert!(
+            output.contains("<>"),
+            "program-aware export should emit eventuality for termination:\n{output}"
+        );
+    }
+
+    #[test]
+    fn export_ta_for_program_temporal_liveness_falls_back_to_agreement_spec() {
+        let source = r#"
+protocol ExportTemporalLiveness {
+    params n, t;
+    resilience: n > 3*t;
+    message Ping;
+    role Replica {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Ping => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property eventual_decide: liveness {
+        forall p: Replica. <> (p.decided == true)
+    }
+}
+"#;
+        let program = tarsier_dsl::parse(source, "export_temporal.trs").expect("parse");
+        let ta = tarsier_ir::lowering::lower(&program).expect("lower");
+        let output = export_ta_for_program(&ta, &program);
+
+        assert!(
+            output.contains("agreement:"),
+            "temporal-liveness export should fall back to agreement spec:\n{output}"
+        );
+        assert!(
+            !output.contains("termination:"),
+            "temporal-liveness fallback should not emit termination label:\n{output}"
         );
     }
 }

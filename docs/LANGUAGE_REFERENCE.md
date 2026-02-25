@@ -608,13 +608,16 @@ The quantified variable can access the role's local state via dot notation: `p.d
 
 ### Verification fragment support and fail-fast diagnostics
 
-Parsing accepts both `forall` and `exists`, but verification is intentionally fragment-restricted:
+Parsing accepts both `forall` and `exists`; verification supports the following fragments:
 
 - `agreement`: requires exactly two universal quantifiers over the same role.
-- `safety` / `invariant` / `validity`: require exactly one universal quantifier.
-- `liveness`: requires exactly one universal quantifier.
-- Existential quantifiers are rejected during verification.
-- Temporal operators are rejected in non-liveness property kinds.
+- `safety` / `invariant` / `validity`: require exactly one quantifier.
+  - `forall p: Role. <state predicate>` uses the safety backend.
+  - `exists p: Role. <state predicate>` and temporal formulas route to the temporal backend.
+- `liveness`: requires exactly one quantifier.
+  - `forall p: Role. <state predicate>` uses termination-goal lowering.
+  - `exists p: Role. <state predicate>` is treated as temporal liveness (`<> <state predicate>`).
+- Temporal operators are supported in all property kinds via temporal lowering when the fragment classifies as temporal.
 
 Unsupported shapes fail fast with actionable diagnostics (`property name`, `message`, `hint`) before solving.
 There is no silent weakening or fallback rewrite of unsupported formulas.

@@ -362,7 +362,7 @@ Safety properties are lowered to bad-state reachability:
 
 If `property ...: liveness` is absent, liveness falls back to `forall p: Role. p.decided == true` (derived from locations where local `decided == true`).
 
-For explicit liveness properties (`forall p: Role. ...`):
+For explicit liveness properties (`forall p: Role. ...` or `exists p: Role. ...`):
 
 - State-target fragment (`<state predicate over p.*>`):
   - Predicate is evaluated over each reachable location of `Role`.

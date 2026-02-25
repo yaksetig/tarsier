@@ -69,11 +69,7 @@ pub fn add_identity_selective_overlay_for_replica(source: &str) -> String {
                 1,
             );
         } else {
-            out = out.replacen(
-                "bound: f;",
-                &format!("bound: f;{}", faithful_block),
-                1,
-            );
+            out = out.replacen("bound: f;", &format!("bound: f;{}", faithful_block), 1);
         }
     }
     if !out.contains("identity Replica:") {
@@ -85,4 +81,3 @@ pub fn add_identity_selective_overlay_for_replica(source: &str) -> String {
     }
     out
 }
-

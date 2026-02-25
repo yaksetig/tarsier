@@ -720,4 +720,3 @@ fn smt_profile_diagnostics_include_por_dynamic_ample() {
     let _dedup = profile.por_pending_obligation_dedup_hits;
     // All fields accessible — test passes
 }
-

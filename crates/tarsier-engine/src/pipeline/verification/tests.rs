@@ -186,8 +186,7 @@ fn build_cti_rationale_mentions_context_for_both_classifications() {
     assert!(likely.contains("depth 7"));
     assert!(likely.contains("likely unreachable"));
 
-    let concrete =
-        build_cti_rationale(&CtiClassification::Concrete, 2, 5, "invariant violated");
+    let concrete = build_cti_rationale(&CtiClassification::Concrete, 2, 5, "invariant violated");
     assert!(concrete.contains("k = 2"));
     assert!(concrete.contains("genuine safety issue"));
 }

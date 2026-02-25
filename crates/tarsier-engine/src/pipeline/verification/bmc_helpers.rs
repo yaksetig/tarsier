@@ -119,26 +119,46 @@ pub(crate) fn trace_config_at_step(
     }
 }
 
-pub(crate) fn eval_universal_atom_on_config(
+pub(crate) fn eval_quantified_atom_on_config(
     ta: &ThresholdAutomaton,
     config: &tarsier_ir::counter_system::Configuration,
+    quantifier: ast::Quantifier,
     quantified_var: &str,
     role: &str,
     atom: &ast::FormulaExpr,
 ) -> Result<bool, PipelineError> {
-    for (loc_id, loc) in ta.locations.iter().enumerate() {
-        if loc.role != role {
-            continue;
+    match quantifier {
+        ast::Quantifier::ForAll => {
+            for (loc_id, loc) in ta.locations.iter().enumerate() {
+                if loc.role != role {
+                    continue;
+                }
+                let occupants = config.kappa.get(loc_id).copied().unwrap_or(0);
+                if occupants <= 0 {
+                    continue;
+                }
+                if !eval_formula_expr_on_location(atom, quantified_var, loc)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
         }
-        let occupants = config.kappa.get(loc_id).copied().unwrap_or(0);
-        if occupants <= 0 {
-            continue;
-        }
-        if !eval_formula_expr_on_location(atom, quantified_var, loc)? {
-            return Ok(false);
+        ast::Quantifier::Exists => {
+            for (loc_id, loc) in ta.locations.iter().enumerate() {
+                if loc.role != role {
+                    continue;
+                }
+                let occupants = config.kappa.get(loc_id).copied().unwrap_or(0);
+                if occupants <= 0 {
+                    continue;
+                }
+                if eval_formula_expr_on_location(atom, quantified_var, loc)? {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
         }
     }
-    Ok(true)
 }
 
 pub(crate) fn temporal_monitor_trace_from_counterexample(
@@ -152,9 +172,10 @@ pub(crate) fn temporal_monitor_trace_from_counterexample(
         let cfg = trace_config_at_step(trace, step);
         let mut atom_truth = Vec::with_capacity(monitor.atoms.len());
         for atom in &monitor.atoms {
-            atom_truth.push(eval_universal_atom_on_config(
+            atom_truth.push(eval_quantified_atom_on_config(
                 ta,
                 cfg,
+                monitor.quantifier,
                 &monitor.quantified_var,
                 &monitor.role,
                 atom,
@@ -345,6 +366,7 @@ pub(crate) fn safety_property_canonical(property: &SafetyProperty) -> String {
 pub(crate) fn encode_temporal_liveness_violation(
     ta: &ThresholdAutomaton,
     cs: &CounterSystem,
+    quantifier: ast::Quantifier,
     quantified_var: &str,
     role: &str,
     formula: &ast::FormulaExpr,
@@ -360,7 +382,15 @@ pub(crate) fn encode_temporal_liveness_violation(
     }
     let extra = committee_bound_assertions(committee_bounds);
     encoding.assertions.extend(extra.iter().cloned());
-    let satisfied = encode_temporal_formula_term(ta, quantified_var, role, formula, 0, depth)?;
+    let satisfied = encode_quantified_temporal_formula_term(
+        ta,
+        quantifier,
+        quantified_var,
+        role,
+        formula,
+        0,
+        depth,
+    )?;
     encoding.assertions.push(SmtTerm::not(satisfied));
     Ok(encoding)
 }
@@ -423,6 +453,7 @@ pub(crate) fn run_liveness_spec_bmc(
             Ok(bmc_result_to_liveness_result(bmc_result, cs))
         }
         LivenessSpec::Temporal {
+            quantifier,
             quantified_var,
             role,
             formula,
@@ -430,6 +461,7 @@ pub(crate) fn run_liveness_spec_bmc(
             let encoding = encode_temporal_liveness_violation(
                 ta,
                 cs,
+                *quantifier,
                 quantified_var,
                 role,
                 formula,
@@ -1354,10 +1386,7 @@ mod tests {
 
     #[test]
     fn soundness_mode_name_permissive() {
-        assert_eq!(
-            soundness_mode_name(SoundnessMode::Permissive),
-            "permissive"
-        );
+        assert_eq!(soundness_mode_name(SoundnessMode::Permissive), "permissive");
     }
 
     #[test]
@@ -1559,9 +1588,8 @@ mod tests {
 
     #[test]
     fn liveness_result_to_property_verification_live() {
-        let result = liveness_result_to_property_verification(LivenessResult::Live {
-            depth_checked: 10,
-        });
+        let result =
+            liveness_result_to_property_verification(LivenessResult::Live { depth_checked: 10 });
         match result {
             VerificationResult::Safe { depth_checked } => assert_eq!(depth_checked, 10),
             _ => panic!("Expected Safe variant"),
@@ -1581,8 +1609,12 @@ mod tests {
 
     #[test]
     fn build_cti_rationale_likely_spurious() {
-        let rationale =
-            build_cti_rationale(&CtiClassification::LikelySpurious, 3, 10, "agreement violated");
+        let rationale = build_cti_rationale(
+            &CtiClassification::LikelySpurious,
+            3,
+            10,
+            "agreement violated",
+        );
         assert!(rationale.contains("k = 3"));
         assert!(rationale.contains("depth 10"));
         assert!(rationale.contains("agreement violated"));

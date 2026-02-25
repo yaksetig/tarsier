@@ -152,8 +152,9 @@ pub(crate) fn add_temporal_automaton_to_fair_lasso_encoding(
     for step in 0..=depth {
         let mut terms = Vec::with_capacity(automaton.atoms.len());
         for atom in &automaton.atoms {
-            terms.push(build_universal_state_predicate_term(
+            terms.push(build_quantified_state_predicate_term(
                 ta,
+                automaton.quantifier,
                 &automaton.quantified_var,
                 &automaton.role,
                 atom,

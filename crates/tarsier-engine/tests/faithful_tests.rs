@@ -338,14 +338,8 @@ fn differential_regression_classic_vs_faithful_corpus() {
         let faith_source = load_library_example(faith_file);
 
         // Use the depth from the manifest if present, otherwise default to 4
-        let min_depth = minimal
-            .get("depth")
-            .and_then(|d| d.as_u64())
-            .unwrap_or(4) as usize;
-        let faith_depth = faithful
-            .get("depth")
-            .and_then(|d| d.as_u64())
-            .unwrap_or(4) as usize;
+        let min_depth = minimal.get("depth").and_then(|d| d.as_u64()).unwrap_or(4) as usize;
+        let faith_depth = faithful.get("depth").and_then(|d| d.as_u64()).unwrap_or(4) as usize;
 
         let min_options = verify_options(min_depth, SoundnessMode::Strict);
         let faith_options = verify_options(faith_depth, SoundnessMode::Strict);
@@ -377,4 +371,3 @@ fn differential_regression_classic_vs_faithful_corpus() {
         checked
     );
 }
-

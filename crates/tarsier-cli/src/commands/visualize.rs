@@ -814,7 +814,7 @@ pub(crate) fn run_export_ta_command(file: PathBuf, out: Option<PathBuf>) -> miet
 
     let program = tarsier_engine::pipeline::parse(&source, &filename).into_diagnostic()?;
     let ta = tarsier_engine::pipeline::lower(&program).into_diagnostic()?;
-    let ta_text = tarsier_engine::export_ta::export_ta(&ta);
+    let ta_text = tarsier_engine::export_ta::export_ta_for_program(&ta, &program);
 
     match out {
         Some(ref out_path) => {

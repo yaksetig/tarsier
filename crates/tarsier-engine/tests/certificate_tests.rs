@@ -299,4 +299,3 @@ protocol RoundLive {
         other => panic!("Expected LIVE_PROVED under round abstraction, got: {other:?}"),
     }
 }
-

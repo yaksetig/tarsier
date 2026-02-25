@@ -2706,10 +2706,7 @@ mod tests {
         ];
         let conj = cube.to_conjunction_term(&state_vars);
         // For Bool, value!=0 => var, value==0 => (not var)
-        let expected = SmtTerm::and(vec![
-            SmtTerm::var("a"),
-            SmtTerm::not(SmtTerm::var("b")),
-        ]);
+        let expected = SmtTerm::and(vec![SmtTerm::var("a"), SmtTerm::not(SmtTerm::var("b"))]);
         assert_eq!(conj, expected);
     }
 

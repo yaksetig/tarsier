@@ -114,142 +114,156 @@ pub fn verify_all_properties(
         let frag_name = frag.to_string();
         let mut temporal_monitor_for_witness: Option<TemporalBuchiAutomaton> = None;
 
-        let result = if is_safety_property_kind(prop.kind) {
-            let property = extract_property_from_decl(&ta, prop)?;
-            let compiled_payload = safety_property_canonical(&property);
-            let compiled_summary = format!(
-                "target=safety_property kind={} quantifiers={}",
-                prop.kind,
-                prop.formula.quantifiers.len()
-            );
-            record_property_compilation(
-                "verify_all_properties",
-                prop,
-                &frag_name,
-                "safety_property",
-                compiled_summary,
-                compiled_payload,
-            );
+        let result = match frag {
+            QuantifiedFragment::UniversalAgreement | QuantifiedFragment::UniversalInvariant => {
+                let property = extract_property_from_decl(&ta, prop)?;
+                let compiled_payload = safety_property_canonical(&property);
+                let compiled_summary = format!(
+                    "target=safety_property kind={} quantifiers={}",
+                    prop.kind,
+                    prop.formula.quantifiers.len()
+                );
+                record_property_compilation(
+                    "verify_all_properties",
+                    prop,
+                    &frag_name,
+                    "safety_property",
+                    compiled_summary,
+                    compiled_payload,
+                );
 
-            let preview_encoding = encode_bmc(&cs, &property, options.max_depth);
-            let (constraint_summary, constraint_payload) =
-                property_constraint_trace(&preview_encoding, &committee_bounds);
-            record_property_compilation(
-                "verify_all_properties",
-                prop,
-                &frag_name,
-                "safety_bmc_constraints",
-                constraint_summary,
-                constraint_payload,
-            );
+                let preview_encoding = encode_bmc(&cs, &property, options.max_depth);
+                let (constraint_summary, constraint_payload) =
+                    property_constraint_trace(&preview_encoding, &committee_bounds);
+                record_property_compilation(
+                    "verify_all_properties",
+                    prop,
+                    &frag_name,
+                    "safety_bmc_constraints",
+                    constraint_summary,
+                    constraint_payload,
+                );
 
-            let (bmc_result, bmc_cs) =
-                run_bmc_for_ta(&ta, &property, options, &committee_bounds, None)?;
-            if has_committees {
-                let total_epsilon = committee_failure_bound.unwrap_or(0.0);
-                match bmc_result {
-                    BmcResult::Safe { depth_checked } => {
-                        VerificationResult::ProbabilisticallySafe {
-                            depth_checked,
-                            failure_probability: total_epsilon,
-                            committee_analyses: committee_summaries.clone(),
+                let (bmc_result, bmc_cs) =
+                    run_bmc_for_ta(&ta, &property, options, &committee_bounds, None)?;
+                if has_committees {
+                    let total_epsilon = committee_failure_bound.unwrap_or(0.0);
+                    match bmc_result {
+                        BmcResult::Safe { depth_checked } => {
+                            VerificationResult::ProbabilisticallySafe {
+                                depth_checked,
+                                failure_probability: total_epsilon,
+                                committee_analyses: committee_summaries.clone(),
+                            }
                         }
+                        BmcResult::Unsafe { depth, model } => {
+                            let trace = extract_trace(&bmc_cs, &model, depth);
+                            VerificationResult::Unsafe { trace }
+                        }
+                        BmcResult::Unknown { reason, .. } => VerificationResult::Unknown { reason },
                     }
-                    BmcResult::Unsafe { depth, model } => {
-                        let trace = extract_trace(&bmc_cs, &model, depth);
-                        VerificationResult::Unsafe { trace }
-                    }
-                    BmcResult::Unknown { reason, .. } => VerificationResult::Unknown { reason },
+                } else {
+                    bmc_result_to_verification(bmc_result, &bmc_cs)
                 }
-            } else {
-                bmc_result_to_verification(bmc_result, &bmc_cs)
             }
-        } else if is_liveness_property_kind(prop.kind) {
-            let liveness_spec = extract_liveness_spec_from_decl(&ta, prop)?;
-            match &liveness_spec {
-                LivenessSpec::TerminationGoalLocs(goal_locs) => {
-                    let mut sorted_goals = goal_locs.clone();
-                    sorted_goals.sort_unstable();
-                    let compiled_payload = format!("goal_locs={sorted_goals:?}");
-                    let compiled_summary = format!(
-                        "target=termination_goal_locations count={}",
-                        sorted_goals.len()
-                    );
-                    record_property_compilation(
-                        "verify_all_properties",
-                        prop,
-                        &frag_name,
-                        "liveness_goal_locations",
-                        compiled_summary,
-                        compiled_payload,
-                    );
+            QuantifiedFragment::UniversalTermination
+            | QuantifiedFragment::UniversalTemporal
+            | QuantifiedFragment::ExistentialTemporal => {
+                let liveness_spec = extract_liveness_spec_from_decl(&ta, prop)?;
+                match &liveness_spec {
+                    LivenessSpec::TerminationGoalLocs(goal_locs) => {
+                        let mut sorted_goals = goal_locs.clone();
+                        sorted_goals.sort_unstable();
+                        let compiled_payload = format!("goal_locs={sorted_goals:?}");
+                        let compiled_summary = format!(
+                            "target=termination_goal_locations count={}",
+                            sorted_goals.len()
+                        );
+                        record_property_compilation(
+                            "verify_all_properties",
+                            prop,
+                            &frag_name,
+                            "liveness_goal_locations",
+                            compiled_summary,
+                            compiled_payload,
+                        );
 
-                    let property = SafetyProperty::Termination {
-                        goal_locs: sorted_goals,
-                    };
-                    let preview_encoding = encode_bmc(&cs, &property, options.max_depth);
-                    let (constraint_summary, constraint_payload) =
-                        property_constraint_trace(&preview_encoding, &committee_bounds);
-                    record_property_compilation(
-                        "verify_all_properties",
-                        prop,
-                        &frag_name,
-                        "liveness_bmc_constraints",
-                        constraint_summary,
-                        constraint_payload,
-                    );
-                }
-                LivenessSpec::Temporal {
-                    quantified_var,
-                    role,
-                    formula,
-                } => {
-                    let monitor = compile_temporal_buchi_automaton(quantified_var, role, formula)?;
-                    temporal_monitor_for_witness = Some(monitor.clone());
-                    let monitor_payload = temporal_buchi_monitor_canonical(&monitor);
-                    let monitor_summary = format!(
-                        "target=temporal_buchi_monitor states={} initial={} acceptance_sets={} atoms={}",
-                        monitor.states.len(),
-                        monitor.initial_states.len(),
-                        monitor.acceptance_sets.len(),
-                        monitor.atoms.len()
-                    );
-                    record_property_compilation(
-                        "verify_all_properties",
-                        prop,
-                        &frag_name,
-                        "temporal_buchi_monitor",
-                        monitor_summary,
-                        monitor_payload,
-                    );
-
-                    let preview_encoding = encode_temporal_liveness_violation(
-                        &ta,
-                        &cs,
+                        let property = SafetyProperty::Termination {
+                            goal_locs: sorted_goals,
+                        };
+                        let preview_encoding = encode_bmc(&cs, &property, options.max_depth);
+                        let (constraint_summary, constraint_payload) =
+                            property_constraint_trace(&preview_encoding, &committee_bounds);
+                        record_property_compilation(
+                            "verify_all_properties",
+                            prop,
+                            &frag_name,
+                            "liveness_bmc_constraints",
+                            constraint_summary,
+                            constraint_payload,
+                        );
+                    }
+                    LivenessSpec::Temporal {
+                        quantifier,
                         quantified_var,
                         role,
                         formula,
-                        options.max_depth,
-                        &committee_bounds,
-                    )?;
-                    let (constraint_summary, constraint_payload) =
-                        property_constraint_trace(&preview_encoding, &committee_bounds);
-                    record_property_compilation(
-                        "verify_all_properties",
-                        prop,
-                        &frag_name,
-                        "liveness_temporal_constraints",
-                        constraint_summary,
-                        constraint_payload,
-                    );
+                    } => {
+                        let monitor = compile_temporal_buchi_automaton(
+                            *quantifier,
+                            quantified_var,
+                            role,
+                            formula,
+                        )?;
+                        temporal_monitor_for_witness = Some(monitor.clone());
+                        let monitor_payload = temporal_buchi_monitor_canonical(&monitor);
+                        let monitor_summary = format!(
+                            "target=temporal_buchi_monitor states={} initial={} acceptance_sets={} atoms={}",
+                            monitor.states.len(),
+                            monitor.initial_states.len(),
+                            monitor.acceptance_sets.len(),
+                            monitor.atoms.len()
+                        );
+                        record_property_compilation(
+                            "verify_all_properties",
+                            prop,
+                            &frag_name,
+                            "temporal_buchi_monitor",
+                            monitor_summary,
+                            monitor_payload,
+                        );
+
+                        let preview_encoding = encode_temporal_liveness_violation(
+                            &ta,
+                            &cs,
+                            *quantifier,
+                            quantified_var,
+                            role,
+                            formula,
+                            options.max_depth,
+                            &committee_bounds,
+                        )?;
+                        let (constraint_summary, constraint_payload) =
+                            property_constraint_trace(&preview_encoding, &committee_bounds);
+                        record_property_compilation(
+                            "verify_all_properties",
+                            prop,
+                            &frag_name,
+                            "liveness_temporal_constraints",
+                            constraint_summary,
+                            constraint_payload,
+                        );
+                    }
                 }
-            }
-            let liveness_result =
-                run_liveness_spec_bmc(&ta, &cs, &liveness_spec, options, &committee_bounds, None)?;
-            liveness_result_to_property_verification(liveness_result)
-        } else {
-            VerificationResult::Unknown {
-                reason: format!("Unsupported property kind: {}", prop.kind),
+                let liveness_result = run_liveness_spec_bmc(
+                    &ta,
+                    &cs,
+                    &liveness_spec,
+                    options,
+                    &committee_bounds,
+                    None,
+                )?;
+                liveness_result_to_property_verification(liveness_result)
             }
         };
         let witness =
@@ -308,6 +322,34 @@ pub(crate) fn verify_program(
                      probabilistic bounds are not enforced."
                 .into(),
         });
+    }
+
+    // Route by classified fragment when an explicit safety-kind property exists.
+    // This allows temporal formulas under safety-kind declarations to execute via
+    // the temporal liveness backend rather than being rejected at extraction.
+    if let Some(prop) = select_single_safety_property_decl(program, options.soundness)? {
+        let fragment = classify_property_fragment(prop)
+            .map_err(|diag| PipelineError::Property(diag.to_string()))?;
+
+        if matches!(
+            fragment,
+            QuantifiedFragment::UniversalTermination
+                | QuantifiedFragment::UniversalTemporal
+                | QuantifiedFragment::ExistentialTemporal
+        ) {
+            let cs = abstract_to_cs(ta.clone());
+            let liveness_spec = extract_liveness_spec_from_decl(&ta, prop)?;
+            crate::sandbox::enforce_active_limits()?;
+            let liveness_result = run_liveness_spec_bmc(
+                &ta,
+                &cs,
+                &liveness_spec,
+                options,
+                &committee_bounds,
+                dump_smt,
+            )?;
+            return Ok(liveness_result_to_property_verification(liveness_result));
+        }
     }
 
     let property = extract_property(&ta, program, options.soundness)?;
@@ -1775,6 +1817,7 @@ pub fn check_liveness(
                 }
             }
             LivenessSpec::Temporal {
+                quantifier,
                 quantified_var,
                 role,
                 formula,
@@ -1788,8 +1831,9 @@ pub fn check_liveness(
                 }
                 let extra = committee_bound_assertions(&committee_bounds);
                 encoding.assertions.extend(extra.iter().cloned());
-                let satisfied = encode_temporal_formula_term(
+                let satisfied = encode_quantified_temporal_formula_term(
                     &ta,
+                    quantifier,
                     &quantified_var,
                     &role,
                     &formula,

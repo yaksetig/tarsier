@@ -351,6 +351,18 @@ property release_example: liveness {
 }
 ```
 
+Existential quantification is also supported:
+
+```trs
+property eventually_some_decides: liveness {
+    exists p: Replica. p.decided == true
+}
+
+property some_decided_always: safety {
+    exists p: Replica. p.decided == true
+}
+```
+
 ## Development
 
 ```bash

@@ -539,8 +539,8 @@ use diagnostics::push_phase_profile;
 
 // From property
 pub use property::{
-    classify_property_fragment, extract_property, validate_property_fragments, FragmentDiagnostic,
-    QuantifiedFragment,
+    classify_property_fragment, extract_property, select_property_for_ta_export,
+    validate_property_fragments, FragmentDiagnostic, QuantifiedFragment,
 };
 
 // From analysis
@@ -1436,19 +1436,27 @@ protocol PorDominance {
     }
 
     #[test]
-    fn fragment_rejects_existential_quantifier() {
+    fn fragment_classifies_existential_in_safety_as_existential_temporal() {
         let prop = make_property_decl(
-            "bad_exists",
+            "exists_safe",
             ast::PropertyKind::Safety,
             vec![exists_binding("p", "R")],
             eq_comparison("p", "x", true),
         );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::ExistentialTemporal);
+    }
+
+    #[test]
+    fn fragment_rejects_existential_in_agreement() {
+        let prop = make_property_decl(
+            "bad_exists_agr",
+            ast::PropertyKind::Agreement,
+            vec![exists_binding("p", "R"), forall_binding("q", "R")],
+            agreement_eq("p", "q", "vote"),
+        );
         let err = classify_property_fragment(&prop).unwrap_err();
-        assert_eq!(err.property_name, "bad_exists");
-        assert!(err
-            .message
-            .contains("existential quantifiers are not supported"));
-        assert!(err.hint.is_some());
+        assert!(err.message.contains("supports only universal quantifiers"));
     }
 
     #[test]
@@ -1479,28 +1487,27 @@ protocol PorDominance {
     }
 
     #[test]
-    fn fragment_rejects_temporal_in_safety() {
+    fn fragment_classifies_temporal_in_safety_kind_as_temporal() {
         let prop = make_property_decl(
             "bad_temporal_safety",
             ast::PropertyKind::Invariant,
             vec![forall_binding("p", "R")],
             ast::FormulaExpr::Always(Box::new(eq_comparison("p", "x", true))),
         );
-        let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(err.message.contains("temporal operators"));
-        assert!(err.message.contains("not supported"));
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
     }
 
     #[test]
-    fn fragment_rejects_temporal_in_agreement() {
+    fn fragment_classifies_temporal_in_agreement_as_temporal() {
         let prop = make_property_decl(
             "bad_temporal_agr",
             ast::PropertyKind::Agreement,
             vec![forall_binding("p", "R"), forall_binding("q", "R")],
             ast::FormulaExpr::Always(Box::new(agreement_eq("p", "q", "vote"))),
         );
-        let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(err.message.contains("temporal operators in agreement"));
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
     }
 
     #[test]
@@ -1512,7 +1519,7 @@ protocol PorDominance {
             ast::FormulaExpr::Eventually(Box::new(eq_comparison("p", "decided", true))),
         );
         let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(err.message.contains("exactly 1 universal quantifier"));
+        assert!(err.message.contains("exactly 1 quantifier"));
     }
 
     #[test]
@@ -1531,6 +1538,10 @@ protocol PorDominance {
                 "universal-termination",
             ),
             (QuantifiedFragment::UniversalTemporal, "universal-temporal"),
+            (
+                QuantifiedFragment::ExistentialTemporal,
+                "existential-temporal",
+            ),
         ];
         for (frag, expected) in fragments {
             assert_eq!(frag.to_string(), expected);
@@ -1764,36 +1775,31 @@ protocol Frag {
         assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
     }
 
-    // Fail-fast diagnostic tests for unsupported LTL shapes
+    // Fail-fast diagnostic tests for still-unsupported LTL shapes
 
     #[test]
-    fn ltl_failfast_temporal_in_invariant_kind() {
-        // []p under kind `invariant` should fail fast — use `liveness` instead
+    fn ltl_conformance_temporal_in_invariant_kind_is_temporal_fragment() {
+        // []p under kind `invariant` is now classified into the temporal fragment.
         let prop = make_property_decl(
             "bad_inv_temporal",
             ast::PropertyKind::Invariant,
             vec![forall_binding("p", "R")],
             ast::FormulaExpr::Always(Box::new(eq_comparison("p", "x", true))),
         );
-        let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(
-            err.message.contains("temporal operators"),
-            "should report temporal operators: {}",
-            err.message
-        );
-        assert!(err.hint.unwrap().contains("liveness"));
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
     }
 
     #[test]
-    fn ltl_failfast_existential_in_liveness() {
+    fn ltl_classifies_existential_in_liveness_as_existential_temporal() {
         let prop = make_property_decl(
-            "bad_exists_live",
+            "exists_live",
             ast::PropertyKind::Liveness,
             vec![exists_binding("p", "R")],
             ast::FormulaExpr::Eventually(Box::new(eq_comparison("p", "x", true))),
         );
-        let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(err.message.contains("existential quantifiers"));
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::ExistentialTemporal);
     }
 
     #[test]
@@ -1805,7 +1811,7 @@ protocol Frag {
             ast::FormulaExpr::Eventually(Box::new(eq_comparison("p", "x", true))),
         );
         let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(err.message.contains("exactly 1 universal quantifier"));
+        assert!(err.message.contains("exactly 1 quantifier"));
     }
 
     #[test]
@@ -1817,7 +1823,7 @@ protocol Frag {
             eq_comparison("p", "x", true),
         );
         let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(err.message.contains("exactly 1 universal quantifier"));
+        assert!(err.message.contains("exactly 1 quantifier"));
     }
 
     #[test]
@@ -2018,6 +2024,134 @@ protocol MultiProps {
         assert_eq!(live_entry.assumptions.solver, "z3");
         assert_eq!(live_entry.assumptions.max_depth, 2);
         assert!(live_entry.witness.is_none());
+    }
+
+    #[test]
+    fn verify_all_properties_routes_temporal_safety_kind_to_temporal_backend() {
+        let src = r#"
+protocol TemporalSafetyKind {
+    params n, t;
+    resilience: n > 3*t;
+
+    role R {
+        var decided: bool = true;
+        init s;
+        phase s {}
+    }
+
+    property inv_temporal: safety {
+        forall p: R. [] (p.decided == true)
+    }
+}
+"#;
+        let options = PipelineOptions {
+            soundness: SoundnessMode::Permissive,
+            max_depth: 2,
+            ..Default::default()
+        };
+
+        let result = verify_all_properties(src, "temporal_safety_kind.trs", &options)
+            .expect("multi-property temporal safety run");
+        assert_eq!(result.verdicts.len(), 1);
+        assert_eq!(result.verdicts[0].name, "inv_temporal");
+        assert_eq!(result.verdicts[0].fragment, "universal-temporal");
+        assert!(matches!(
+            result.verdicts[0].result,
+            VerificationResult::Safe { .. }
+        ));
+    }
+
+    #[test]
+    fn verify_routes_temporal_safety_kind_to_temporal_backend() {
+        let src = r#"
+protocol TemporalSafetyKindSingle {
+    params n, t;
+    resilience: n > 3*t;
+
+    role R {
+        var decided: bool = true;
+        init s;
+        phase s {}
+    }
+
+    property inv_temporal: safety {
+        forall p: R. [] (p.decided == true)
+    }
+}
+"#;
+        let options = PipelineOptions {
+            soundness: SoundnessMode::Strict,
+            max_depth: 2,
+            ..Default::default()
+        };
+
+        let result = verify(src, "temporal_safety_kind_single.trs", &options)
+            .expect("single-property temporal safety run");
+        assert!(matches!(result, VerificationResult::Safe { .. }));
+    }
+
+    #[test]
+    fn verify_all_properties_routes_exists_safety_kind_to_temporal_backend() {
+        let src = r#"
+protocol ExistsSafetyKind {
+    params n, t;
+    resilience: n > 3*t;
+
+    role R {
+        var decided: bool = true;
+        init s;
+        phase s {}
+    }
+
+    property some_decided_always: safety {
+        exists p: R. p.decided == true
+    }
+}
+"#;
+        let options = PipelineOptions {
+            soundness: SoundnessMode::Permissive,
+            max_depth: 2,
+            ..Default::default()
+        };
+
+        let result = verify_all_properties(src, "exists_safety_kind.trs", &options)
+            .expect("multi-property exists safety run");
+        assert_eq!(result.verdicts.len(), 1);
+        assert_eq!(result.verdicts[0].name, "some_decided_always");
+        assert_eq!(result.verdicts[0].fragment, "existential-temporal");
+        assert!(matches!(
+            result.verdicts[0].result,
+            VerificationResult::Safe { .. }
+        ));
+    }
+
+    #[test]
+    fn verify_routes_exists_safety_kind_to_temporal_backend() {
+        let src = r#"
+protocol ExistsSafetyKindSingle {
+    params n, t;
+    resilience: n > 3*t;
+
+    role R {
+        var decided: bool = true;
+        init s;
+        phase s {}
+    }
+
+    property some_decided_always: safety {
+        exists p: R. p.decided == true
+    }
+}
+"#;
+        let options = PipelineOptions {
+            soundness: SoundnessMode::Strict,
+            max_depth: 2,
+            ..Default::default()
+        };
+
+        let result = verify(src, "exists_safety_kind_single.trs", &options)
+            .expect("single-property exists safety run");
+        assert!(matches!(result, VerificationResult::Safe { .. }));
     }
 
     #[test]

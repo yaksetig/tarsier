@@ -4994,18 +4994,9 @@ protocol BuggyBroadcast {
         let decl_names: std::collections::HashSet<_> =
             enc.declarations.iter().map(|(n, _)| n.clone()).collect();
         // Should have parameter variables for n, t, f
-        assert!(
-            decl_names.contains("p_0"),
-            "missing param p_0 (n)"
-        );
-        assert!(
-            decl_names.contains("p_1"),
-            "missing param p_1 (t)"
-        );
-        assert!(
-            decl_names.contains("p_2"),
-            "missing param p_2 (f)"
-        );
+        assert!(decl_names.contains("p_0"), "missing param p_0 (n)");
+        assert!(decl_names.contains("p_1"), "missing param p_1 (t)");
+        assert!(decl_names.contains("p_2"), "missing param p_2 (f)");
     }
 
     #[test]
@@ -5021,35 +5012,20 @@ protocol BuggyBroadcast {
 
         // Step 0 kappa variables
         for l in 0..num_locs {
-            assert!(
-                decl_names.contains(&kappa_var(0, l)),
-                "missing kappa_0_{l}"
-            );
+            assert!(decl_names.contains(&kappa_var(0, l)), "missing kappa_0_{l}");
         }
         // Step 1 kappa variables
         for l in 0..num_locs {
-            assert!(
-                decl_names.contains(&kappa_var(1, l)),
-                "missing kappa_1_{l}"
-            );
+            assert!(decl_names.contains(&kappa_var(1, l)), "missing kappa_1_{l}");
         }
         // Gamma variables at step 0 and 1
         for v in 0..num_svars {
-            assert!(
-                decl_names.contains(&gamma_var(0, v)),
-                "missing g_0_{v}"
-            );
-            assert!(
-                decl_names.contains(&gamma_var(1, v)),
-                "missing g_1_{v}"
-            );
+            assert!(decl_names.contains(&gamma_var(0, v)), "missing g_0_{v}");
+            assert!(decl_names.contains(&gamma_var(1, v)), "missing g_1_{v}");
         }
         // Delta variables for step 0
         for r in 0..num_rules {
-            assert!(
-                decl_names.contains(&delta_var(0, r)),
-                "missing delta_0_{r}"
-            );
+            assert!(decl_names.contains(&delta_var(0, r)), "missing delta_0_{r}");
         }
         // Time variables
         assert!(decl_names.contains(&time_var(0)), "missing time_0");
@@ -5111,9 +5087,9 @@ protocol BuggyBroadcast {
         // At minimum, each kappa_1_l should appear in an equality assertion.
         for l in 0..cs.num_locations() {
             let kappa_next = format!("kappa_1_{l}");
-            let has_update = assertions.iter().any(|a| {
-                a.starts_with(&format!("(= {kappa_next}"))
-            });
+            let has_update = assertions
+                .iter()
+                .any(|a| a.starts_with(&format!("(= {kappa_next}")));
             assert!(
                 has_update,
                 "missing location counter update for kappa_1_{l}"
@@ -5259,9 +5235,11 @@ protocol BuggyBroadcast {
                     // Violation should be trivially false => UNSAT
                     let sat = solve_with_extra_assertions(
                         &enc,
-                        &[SmtTerm::var("p_0").eq(SmtTerm::int(4)),
-                          SmtTerm::var("p_1").eq(SmtTerm::int(1)),
-                          SmtTerm::var("p_2").eq(SmtTerm::int(1))],
+                        &[
+                            SmtTerm::var("p_0").eq(SmtTerm::int(4)),
+                            SmtTerm::var("p_1").eq(SmtTerm::int(1)),
+                            SmtTerm::var("p_2").eq(SmtTerm::int(1)),
+                        ],
                     );
                     assert_eq!(sat, SatResult::Unsat);
                 }
@@ -5365,9 +5343,7 @@ protocol BuggyBroadcast {
     fn property_violation_termination_encoding() {
         let ta = make_simple_ta();
         // Termination: goal is location 1 (done)
-        let property = SafetyProperty::Termination {
-            goal_locs: vec![1],
-        };
+        let property = SafetyProperty::Termination { goal_locs: vec![1] };
         let term = encode_property_violation_at_step(&ta, &property, 0);
         let s = to_smtlib(&term);
         // Termination violation means some process is NOT in a goal location
@@ -5381,9 +5357,7 @@ protocol BuggyBroadcast {
     #[test]
     fn property_violation_empty_invariant_is_false() {
         let ta = make_simple_ta();
-        let property = SafetyProperty::Invariant {
-            bad_sets: vec![],
-        };
+        let property = SafetyProperty::Invariant { bad_sets: vec![] };
         let term = encode_property_violation(&ta, &property, 2);
         assert_eq!(term, SmtTerm::bool(false));
     }
@@ -5431,9 +5405,9 @@ protocol BuggyBroadcast {
 
         // k-induction step should have process conservation: sum of kappa = n
         // This appears as an equality involving p_0 (the n parameter)
-        let has_conservation = assertions.iter().any(|a| {
-            a.contains("kappa_0_") && a.contains("p_0") && a.contains("=")
-        });
+        let has_conservation = assertions
+            .iter()
+            .any(|a| a.contains("kappa_0_") && a.contains("p_0") && a.contains("="));
         assert!(
             has_conservation,
             "k-induction step should have process conservation strengthening"

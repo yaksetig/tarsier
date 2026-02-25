@@ -262,4 +262,3 @@ protocol NeedsStrengtheningCegar {
         other => panic!("Unexpected CEGAR prove result: {other}"),
     }
 }
-

@@ -178,14 +178,15 @@ disagreements between non-mock tools as failures.
 
 All `.ta` model files in the corpus must be real threshold automaton models (not
 placeholders). The CI contract check (`check_cross_tool_benchmark_contract.py`)
-enforces that each `.ta` file has at least 5 non-empty lines, contains no
-`placeholder` comments, and has non-empty `specifications`.
+enforces this for both the baseline manifest and the real-ByMC smoke manifest:
+each `.ta` file must have at least 5 non-empty lines, contain no `placeholder`
+comments, and have non-empty `specifications`.
 
 ### Running with Real ByMC
 
 The cross-tool runner supports real [ByMC](https://github.com/konnov/bymc)
-verification via Docker. The default CI path uses mock adapters; real mode is
-opt-in.
+verification via Docker. Local runs default to mock mode; CI now includes a
+separate blocking real-ByMC smoke gate for non-mock parity coverage.
 
 ```bash
 # 1. Build the ByMC Docker image (one-time, requires Docker)
@@ -210,3 +211,43 @@ The `--bymc-mode` flag controls which command template is used:
 The wrapper script `benchmarks/bymc/run_bymc.sh` auto-detects whether to use a
 local `verifypa-schema` installation or the Docker image. See
 `benchmarks/bymc/README.md` for setup details and troubleshooting.
+
+Blocking CI gate:
+- `.github/workflows/ci.yml` job `cross-tool-real-bymc-gate` builds the pinned
+  ByMC Docker image and runs a real (non-mock) smoke scenario manifest:
+  `benchmarks/cross_tool_scenarios/scenario_manifest_real_bymc_smoke.json`.
+- The gate enforces:
+  - `bymc` execution mode is `real` (`check_cross_tool_external_execution.py --require-real-tools bymc`)
+  - verdict parity agreement between non-mock tools (`check_cross_tool_verdict_parity.py`).
+
+### Running with Real SPIN
+
+The cross-tool runner also supports real SPIN execution for Promela models.
+
+```bash
+# 1. Install SPIN (example for Debian/Ubuntu)
+sudo apt-get update && sudo apt-get install -y spin
+
+# 2. Run real SPIN smoke scenario
+python3 benchmarks/cross_tool_runner.py \
+  --skip-build \
+  --manifest benchmarks/cross_tool_scenarios/scenario_manifest_real_spin_smoke.json \
+  --tools tarsier,spin \
+  --spin-binary spin \
+  --out /tmp/cross-tool-real-spin.json
+
+# 3. Verify external execution and parity
+python3 .github/scripts/check_cross_tool_external_execution.py \
+  /tmp/cross-tool-real-spin.json \
+  --required-tools tarsier,spin \
+  --require-real-tools spin
+python3 .github/scripts/check_cross_tool_verdict_parity.py /tmp/cross-tool-real-spin.json
+```
+
+Blocking CI gate:
+- `.github/workflows/ci.yml` job `cross-tool-real-spin-gate` installs SPIN and
+  runs a real (non-mock) smoke scenario manifest:
+  `benchmarks/cross_tool_scenarios/scenario_manifest_real_spin_smoke.json`.
+- The gate enforces:
+  - `spin` execution mode is `real` (`check_cross_tool_external_execution.py --require-real-tools spin`)
+  - verdict parity agreement between non-mock tools (`check_cross_tool_verdict_parity.py`).

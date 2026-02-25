@@ -18,8 +18,10 @@ of analysis on every edit:
   `tarsier::parse::duplicate`).
 - **Lowering diagnostics** -- semantic errors detected during IR lowering, such
   as unknown phases, unknown message types, missing `init` declarations, unknown
-  enum types, and out-of-range values. Error messages include "did you mean?"
-  suggestions when a close match exists (Levenshtein distance <= 2).
+  enum types, missing enum initializers, and out-of-range values. Structural
+  checks (unknown names, missing `init`, enum typing/init) are aggregated so
+  multiple issues can be reported in one pass. Error messages include "did you
+  mean?" suggestions when a close match exists (Levenshtein distance <= 2).
 
 ### Hover
 
@@ -41,13 +43,40 @@ Hover over any identifier to see documentation:
 
 Jump to the declaration of any user-defined symbol: messages, roles, phases,
 parameters, variables, properties, and enums. The server resolves definitions
-using AST span information from the parser.
+using AST span information from the parser and follows `import` declarations
+across files (recursive import traversal).
 
 ### Find References
 
-Find all occurrences of a symbol across the current file. The server performs
-whole-word matching within the protocol span, returning every reference site
-for the selected identifier.
+Find occurrences of a symbol in the current file and imported `.trs` files.
+The server performs whole-word matching within each protocol span, returning
+reference locations from the import graph.
+
+### Workspace Symbol Search
+
+Implements `workspace/symbol` for global symbol lookup across:
+
+- currently open `.trs` documents
+- recursively resolved imports
+- discovered `.trs` files under workspace roots (bounded scan)
+
+Results include symbol kind, location, and container name metadata.
+
+### Document Symbols (Outline)
+
+Provides hierarchical outline symbols (`textDocument/documentSymbol`) for:
+
+- protocol root
+- imports/modules
+- parameters and enums
+- messages and cryptographic objects
+- committees
+- roles with child symbols for variables and phases
+- properties
+
+Selection ranges target identifier tokens where possible, so editor outline
+navigation and breadcrumbs land on symbol names rather than full declaration
+blocks.
 
 ### Completions
 
@@ -72,9 +101,49 @@ The server generates quick-fix code actions for specific diagnostic codes:
 - **Unknown phase** (`tarsier::lower::unknown_phase`) -- offers to replace with
   the closest known phase name.
 - **Unknown message** (`tarsier::lower::unknown_message`) -- offers to replace
-  with the closest known message name, or to insert a new `message` declaration.
+  with the closest known message/object name, or to insert a new `message`
+  declaration (for message-type diagnostics).
 - **Missing init phase** (`tarsier::lower::no_init_phase`) -- offers to insert
   an `init <first_phase>;` statement before the first phase in the role.
+- **Unknown enum type** (`tarsier::lower::unknown_enum`) -- offers to replace
+  with the closest declared enum name.
+- **Missing enum init** (`tarsier::lower::missing_enum_init`) -- offers to
+  insert `= <first_enum_variant>` for enum variables without initializers.
+
+### Rename Refactoring
+
+Implements `textDocument/prepareRename` and `textDocument/rename`:
+
+- validates identifier syntax (`[A-Za-z_][A-Za-z0-9_]*`)
+- rejects keyword renames
+- resolves symbol kind/scope at cursor (e.g., message vs role-local variable with
+  the same identifier) before computing edits
+- computes edits for declarations and references in the current file and
+  imported `.trs` files
+- returns a multi-file `WorkspaceEdit`
+
+### Formatting
+
+Implements `textDocument/formatting` and `textDocument/rangeFormatting` with a
+deterministic canonicalization pass:
+
+- normalizes indentation based on brace structure
+- trims redundant whitespace-only lines
+- produces stable output for repeated runs
+
+### Semantic Tokens
+
+Implements `textDocument/semanticTokens/full` and
+`textDocument/semanticTokens/range` using an LSP semantic token legend for:
+
+- keywords
+- types
+- variables
+- properties
+- functions
+- strings
+- numbers
+- operators
 
 ### Incremental Document Sync
 
@@ -210,23 +279,18 @@ The LSP understands the full Tarsier DSL grammar, including:
 
 ## Known Limitations
 
-- **Single-file scope.** The server analyzes each file independently. Cross-file
-  go-to-definition and references (e.g. following `import` declarations into
-  other `.trs` files) are not yet supported.
-- **No rename refactoring.** The `textDocument/rename` capability is not
-  implemented. Use find-references and manual edits instead.
-- **No document symbols / outline.** The `textDocument/documentSymbol` capability
-  is not yet implemented, so the VS Code outline view and breadcrumbs do not
-  populate.
-- **No formatting.** The server does not provide `textDocument/formatting` or
-  `textDocument/rangeFormatting`.
-- **No semantic tokens.** Syntax highlighting relies on the TextMate grammar
-  shipped with the VS Code extension rather than LSP semantic tokens.
-- **First-error-only for lowering.** Lowering diagnostics stop at the first
-  error; subsequent lowering issues in the same file are not reported until
-  the first is fixed.
-- **Code actions are limited.** Quick fixes are only available for a small set
-  of diagnostic codes (unknown phase, unknown message, missing init).
+- **Import-graph scope, not full workspace index.** Cross-file navigation and
+  rename currently follow resolved `import` chains. Symbols in unrelated
+  workspace files that are not imported are not indexed.
+- **Range formatting uses document canonicalization.** `textDocument/rangeFormatting`
+  currently applies the same formatter as full-document formatting, returning a
+  whole-document edit for consistency.
+- **Deep lowering remains first-error.** Structural lowering checks are
+  multi-error, but non-structural lowering failures still come from a first
+  failing `lower_with_source` pass.
+- **Code actions are still selective.** Quick fixes currently target unknown
+  phase/message/enum names and missing init/enum-init diagnostics; they do not
+  yet cover all diagnostic codes.
 
 ## Workspace Links
 

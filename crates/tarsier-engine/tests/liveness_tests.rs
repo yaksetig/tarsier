@@ -3,9 +3,7 @@ mod common;
 use tarsier_engine::pipeline::{
     FairnessMode, PipelineOptions, ProofEngine, SolverChoice, SoundnessMode,
 };
-use tarsier_engine::result::{
-    FairLivenessResult, LivenessResult, UnboundedFairLivenessResult,
-};
+use tarsier_engine::result::{FairLivenessResult, LivenessResult, UnboundedFairLivenessResult};
 
 #[test]
 fn bounded_liveness_uses_explicit_liveness_property() {
@@ -700,4 +698,3 @@ protocol FairNonTerminatingUnbounded {
         other => panic!("Expected fair cycle for unbounded k=0 run, got: {other}"),
     }
 }
-

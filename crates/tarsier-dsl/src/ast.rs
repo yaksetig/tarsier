@@ -853,10 +853,7 @@ mod tests {
 
     #[test]
     fn display_expr_arithmetic() {
-        let add = Expr::Add(
-            Box::new(Expr::Var("x".into())),
-            Box::new(Expr::IntLit(1)),
-        );
+        let add = Expr::Add(Box::new(Expr::Var("x".into())), Box::new(Expr::IntLit(1)));
         assert_eq!(add.to_string(), "(x + 1)");
 
         let sub = Expr::Sub(
@@ -865,16 +862,10 @@ mod tests {
         );
         assert_eq!(sub.to_string(), "(a - b)");
 
-        let mul = Expr::Mul(
-            Box::new(Expr::IntLit(2)),
-            Box::new(Expr::Var("y".into())),
-        );
+        let mul = Expr::Mul(Box::new(Expr::IntLit(2)), Box::new(Expr::Var("y".into())));
         assert_eq!(mul.to_string(), "(2 * y)");
 
-        let div = Expr::Div(
-            Box::new(Expr::Var("z".into())),
-            Box::new(Expr::IntLit(3)),
-        );
+        let div = Expr::Div(Box::new(Expr::Var("z".into())), Box::new(Expr::IntLit(3)));
         assert_eq!(div.to_string(), "(z / 3)");
     }
 

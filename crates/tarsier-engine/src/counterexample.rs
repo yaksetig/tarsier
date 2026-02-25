@@ -1139,10 +1139,7 @@ mod tests {
         let trace = Trace {
             initial_config: Configuration::new(2, 1, 2),
             steps: vec![],
-            param_values: vec![
-                ("n".to_string(), 10),
-                ("f".to_string(), 3),
-            ],
+            param_values: vec![("n".to_string(), 10), ("f".to_string(), 3)],
         };
         let s = format!("{trace}");
         assert!(s.contains("n = 10"));
@@ -1313,9 +1310,8 @@ mod tests {
 
     #[test]
     fn parse_counter_metadata_with_sender_no_fields() {
-        let parsed =
-            parse_counter_message_metadata("cnt_Prepare@Replica#1<-Replica#0")
-                .expect("should parse");
+        let parsed = parse_counter_message_metadata("cnt_Prepare@Replica#1<-Replica#0")
+            .expect("should parse");
         assert_eq!(parsed.0, "Prepare");
         assert_eq!(parsed.1, "Replica#1");
         assert_eq!(parsed.2.as_deref(), Some("Replica#0"));
@@ -1325,9 +1321,7 @@ mod tests {
 
     #[test]
     fn parse_counter_metadata_recipient_only_no_sender() {
-        let parsed =
-            parse_counter_message_metadata("cnt_Commit@Leader#0")
-                .expect("should parse");
+        let parsed = parse_counter_message_metadata("cnt_Commit@Leader#0").expect("should parse");
         assert_eq!(parsed.0, "Commit");
         assert_eq!(parsed.1, "Leader#0");
         assert_eq!(parsed.2, None);

@@ -154,7 +154,8 @@ These checks enforce the beginner/pro UX contract (help text, report schema fiel
   - Signs each artifact with Cosign (keyless OIDC).
   - Generates SPDX SBOM for each artifact.
   - Creates GitHub Artifact Attestation (SLSA provenance) for each artifact.
-  - Verifies all signatures and checksums before creating the GitHub Release.
+  - Verifies signatures/checksums and validates platform payload contents
+    (including required `.exe` binaries for Windows) before creating the GitHub Release.
   - Publishes all artifacts (`.tar.gz`, `.sha256`, `.sig`, `.pem`, `.sbom.spdx.json`) to the GitHub Release.
 
 ## CI Gate

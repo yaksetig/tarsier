@@ -308,9 +308,7 @@ mod tests {
         // Verify it is the Syntax variant
         match &err {
             ParseError::Syntax {
-                message,
-                span: s,
-                ..
+                message, span: s, ..
             } => {
                 assert_eq!(message, "bad token");
                 // miette::SourceSpan offset = 5, length = 5

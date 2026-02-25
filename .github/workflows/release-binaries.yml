@@ -70,15 +70,40 @@ jobs:
       - name: Package artifacts
         shell: bash
         run: |
+          set -euo pipefail
           TARGET=${{ matrix.target }}
           export TARGET
           STAGING="tarsier-${TARGET}"
           mkdir -p "${STAGING}"
-          cp "target/${TARGET}/release/tarsier" "${STAGING}/" 2>/dev/null || true
-          cp "target/${TARGET}/release/tarsier-certcheck" "${STAGING}/" 2>/dev/null || true
-          # Windows would have .exe suffix
-          cp "target/${TARGET}/release/tarsier.exe" "${STAGING}/" 2>/dev/null || true
-          cp "target/${TARGET}/release/tarsier-certcheck.exe" "${STAGING}/" 2>/dev/null || true
+
+          if [[ "${TARGET}" == *"windows"* ]]; then
+            expected_bins=("tarsier.exe" "tarsier-certcheck.exe")
+          else
+            expected_bins=("tarsier" "tarsier-certcheck")
+          fi
+
+          missing=0
+          for bin in "${expected_bins[@]}"; do
+            src="target/${TARGET}/release/${bin}"
+            if [[ -f "${src}" ]]; then
+              cp "${src}" "${STAGING}/"
+            else
+              echo "ERROR: expected release binary missing: ${src}"
+              missing=1
+            fi
+          done
+
+          if [[ "${missing}" -ne 0 ]]; then
+            echo "ERROR: packaging aborted due to missing binaries for ${TARGET}"
+            exit 1
+          fi
+
+          {
+            echo "target=${TARGET}"
+            echo "artifacts:"
+            ls -1 "${STAGING}"
+          } > "${STAGING}/MANIFEST.txt"
+
           tar czf "tarsier-${TARGET}.tar.gz" "${STAGING}"
           python3 - <<'PY'
           import hashlib
@@ -212,6 +237,41 @@ jobs:
             exit 1
           fi
           echo "All checksums verified"
+
+      - name: Verify artifact payloads
+        run: |
+          set -euo pipefail
+          for tarball in artifacts/*.tar.gz; do
+            base="$(basename "${tarball}" .tar.gz)"
+            target="${base#tarsier-}"
+            echo "Validating payload for ${target}..."
+            python3 - "${tarball}" "${target}" <<'PY'
+          import pathlib
+          import sys
+          import tarfile
+
+          tarball = sys.argv[1]
+          target = sys.argv[2]
+          if "windows" in target:
+              required = {"tarsier.exe", "tarsier-certcheck.exe"}
+          else:
+              required = {"tarsier", "tarsier-certcheck"}
+
+          with tarfile.open(tarball, "r:gz") as tf:
+              files = {
+                  pathlib.PurePosixPath(member.name).name
+                  for member in tf.getmembers()
+                  if member.isfile()
+              }
+
+          missing = sorted(required - files)
+          if missing:
+              raise SystemExit(
+                  f"missing expected binaries {missing} in {tarball}; payload files={sorted(files)}"
+              )
+          print(f"OK: {target} payload includes {sorted(required)}")
+          PY
+          done
 
       - name: Verify SBOMs present
         run: |

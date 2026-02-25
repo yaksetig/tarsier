@@ -302,6 +302,98 @@ jobs:
           fi
           echo "Certcheck standalone replay coverage OK"
 
+  cross-tool-real-bymc-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build Real ByMC Docker Image
+        run: bash benchmarks/bymc/build-docker.sh
+
+      - name: Run Cross-Tool Real ByMC Smoke
+        run: |
+          python3 benchmarks/cross_tool_runner.py \
+            --manifest benchmarks/cross_tool_scenarios/scenario_manifest_real_bymc_smoke.json \
+            --tools tarsier,bymc \
+            --bymc-binary benchmarks/bymc/run_bymc.sh \
+            --bymc-mode real \
+            --timeout 180 \
+            --out artifacts/cross-tool-real-bymc-report.json
+
+      - name: Validate Real External Execution Contract
+        run: |
+          python3 ./.github/scripts/check_cross_tool_external_execution.py \
+            artifacts/cross-tool-real-bymc-report.json \
+            --required-tools tarsier,bymc \
+            --require-real-tools bymc
+
+      - name: Cross-Tool Real Verdict Parity Check
+        run: python3 ./.github/scripts/check_cross_tool_verdict_parity.py artifacts/cross-tool-real-bymc-report.json
+
+      - name: Upload Real ByMC Cross-Tool Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-tool-real-bymc-report
+          path: artifacts/cross-tool-real-bymc-report.json
+
+  cross-tool-real-spin-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Real SPIN
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y spin
+          spin -V
+
+      - name: Run Cross-Tool Real SPIN Smoke
+        run: |
+          python3 benchmarks/cross_tool_runner.py \
+            --manifest benchmarks/cross_tool_scenarios/scenario_manifest_real_spin_smoke.json \
+            --tools tarsier,spin \
+            --spin-binary spin \
+            --timeout 180 \
+            --out artifacts/cross-tool-real-spin-report.json
+
+      - name: Validate Real External Execution Contract
+        run: |
+          python3 ./.github/scripts/check_cross_tool_external_execution.py \
+            artifacts/cross-tool-real-spin-report.json \
+            --required-tools tarsier,spin \
+            --require-real-tools spin
+
+      - name: Cross-Tool Real Verdict Parity Check
+        run: python3 ./.github/scripts/check_cross_tool_verdict_parity.py artifacts/cross-tool-real-spin-report.json
+
+      - name: Upload Real SPIN Cross-Tool Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-tool-real-spin-report
+          path: artifacts/cross-tool-real-spin-report.json
+
   coverage-llvm:
     runs-on: ubuntu-latest
     needs: build-test

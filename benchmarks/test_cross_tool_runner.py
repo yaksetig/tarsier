@@ -533,6 +533,54 @@ class TestScenarioManifest(unittest.TestCase):
                     f"scenario {sid} tool {tool} command_template must include {{binary}}",
                 )
 
+    def _assert_real_smoke_manifest_contract(
+        self,
+        manifest_name: str,
+        external_tool: str,
+        *,
+        require_command_template_real: bool = False,
+    ):
+        manifest_path = Path(__file__).parent / "cross_tool_scenarios" / manifest_name
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        self.assertEqual(manifest["schema_version"], 1)
+        self.assertGreaterEqual(len(manifest.get("scenarios", [])), 1)
+
+        scenario = manifest["scenarios"][0]
+        self.assertIn("tool_inputs", scenario)
+        self.assertIn("tarsier", scenario["tool_inputs"])
+        self.assertIn(external_tool, scenario["tool_inputs"])
+
+        tarsier_cfg = scenario["tool_inputs"]["tarsier"]
+        tarsier_model_file = tarsier_cfg.get("file")
+        self.assertIsInstance(tarsier_model_file, str)
+        self.assertTrue((Path(__file__).parent.parent / tarsier_model_file).exists())
+
+        external_cfg = scenario["tool_inputs"][external_tool]
+        self.assertEqual(external_cfg.get("execution_mode"), "real")
+        self.assertIn("{binary}", external_cfg.get("command_template", ""))
+
+        if require_command_template_real:
+            self.assertIn("{binary}", external_cfg.get("command_template_real", ""))
+
+        model_file = external_cfg.get("file")
+        self.assertIsInstance(model_file, str)
+        self.assertTrue((Path(__file__).parent.parent / model_file).exists())
+
+    def test_real_bymc_smoke_manifest_contract(self):
+        self._assert_real_smoke_manifest_contract(
+            "scenario_manifest_real_bymc_smoke.json",
+            "bymc",
+            require_command_template_real=True,
+        )
+
+    def test_real_spin_smoke_manifest_contract(self):
+        self._assert_real_smoke_manifest_contract(
+            "scenario_manifest_real_spin_smoke.json",
+            "spin",
+        )
+
 
 class TestExternalToolExecution(unittest.TestCase):
     """AC1: runner executes scenarios across at least two external tools."""

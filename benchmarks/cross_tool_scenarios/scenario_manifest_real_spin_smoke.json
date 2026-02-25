@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "description": "Real SPIN smoke scenarios for blocking CI parity gate.",
+  "scenarios": [
+    {
+      "id": "reliable_broadcast_agreement_real_spin_smoke",
+      "name": "Reliable Broadcast Agreement (Real SPIN Smoke)",
+      "protocol_family": "reliable_broadcast",
+      "property": "agreement",
+      "property_description": "If any correct process delivers, all correct processes deliver the same value.",
+      "expected_verdict": "safe",
+      "assumptions": {
+        "fault_model": "byzantine",
+        "fault_bound": "n >= 3f+1",
+        "network": "asynchronous",
+        "message_loss": false
+      },
+      "tool_inputs": {
+        "tarsier": {
+          "file": "examples/library/reliable_broadcast_safe.trs",
+          "mode": "proof",
+          "depth": 8,
+          "k": 10,
+          "timeout_secs": 120
+        },
+        "spin": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/reliable_broadcast_agreement_spin_smoke.pml",
+          "command_template": "{binary} -run {model_file}",
+          "execution_mode": "real",
+          "notes": "Blocking CI smoke gate for real SPIN execution."
+        }
+      }
+    }
+  ]
+}

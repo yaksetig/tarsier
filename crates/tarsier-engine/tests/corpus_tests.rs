@@ -333,4 +333,3 @@ fn manifest_expected_outcomes_are_valid_tokens() {
         );
     }
 }
-

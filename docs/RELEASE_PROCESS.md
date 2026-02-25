@@ -71,7 +71,8 @@ Signatures are verified in CI before the GitHub Release is created (the `verify`
    - sign all artifacts with Cosign
    - generate SBOMs for all artifacts
    - generate build provenance attestations
-   - verify all signatures, checksums, and SBOMs
+   - verify all signatures, checksums, SBOMs, and platform payload contents
+     (including `.exe` binaries for Windows targets)
    - create GitHub Release with all artifacts attached
 5. Publish/refer to release only after all gates are green.
 

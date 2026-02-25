@@ -28,10 +28,17 @@ pub enum QuantifiedFragment {
     /// Verified via termination goal-location reachability.
     UniversalTermination,
 
-    /// `forall p:R. <temporal formula>` (contains temporal operators, liveness kind)
+    /// `forall ... . <temporal formula>` (contains temporal operators)
     ///
     /// Verified via Büchi automaton construction + fair-cycle detection.
     UniversalTemporal,
+
+    /// `exists ... . <formula>` handled through temporal encoding.
+    ///
+    /// This includes explicit temporal formulas, plus non-temporal formulas
+    /// rewritten by property-kind semantics (for example `[]phi` for safety
+    /// kinds, `<>phi` for liveness kinds).
+    ExistentialTemporal,
 }
 
 impl QuantifiedFragment {
@@ -75,6 +82,14 @@ impl QuantifiedFragment {
                  (1) correct Büchi construction from the LTL formula, (2) the fairness \
                  assumption, and (3) faithful counter-abstraction of the protocol."
             }
+
+            QuantifiedFragment::ExistentialTemporal => {
+                "Under the counter-abstraction model with weak/strong fairness, if the \
+                 verifier reports Live, then no fair execution violates the existentially \
+                 quantified temporal specification. Existential state predicates are encoded \
+                 as occupancy constraints (some role process satisfies the predicate). \
+                 Soundness depends on faithful counter abstraction and fairness assumptions."
+            }
         }
     }
 }
@@ -86,6 +101,7 @@ impl std::fmt::Display for QuantifiedFragment {
             QuantifiedFragment::UniversalInvariant => write!(f, "universal-invariant"),
             QuantifiedFragment::UniversalTermination => write!(f, "universal-termination"),
             QuantifiedFragment::UniversalTemporal => write!(f, "universal-temporal"),
+            QuantifiedFragment::ExistentialTemporal => write!(f, "existential-temporal"),
         }
     }
 }
@@ -119,22 +135,6 @@ pub fn classify_property_fragment(
     let q = &prop.formula.quantifiers;
     let body = &prop.formula.body;
 
-    // Check for existential quantifiers (not supported).
-    if q.iter().any(|b| b.quantifier == ast::Quantifier::Exists) {
-        return Err(FragmentDiagnostic {
-            property_name: name,
-            message: "existential quantifiers are not supported. Tarsier verifies \
-                      universally quantified properties over counter-abstracted processes."
-                .into(),
-            hint: Some(
-                "Rewrite as a universal property: `exists p:R. phi(p)` is equivalent to \
-                 `!(forall p:R. !phi(p))` but Tarsier cannot negate the verification \
-                 result soundly. Consider expressing as a safety invariant instead."
-                    .into(),
-            ),
-        });
-    }
-
     match prop.kind {
         ast::PropertyKind::Agreement => {
             // Must have exactly 2 universal quantifiers over the same role.
@@ -145,6 +145,13 @@ pub fn classify_property_fragment(
                         "agreement requires exactly 2 universal quantifiers, found {}.",
                         q.len()
                     ),
+                    hint: Some("Use: `forall p: Role. forall q: Role. p.x == q.x`".into()),
+                });
+            }
+            if q.iter().any(|b| b.quantifier != ast::Quantifier::ForAll) {
+                return Err(FragmentDiagnostic {
+                    property_name: name,
+                    message: "agreement supports only universal quantifiers (`forall`).".into(),
                     hint: Some("Use: `forall p: Role. forall q: Role. p.x == q.x`".into()),
                 });
             }
@@ -159,66 +166,62 @@ pub fn classify_property_fragment(
                 });
             }
             if formula_contains_temporal(body) {
-                return Err(FragmentDiagnostic {
-                    property_name: name,
-                    message: "temporal operators in agreement properties are not supported. \
-                              Agreement is a state-based safety property."
-                        .into(),
-                    hint: Some(
-                        "Remove temporal operators ([], <>, U, etc.) from the agreement formula. \
-                         Agreement is checked as: in every reachable state, no two processes \
-                         disagree."
-                            .into(),
-                    ),
-                });
+                Ok(QuantifiedFragment::UniversalTemporal)
+            } else {
+                Ok(QuantifiedFragment::UniversalAgreement)
             }
-            Ok(QuantifiedFragment::UniversalAgreement)
         }
         ast::PropertyKind::Invariant | ast::PropertyKind::Safety | ast::PropertyKind::Validity => {
-            // Must have exactly 1 universal quantifier.
+            // Must have exactly 1 quantifier over one role.
             if q.len() != 1 {
                 return Err(FragmentDiagnostic {
                     property_name: name,
                     message: format!(
-                        "{} requires exactly 1 universal quantifier, found {}.",
+                        "{} requires exactly 1 quantifier, found {}.",
                         prop.kind,
                         q.len()
                     ),
-                    hint: Some("Use: `forall p: Role. p.x == true`".into()),
-                });
-            }
-            if formula_contains_temporal(body) {
-                return Err(FragmentDiagnostic {
-                    property_name: name,
-                    message: format!(
-                        "temporal operators in {} properties are not supported. \
-                         Use kind `liveness` for temporal properties.",
-                        prop.kind
-                    ),
                     hint: Some(
-                        "Either remove temporal operators or change the property kind to `liveness`."
+                        "Use: `forall p: Role. p.x == true` or `exists p: Role. p.x == true`"
                             .into(),
                     ),
                 });
             }
-            Ok(QuantifiedFragment::UniversalInvariant)
+            match q[0].quantifier {
+                ast::Quantifier::ForAll => {
+                    if formula_contains_temporal(body) {
+                        Ok(QuantifiedFragment::UniversalTemporal)
+                    } else {
+                        Ok(QuantifiedFragment::UniversalInvariant)
+                    }
+                }
+                ast::Quantifier::Exists => Ok(QuantifiedFragment::ExistentialTemporal),
+            }
         }
         ast::PropertyKind::Liveness => {
-            // Must have exactly 1 universal quantifier.
+            // Must have exactly 1 quantifier over one role.
             if q.len() != 1 {
                 return Err(FragmentDiagnostic {
                     property_name: name,
                     message: format!(
-                        "liveness requires exactly 1 universal quantifier, found {}.",
+                        "liveness requires exactly 1 quantifier, found {}.",
                         q.len()
                     ),
-                    hint: Some("Use: `forall p: Role. <> p.decided == true`".into()),
+                    hint: Some(
+                        "Use: `forall p: Role. <> p.decided == true` or `exists p: Role. <> p.decided == true`"
+                            .into(),
+                    ),
                 });
             }
-            if formula_contains_temporal(body) {
-                Ok(QuantifiedFragment::UniversalTemporal)
-            } else {
-                Ok(QuantifiedFragment::UniversalTermination)
+            match q[0].quantifier {
+                ast::Quantifier::ForAll => {
+                    if formula_contains_temporal(body) {
+                        Ok(QuantifiedFragment::UniversalTemporal)
+                    } else {
+                        Ok(QuantifiedFragment::UniversalTermination)
+                    }
+                }
+                ast::Quantifier::Exists => Ok(QuantifiedFragment::ExistentialTemporal),
             }
         }
     }
@@ -259,11 +262,10 @@ pub fn validate_property_fragments(
 /// - Invariant/Safety/Validity: `forall p: R. p.x == true/false` where `x` is boolean.
 ///
 /// Any other property shape returns an error rather than silently falling back.
-pub fn extract_property(
-    ta: &ThresholdAutomaton,
-    program: &ast::Program,
+pub(super) fn select_single_safety_property_decl<'a>(
+    program: &'a ast::Program,
     soundness: SoundnessMode,
-) -> Result<SafetyProperty, PipelineError> {
+) -> Result<Option<&'a ast::PropertyDecl>, PipelineError> {
     let safety_props: Vec<&ast::Spanned<ast::PropertyDecl>> = program
         .protocol
         .node
@@ -271,16 +273,16 @@ pub fn extract_property(
         .iter()
         .filter(|p| is_safety_property_kind(p.node.kind))
         .collect();
+
     if safety_props.is_empty() {
         if soundness == SoundnessMode::Strict {
             return Err(PipelineError::Validation(
                 "Strict mode requires an explicit property declaration.".into(),
             ));
         }
-        // Default to agreement on `decided` if no property provided.
-        tracing::warn!("No property declared; defaulting to structural agreement on `decided`.");
-        return Ok(extract_agreement_property(ta));
+        return Ok(None);
     }
+
     if safety_props.len() > 1 {
         return Err(PipelineError::Validation(
             "This entry point checks one safety property at a time. Use verify_all_properties() \
@@ -289,8 +291,74 @@ pub fn extract_property(
         ));
     }
 
-    let prop = &safety_props[0].node;
+    Ok(Some(&safety_props[0].node))
+}
+
+/// Extract the safety property from the protocol.
+///
+/// Supported (sound) fragments:
+/// - Agreement: `forall p: R. forall q: R. p.x == q.x` where `x` is a boolean or enum local var.
+/// - Invariant/Safety/Validity: `forall p: R. p.x == true/false` where `x` is boolean.
+///
+/// Any other property shape returns an error rather than silently falling back.
+pub fn extract_property(
+    ta: &ThresholdAutomaton,
+    program: &ast::Program,
+    soundness: SoundnessMode,
+) -> Result<SafetyProperty, PipelineError> {
+    let Some(prop) = select_single_safety_property_decl(program, soundness)? else {
+        // Default to agreement on `decided` if no property provided.
+        tracing::warn!("No property declared; defaulting to structural agreement on `decided`.");
+        return Ok(extract_agreement_property(ta));
+    };
     extract_property_from_decl(ta, prop)
+}
+
+/// Select a property for ByMC `.ta` export.
+///
+/// Selection policy:
+/// - If the model declares a safety property, export that safety property.
+/// - Else if the model declares a liveness property that is a non-temporal
+///   termination predicate, export it as `SafetyProperty::Termination`.
+/// - Else (temporal-only liveness or extraction errors), fall back to
+///   structural agreement to keep export best-effort and non-failing.
+pub fn select_property_for_ta_export(
+    ta: &ThresholdAutomaton,
+    program: &ast::Program,
+) -> SafetyProperty {
+    if has_safety_properties(program) {
+        match extract_property(ta, program, SoundnessMode::Permissive) {
+            Ok(prop) => return prop,
+            Err(err) => {
+                tracing::warn!(
+                    "failed to extract safety property for TA export ({err}); \
+                     falling back to agreement"
+                );
+            }
+        }
+    }
+
+    if has_liveness_properties(program) {
+        match extract_liveness_spec(ta, program) {
+            Ok(LivenessSpec::TerminationGoalLocs(goal_locs)) => {
+                return SafetyProperty::Termination { goal_locs };
+            }
+            Ok(LivenessSpec::Temporal { .. }) => {
+                tracing::warn!(
+                    "temporal liveness property is not representable in ByMC \
+                     `.ta` specification export; falling back to agreement"
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "failed to extract liveness property for TA export ({err}); \
+                     falling back to agreement"
+                );
+            }
+        }
+    }
+
+    extract_agreement_property(ta)
 }
 
 pub(super) fn extract_property_from_decl(
@@ -703,6 +771,7 @@ pub(super) fn collect_non_goal_reachable_locs(
 pub(crate) enum LivenessSpec {
     TerminationGoalLocs(Vec<usize>),
     Temporal {
+        quantifier: ast::Quantifier,
         quantified_var: String,
         role: String,
         formula: ast::FormulaExpr,
@@ -737,6 +806,7 @@ pub(crate) struct TemporalBuchiState {
 
 #[derive(Debug, Clone)]
 pub(crate) struct TemporalBuchiAutomaton {
+    pub(crate) quantifier: ast::Quantifier,
     pub(crate) quantified_var: String,
     pub(crate) role: String,
     pub(crate) atoms: Vec<ast::FormulaExpr>,
@@ -1138,8 +1208,8 @@ pub(super) fn temporal_formula_canonical(formula: &TemporalFormula) -> String {
 pub(super) fn temporal_buchi_monitor_canonical(automaton: &TemporalBuchiAutomaton) -> String {
     let mut chunks = Vec::new();
     chunks.push(format!(
-        "quantified_var={};role={}",
-        automaton.quantified_var, automaton.role
+        "quantifier={};quantified_var={};role={}",
+        automaton.quantifier, automaton.quantified_var, automaton.role
     ));
     for (idx, atom) in automaton.atoms.iter().enumerate() {
         chunks.push(format!("atom[{idx}]={atom}"));
@@ -1337,6 +1407,7 @@ pub(super) fn expand_temporal_seed(
 
 /// Compile a temporal property into an explicit Büchi monitor.
 pub(super) fn compile_temporal_buchi_automaton(
+    quantifier: ast::Quantifier,
     quantified_var: &str,
     role: &str,
     formula: &ast::FormulaExpr,
@@ -1450,6 +1521,7 @@ pub(super) fn compile_temporal_buchi_automaton(
     }
 
     Ok(TemporalBuchiAutomaton {
+        quantifier,
         quantified_var: quantified_var.to_string(),
         role: role.to_string(),
         atoms: atoms.atoms,
@@ -1459,37 +1531,56 @@ pub(super) fn compile_temporal_buchi_automaton(
     })
 }
 
-/// Encode a universally quantified state predicate at one time-step.
-pub(super) fn build_universal_state_predicate_term(
+/// Encode a quantified state predicate at one time-step.
+pub(super) fn build_quantified_state_predicate_term(
     ta: &ThresholdAutomaton,
+    quantifier: ast::Quantifier,
     quantified_var: &str,
     role: &str,
     state_expr: &ast::FormulaExpr,
     step: usize,
 ) -> Result<SmtTerm, PipelineError> {
+    let mut satisfying_locs = Vec::new();
     let mut disallowed_locs = Vec::new();
     for (id, loc) in ta.locations.iter().enumerate() {
         if loc.role != role {
             continue;
         }
         let holds = eval_formula_expr_on_location(state_expr, quantified_var, loc)?;
-        if !holds {
+        if holds {
+            satisfying_locs.push(id);
+        } else {
             disallowed_locs.push(id);
         }
     }
-    if disallowed_locs.is_empty() {
-        return Ok(SmtTerm::bool(true));
+    match quantifier {
+        ast::Quantifier::ForAll => {
+            if disallowed_locs.is_empty() {
+                return Ok(SmtTerm::bool(true));
+            }
+            let clauses = disallowed_locs
+                .into_iter()
+                .map(|id| SmtTerm::var(pdr_kappa_var(step, id)).eq(SmtTerm::int(0)))
+                .collect::<Vec<_>>();
+            Ok(SmtTerm::and(clauses))
+        }
+        ast::Quantifier::Exists => {
+            if satisfying_locs.is_empty() {
+                return Ok(SmtTerm::bool(false));
+            }
+            let disjuncts = satisfying_locs
+                .into_iter()
+                .map(|id| SmtTerm::var(pdr_kappa_var(step, id)).gt(SmtTerm::int(0)))
+                .collect::<Vec<_>>();
+            Ok(SmtTerm::or(disjuncts))
+        }
     }
-    let clauses = disallowed_locs
-        .into_iter()
-        .map(|id| SmtTerm::var(pdr_kappa_var(step, id)).eq(SmtTerm::int(0)))
-        .collect::<Vec<_>>();
-    Ok(SmtTerm::and(clauses))
 }
 
 /// Encode a (possibly temporal) quantified formula on a bounded trace suffix.
-pub(super) fn encode_temporal_formula_term(
+pub(super) fn encode_quantified_temporal_formula_term(
     ta: &ThresholdAutomaton,
+    quantifier: ast::Quantifier,
     quantified_var: &str,
     role: &str,
     formula: &ast::FormulaExpr,
@@ -1500,14 +1591,27 @@ pub(super) fn encode_temporal_formula_term(
         return Ok(SmtTerm::bool(false));
     }
     if !formula_contains_temporal(formula) {
-        return build_universal_state_predicate_term(ta, quantified_var, role, formula, step);
+        return build_quantified_state_predicate_term(
+            ta,
+            quantifier,
+            quantified_var,
+            role,
+            formula,
+            step,
+        );
     }
     match formula {
-        ast::FormulaExpr::Comparison { .. } => {
-            build_universal_state_predicate_term(ta, quantified_var, role, formula, step)
-        }
-        ast::FormulaExpr::Not(inner) => Ok(SmtTerm::not(encode_temporal_formula_term(
+        ast::FormulaExpr::Comparison { .. } => build_quantified_state_predicate_term(
             ta,
+            quantifier,
+            quantified_var,
+            role,
+            formula,
+            step,
+        ),
+        ast::FormulaExpr::Not(inner) => Ok(SmtTerm::not(encode_quantified_temporal_formula_term(
+            ta,
+            quantifier,
             quantified_var,
             role,
             inner,
@@ -1515,21 +1619,85 @@ pub(super) fn encode_temporal_formula_term(
             depth,
         )?)),
         ast::FormulaExpr::And(lhs, rhs) => Ok(SmtTerm::and(vec![
-            encode_temporal_formula_term(ta, quantified_var, role, lhs, step, depth)?,
-            encode_temporal_formula_term(ta, quantified_var, role, rhs, step, depth)?,
+            encode_quantified_temporal_formula_term(
+                ta,
+                quantifier,
+                quantified_var,
+                role,
+                lhs,
+                step,
+                depth,
+            )?,
+            encode_quantified_temporal_formula_term(
+                ta,
+                quantifier,
+                quantified_var,
+                role,
+                rhs,
+                step,
+                depth,
+            )?,
         ])),
         ast::FormulaExpr::Or(lhs, rhs) => Ok(SmtTerm::or(vec![
-            encode_temporal_formula_term(ta, quantified_var, role, lhs, step, depth)?,
-            encode_temporal_formula_term(ta, quantified_var, role, rhs, step, depth)?,
+            encode_quantified_temporal_formula_term(
+                ta,
+                quantifier,
+                quantified_var,
+                role,
+                lhs,
+                step,
+                depth,
+            )?,
+            encode_quantified_temporal_formula_term(
+                ta,
+                quantifier,
+                quantified_var,
+                role,
+                rhs,
+                step,
+                depth,
+            )?,
         ])),
         ast::FormulaExpr::Implies(lhs, rhs) => {
-            let l = encode_temporal_formula_term(ta, quantified_var, role, lhs, step, depth)?;
-            let r = encode_temporal_formula_term(ta, quantified_var, role, rhs, step, depth)?;
+            let l = encode_quantified_temporal_formula_term(
+                ta,
+                quantifier,
+                quantified_var,
+                role,
+                lhs,
+                step,
+                depth,
+            )?;
+            let r = encode_quantified_temporal_formula_term(
+                ta,
+                quantifier,
+                quantified_var,
+                role,
+                rhs,
+                step,
+                depth,
+            )?;
             Ok(SmtTerm::or(vec![SmtTerm::not(l), r]))
         }
         ast::FormulaExpr::Iff(lhs, rhs) => {
-            let l = encode_temporal_formula_term(ta, quantified_var, role, lhs, step, depth)?;
-            let r = encode_temporal_formula_term(ta, quantified_var, role, rhs, step, depth)?;
+            let l = encode_quantified_temporal_formula_term(
+                ta,
+                quantifier,
+                quantified_var,
+                role,
+                lhs,
+                step,
+                depth,
+            )?;
+            let r = encode_quantified_temporal_formula_term(
+                ta,
+                quantifier,
+                quantified_var,
+                role,
+                rhs,
+                step,
+                depth,
+            )?;
             Ok(SmtTerm::or(vec![
                 SmtTerm::and(vec![l.clone(), r.clone()]),
                 SmtTerm::and(vec![SmtTerm::not(l), SmtTerm::not(r)]),
@@ -1539,30 +1707,66 @@ pub(super) fn encode_temporal_formula_term(
             if step == depth {
                 Ok(SmtTerm::bool(false))
             } else {
-                encode_temporal_formula_term(ta, quantified_var, role, inner, step + 1, depth)
+                encode_quantified_temporal_formula_term(
+                    ta,
+                    quantifier,
+                    quantified_var,
+                    role,
+                    inner,
+                    step + 1,
+                    depth,
+                )
             }
         }
         ast::FormulaExpr::Always(inner) => {
             let terms = (step..=depth)
-                .map(|i| encode_temporal_formula_term(ta, quantified_var, role, inner, i, depth))
+                .map(|i| {
+                    encode_quantified_temporal_formula_term(
+                        ta,
+                        quantifier,
+                        quantified_var,
+                        role,
+                        inner,
+                        i,
+                        depth,
+                    )
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(SmtTerm::and(terms))
         }
         ast::FormulaExpr::Eventually(inner) => {
             let terms = (step..=depth)
-                .map(|i| encode_temporal_formula_term(ta, quantified_var, role, inner, i, depth))
+                .map(|i| {
+                    encode_quantified_temporal_formula_term(
+                        ta,
+                        quantifier,
+                        quantified_var,
+                        role,
+                        inner,
+                        i,
+                        depth,
+                    )
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(SmtTerm::or(terms))
         }
         ast::FormulaExpr::Until(lhs, rhs) => {
             let mut disjuncts = Vec::new();
             for j in step..=depth {
-                let rhs_at_j =
-                    encode_temporal_formula_term(ta, quantified_var, role, rhs, j, depth)?;
+                let rhs_at_j = encode_quantified_temporal_formula_term(
+                    ta,
+                    quantifier,
+                    quantified_var,
+                    role,
+                    rhs,
+                    j,
+                    depth,
+                )?;
                 let mut conjuncts = vec![rhs_at_j];
                 for i in step..j {
-                    conjuncts.push(encode_temporal_formula_term(
+                    conjuncts.push(encode_quantified_temporal_formula_term(
                         ta,
+                        quantifier,
                         quantified_var,
                         role,
                         lhs,
@@ -1578,8 +1782,24 @@ pub(super) fn encode_temporal_formula_term(
             let until_expr = ast::FormulaExpr::Until(lhs.clone(), rhs.clone());
             let always_expr = ast::FormulaExpr::Always(lhs.clone());
             Ok(SmtTerm::or(vec![
-                encode_temporal_formula_term(ta, quantified_var, role, &until_expr, step, depth)?,
-                encode_temporal_formula_term(ta, quantified_var, role, &always_expr, step, depth)?,
+                encode_quantified_temporal_formula_term(
+                    ta,
+                    quantifier,
+                    quantified_var,
+                    role,
+                    &until_expr,
+                    step,
+                    depth,
+                )?,
+                encode_quantified_temporal_formula_term(
+                    ta,
+                    quantifier,
+                    quantified_var,
+                    role,
+                    &always_expr,
+                    step,
+                    depth,
+                )?,
             ]))
         }
         ast::FormulaExpr::Release(lhs, rhs) => {
@@ -1588,8 +1808,9 @@ pub(super) fn encode_temporal_formula_term(
                 Box::new(ast::FormulaExpr::Not(lhs.clone())),
                 Box::new(ast::FormulaExpr::Not(rhs.clone())),
             );
-            Ok(SmtTerm::not(encode_temporal_formula_term(
+            Ok(SmtTerm::not(encode_quantified_temporal_formula_term(
                 ta,
+                quantifier,
                 quantified_var,
                 role,
                 &dual_until,
@@ -1600,9 +1821,27 @@ pub(super) fn encode_temporal_formula_term(
         ast::FormulaExpr::LeadsTo(lhs, rhs) => {
             let mut conjuncts = Vec::new();
             for i in step..=depth {
-                let lhs_i = encode_temporal_formula_term(ta, quantified_var, role, lhs, i, depth)?;
+                let lhs_i = encode_quantified_temporal_formula_term(
+                    ta,
+                    quantifier,
+                    quantified_var,
+                    role,
+                    lhs,
+                    i,
+                    depth,
+                )?;
                 let future_rhs = (i..=depth)
-                    .map(|j| encode_temporal_formula_term(ta, quantified_var, role, rhs, j, depth))
+                    .map(|j| {
+                        encode_quantified_temporal_formula_term(
+                            ta,
+                            quantifier,
+                            quantified_var,
+                            role,
+                            rhs,
+                            j,
+                            depth,
+                        )
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 conjuncts.push(SmtTerm::or(vec![
                     SmtTerm::not(lhs_i),
@@ -1621,25 +1860,55 @@ pub(super) fn extract_liveness_spec_from_decl(
 ) -> Result<LivenessSpec, PipelineError> {
     let reachable = graph_reachable_locations(ta);
     let q = &prop.formula.quantifiers;
-    if q.len() != 1 || q[0].quantifier != ast::Quantifier::ForAll {
+    if q.len() != 1 {
         return Err(PipelineError::Property(
-            "Liveness property must use one universal quantifier: `forall p: Role. ...`.".into(),
+            "Property must use exactly one quantifier: `forall p: Role. ...` or `exists p: Role. ...`."
+                .into(),
         ));
     }
+    let quantifier = q[0].quantifier;
     let quantified_var = &q[0].var;
     let role = &q[0].domain;
     let role_exists = ta.locations.iter().any(|loc| loc.role == *role);
     if !role_exists {
         return Err(PipelineError::Property(format!(
-            "Liveness property references unknown role '{role}'."
+            "Property references unknown role '{role}'."
         )));
     }
 
-    if formula_contains_temporal(&prop.formula.body) {
+    let has_temporal_ops = formula_contains_temporal(&prop.formula.body);
+    if has_temporal_ops {
         return Ok(LivenessSpec::Temporal {
+            quantifier,
             quantified_var: quantified_var.clone(),
             role: role.clone(),
             formula: prop.formula.body.clone(),
+        });
+    }
+
+    // Existential quantification and safety-kind state predicates are routed
+    // through the temporal backend with explicit wrappers that preserve kind
+    // semantics:
+    //   - safety/invariant/validity: []phi
+    //   - liveness exists:           <>phi
+    let wrapped_temporal = match (prop.kind, quantifier) {
+        (
+            ast::PropertyKind::Invariant | ast::PropertyKind::Safety | ast::PropertyKind::Validity,
+            _,
+        ) => Some(ast::FormulaExpr::Always(Box::new(
+            prop.formula.body.clone(),
+        ))),
+        (ast::PropertyKind::Liveness, ast::Quantifier::Exists) => Some(
+            ast::FormulaExpr::Eventually(Box::new(prop.formula.body.clone())),
+        ),
+        _ => None,
+    };
+    if let Some(formula) = wrapped_temporal {
+        return Ok(LivenessSpec::Temporal {
+            quantifier,
+            quantified_var: quantified_var.clone(),
+            role: role.clone(),
+            formula,
         });
     }
 
@@ -1699,11 +1968,12 @@ pub(super) fn fair_liveness_target_from_spec(
             collect_non_goal_reachable_locs(ta, &goal_locs),
         )),
         LivenessSpec::Temporal {
+            quantifier,
             quantified_var,
             role,
             formula,
         } => Ok(FairLivenessTarget::Temporal(
-            compile_temporal_buchi_automaton(&quantified_var, &role, &formula)?,
+            compile_temporal_buchi_automaton(quantifier, &quantified_var, &role, &formula)?,
         )),
     }
 }
@@ -1746,6 +2016,14 @@ mod tests {
     fn forall(var: &str, domain: &str) -> ast::QuantifierBinding {
         ast::QuantifierBinding {
             quantifier: ast::Quantifier::ForAll,
+            var: var.to_string(),
+            domain: domain.to_string(),
+        }
+    }
+
+    fn exists(var: &str, domain: &str) -> ast::QuantifierBinding {
+        ast::QuantifierBinding {
+            quantifier: ast::Quantifier::Exists,
             var: var.to_string(),
             domain: domain.to_string(),
         }
@@ -2178,19 +2456,27 @@ mod tests {
             ast::FormulaAtom::BoolLit(true),
         )));
         let monitor =
-            compile_temporal_buchi_automaton("p", "R", &always_true).expect("temporal compile");
+            compile_temporal_buchi_automaton(ast::Quantifier::ForAll, "p", "R", &always_true)
+                .expect("temporal compile");
         assert!(!monitor.states.is_empty());
         assert!(!monitor.initial_states.is_empty());
         let canonical = temporal_buchi_monitor_canonical(&monitor);
-        assert!(canonical.contains("quantified_var=p;role=R"));
+        assert!(canonical.contains("quantifier=forall;quantified_var=p;role=R"));
 
         let decided_true = cmp(
             qvar("p", "decided"),
             ast::CmpOp::Eq,
             ast::FormulaAtom::BoolLit(true),
         );
-        let state_term =
-            build_universal_state_predicate_term(&ta, "p", "R", &decided_true, 2).unwrap();
+        let state_term = build_quantified_state_predicate_term(
+            &ta,
+            ast::Quantifier::ForAll,
+            "p",
+            "R",
+            &decided_true,
+            2,
+        )
+        .unwrap();
         assert_eq!(
             state_term,
             SmtTerm::and(vec![
@@ -2205,17 +2491,66 @@ mod tests {
             ast::FormulaAtom::IntLit(0),
         );
         assert_eq!(
-            build_universal_state_predicate_term(&ta, "p", "R", &always_nonnegative, 0).unwrap(),
+            build_quantified_state_predicate_term(
+                &ta,
+                ast::Quantifier::ForAll,
+                "p",
+                "R",
+                &always_nonnegative,
+                0,
+            )
+            .unwrap(),
             SmtTerm::bool(true)
+        );
+        assert_eq!(
+            build_quantified_state_predicate_term(
+                &ta,
+                ast::Quantifier::Exists,
+                "p",
+                "R",
+                &decided_true,
+                0,
+            )
+            .unwrap(),
+            SmtTerm::or(vec![
+                SmtTerm::var(pdr_kappa_var(0, 1)).gt(SmtTerm::int(0)),
+                SmtTerm::var(pdr_kappa_var(0, 4)).gt(SmtTerm::int(0)),
+            ])
+        );
+        assert_eq!(
+            build_quantified_state_predicate_term(
+                &ta,
+                ast::Quantifier::Exists,
+                "p",
+                "R",
+                &cmp(
+                    qvar("p", "round"),
+                    ast::CmpOp::Gt,
+                    ast::FormulaAtom::IntLit(1000)
+                ),
+                0,
+            )
+            .unwrap(),
+            SmtTerm::bool(false)
         );
 
         assert_eq!(
-            encode_temporal_formula_term(&ta, "p", "R", &decided_true, 3, 2).unwrap(),
+            encode_quantified_temporal_formula_term(
+                &ta,
+                ast::Quantifier::ForAll,
+                "p",
+                "R",
+                &decided_true,
+                3,
+                2,
+            )
+            .unwrap(),
             SmtTerm::bool(false)
         );
         assert_eq!(
-            encode_temporal_formula_term(
+            encode_quantified_temporal_formula_term(
                 &ta,
+                ast::Quantifier::ForAll,
                 "p",
                 "R",
                 &ast::FormulaExpr::Next(Box::new(decided_true.clone())),
@@ -2226,8 +2561,25 @@ mod tests {
             SmtTerm::bool(false)
         );
         assert_eq!(
-            encode_temporal_formula_term(&ta, "p", "R", &decided_true, 1, 2).unwrap(),
-            build_universal_state_predicate_term(&ta, "p", "R", &decided_true, 1).unwrap()
+            encode_quantified_temporal_formula_term(
+                &ta,
+                ast::Quantifier::ForAll,
+                "p",
+                "R",
+                &decided_true,
+                1,
+                2,
+            )
+            .unwrap(),
+            build_quantified_state_predicate_term(
+                &ta,
+                ast::Quantifier::ForAll,
+                "p",
+                "R",
+                &decided_true,
+                1,
+            )
+            .unwrap()
         );
 
         let weak_until = ast::FormulaExpr::WeakUntil(
@@ -2238,7 +2590,17 @@ mod tests {
             )),
             Box::new(decided_true.clone()),
         );
-        match encode_temporal_formula_term(&ta, "p", "R", &weak_until, 0, 2).unwrap() {
+        match encode_quantified_temporal_formula_term(
+            &ta,
+            ast::Quantifier::ForAll,
+            "p",
+            "R",
+            &weak_until,
+            0,
+            2,
+        )
+        .unwrap()
+        {
             SmtTerm::Or(parts) => assert_eq!(parts.len(), 2),
             other => panic!("expected weak-until desugaring to OR, got {other:?}"),
         }
@@ -2260,7 +2622,7 @@ mod tests {
         )
         .expect_err("missing quantifier must fail");
         match err {
-            PipelineError::Property(msg) => assert!(msg.contains("one universal quantifier")),
+            PipelineError::Property(msg) => assert!(msg.contains("exactly one quantifier")),
             other => panic!("unexpected error: {other}"),
         }
         let err = extract_liveness_spec_from_decl(
@@ -2294,14 +2656,39 @@ mod tests {
         .expect("temporal liveness should compile");
         match temporal_spec.clone() {
             LivenessSpec::Temporal {
+                quantifier,
                 quantified_var,
                 role,
                 ..
             } => {
+                assert_eq!(quantifier, ast::Quantifier::ForAll);
                 assert_eq!(quantified_var, "p");
                 assert_eq!(role, "R");
             }
             other => panic!("expected temporal spec, got {other:?}"),
+        }
+
+        let exists_spec = extract_liveness_spec_from_decl(
+            &ta,
+            &liveness_prop("exists_live", vec![exists("p", "R")], propositional.clone()),
+        )
+        .expect("existential liveness should compile");
+        match exists_spec {
+            LivenessSpec::Temporal {
+                quantifier,
+                quantified_var,
+                role,
+                formula,
+            } => {
+                assert_eq!(quantifier, ast::Quantifier::Exists);
+                assert_eq!(quantified_var, "p");
+                assert_eq!(role, "R");
+                assert_eq!(
+                    formula,
+                    ast::FormulaExpr::Eventually(Box::new(propositional.clone()))
+                );
+            }
+            other => panic!("expected temporal exists spec, got {other:?}"),
         }
 
         match fair_liveness_target_from_spec(&ta, spec).expect("termination target") {
@@ -2311,6 +2698,39 @@ mod tests {
         match fair_liveness_target_from_spec(&ta, temporal_spec).expect("temporal target") {
             FairLivenessTarget::Temporal(automaton) => assert!(!automaton.states.is_empty()),
             other => panic!("expected temporal target, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn safety_kind_exists_predicate_is_wrapped_as_always_temporal_spec() {
+        let ta = test_ta();
+        let body = cmp(
+            qvar("p", "decided"),
+            ast::CmpOp::Eq,
+            ast::FormulaAtom::BoolLit(true),
+        );
+        let prop = ast::PropertyDecl {
+            name: "safe_exists".to_string(),
+            kind: ast::PropertyKind::Safety,
+            formula: ast::QuantifiedFormula {
+                quantifiers: vec![exists("p", "R")],
+                body: body.clone(),
+            },
+        };
+        match extract_liveness_spec_from_decl(&ta, &prop).expect("safety exists wraps to temporal")
+        {
+            LivenessSpec::Temporal {
+                quantifier,
+                quantified_var,
+                role,
+                formula,
+            } => {
+                assert_eq!(quantifier, ast::Quantifier::Exists);
+                assert_eq!(quantified_var, "p");
+                assert_eq!(role, "R");
+                assert_eq!(formula, ast::FormulaExpr::Always(Box::new(body)));
+            }
+            other => panic!("expected wrapped temporal spec, got {other:?}"),
         }
     }
 
@@ -2392,5 +2812,72 @@ protocol KindScan {
         let program = tarsier_dsl::parse(src, "kind_scan.trs").expect("parse");
         assert!(has_safety_properties(&program));
         assert!(has_liveness_properties(&program));
+    }
+
+    #[test]
+    fn select_property_for_ta_export_prefers_liveness_termination_when_no_safety() {
+        let src = r#"
+protocol ExportTerminationOnly {
+    params n, t;
+    resilience: n > 3*t;
+    message Vote;
+    role Replica {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Vote => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property termination: liveness {
+        forall p: Replica. p.decided == true
+    }
+}
+"#;
+        let program = tarsier_dsl::parse(src, "export_term_only.trs").expect("parse");
+        let ta = tarsier_ir::lowering::lower(&program).expect("lower");
+        match select_property_for_ta_export(&ta, &program) {
+            SafetyProperty::Termination { goal_locs } => {
+                assert!(
+                    !goal_locs.is_empty(),
+                    "termination goals should be non-empty"
+                );
+            }
+            other => panic!("expected termination export property, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn select_property_for_ta_export_falls_back_from_temporal_liveness() {
+        let src = r#"
+protocol ExportTemporalLiveness {
+    params n, t;
+    resilience: n > 3*t;
+    message Ping;
+    role Replica {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Ping => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property eventual_decide: liveness {
+        forall p: Replica. <> (p.decided == true)
+    }
+}
+"#;
+        let program = tarsier_dsl::parse(src, "export_temporal.trs").expect("parse");
+        let ta = tarsier_ir::lowering::lower(&program).expect("lower");
+        match select_property_for_ta_export(&ta, &program) {
+            SafetyProperty::Agreement { .. } => {}
+            other => panic!("expected agreement fallback for temporal liveness, got {other:?}"),
+        }
     }
 }
