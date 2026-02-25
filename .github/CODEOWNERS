@@ -1,0 +1,22 @@
+# Default owner for all files.
+* @myaksetig
+
+# Verification core.
+/crates/tarsier-dsl/ @myaksetig
+/crates/tarsier-ir/ @myaksetig
+/crates/tarsier-smt/ @myaksetig
+/crates/tarsier-engine/ @myaksetig
+/crates/tarsier-proof-kernel/ @myaksetig
+/crates/tarsier-certcheck/ @myaksetig
+
+# UX/tooling surface.
+/crates/tarsier-cli/ @myaksetig
+/crates/tarsier-lsp/ @myaksetig
+/crates/tarsier-codegen/ @myaksetig
+/crates/tarsier-conformance/ @myaksetig
+/playground/ @myaksetig
+
+# CI, docs, and release flows.
+/.github/ @myaksetig
+/docs/ @myaksetig
+/benchmarks/ @myaksetig

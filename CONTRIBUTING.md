@@ -14,7 +14,7 @@ Thank you for your interest in contributing to Tarsier! This document provides g
 ### Building
 
 ```bash
-git clone https://github.com/tarsier-verify/tarsier.git
+git clone https://github.com/yaksetig/tarsier.git
 cd tarsier
 CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build
 ```
@@ -37,6 +37,22 @@ python3 -m pytest benchmarks/ -v
 ```bash
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
+```
+
+### Deterministic Drift Checks
+
+Run these before opening a PR to ensure generated/contract files are in sync and
+the repository has no unexpected drift:
+
+```bash
+# Validate package metadata inheritance contract.
+python3 .github/scripts/check_workspace_package_metadata.py
+
+# Validate cert-suite model hashes are current.
+python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json --check
+
+# Fail if tracked/untracked drift remains.
+./scripts/check-clean-worktree.sh
 ```
 
 ## Project Structure
@@ -86,14 +102,20 @@ For PRs touching `examples/library/` or `examples/library/cert_suite.json`, incl
 1. Fork the repository and create a feature branch.
 2. Make your changes, ensuring all tests pass.
 3. Run `cargo fmt` and `cargo clippy --all-targets -- -D warnings`.
-4. Submit a pull request with a clear description of the changes.
+4. Use the pull request template (`.github/pull_request_template.md`) and include validation evidence.
+5. Submit a pull request with a clear description of the changes.
 
 ## Reporting Issues
 
-Please file issues at [GitHub Issues](https://github.com/tarsier-verify/tarsier/issues) with:
+Please file issues at [GitHub Issues](https://github.com/yaksetig/tarsier/issues) with:
 - A minimal `.trs` file reproducing the problem (if applicable).
 - The command you ran and the full output.
 - Your Rust version (`rustc --version`) and OS.
+
+Use the issue templates under `.github/ISSUE_TEMPLATE/`:
+- `bug_report.yml` for defects/crashes.
+- `verification_regression.yml` for verdict/cert/repro/perf regressions.
+- `feature_request.yml` for enhancements.
 
 ## Code of Conduct
 

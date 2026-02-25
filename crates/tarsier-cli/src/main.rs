@@ -1874,10 +1874,10 @@ fn main() -> miette::Result<()> {
             format,
             report_out,
         } => {
-            commands::analyze::run_analyze_command(
-                &file,
+            commands::analyze::run_analyze_command(commands::analyze::AnalyzeCommandArgs {
+                file: &file,
                 goal,
-                &profile,
+                profile: &profile,
                 advanced,
                 mode,
                 solver,
@@ -1887,11 +1887,11 @@ fn main() -> miette::Result<()> {
                 soundness,
                 fairness,
                 portfolio,
-                &format,
-                report_out.as_deref(),
+                format: &format,
+                report_out: report_out.as_deref(),
                 cli_network_mode,
-                &cli.por_mode,
-            )?;
+                por_mode: &cli.por_mode,
+            })?;
         }
         #[cfg(feature = "governance")]
         Commands::CertifySafety {

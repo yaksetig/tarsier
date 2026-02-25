@@ -5,7 +5,10 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Verification engine with BMC, k-induction, PDR, and CEGAR"
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 tarsier-dsl = { path = "../tarsier-dsl", version = "0.1.0" }

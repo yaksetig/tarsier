@@ -5,9 +5,10 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Formal verification tool for distributed consensus protocols"
-keywords = ["formal-verification", "consensus", "byzantine", "model-checking"]
-categories = ["development-tools", "science"]
+keywords.workspace = true
+categories.workspace = true
 
 [[bin]]
 name = "tarsier"

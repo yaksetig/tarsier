@@ -26,6 +26,12 @@ jobs:
       - name: Enforce Doc Semantic Consistency
         run: python3 ./.github/scripts/check_doc_consistency.py
 
+      - name: Enforce Workspace Metadata Contract
+        run: python3 ./.github/scripts/check_workspace_package_metadata.py
+
+      - name: Refresh Cert-Suite Hashes (Deterministic)
+        run: python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json
+
       - name: Completion Workflow Contract
         run: |
           test -f .github/workflow-data/AGENT_EXECUTION_TICKETS.yaml
@@ -33,6 +39,9 @@ jobs:
           test -f .github/workflow-data/FINAL_COMPLETION_STATUS.json
           python3 scripts/validate_final_completion.py
           python3 scripts/validate_final_completion.py --strict-evidence
+
+      - name: Enforce Clean Worktree Contract
+        run: ./scripts/check-clean-worktree.sh
 
       - name: Enforce Trust/Docs Consistency
         run: python3 ./.github/scripts/check_trust_doc_consistency.py

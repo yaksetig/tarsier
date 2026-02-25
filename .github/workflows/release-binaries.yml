@@ -33,12 +33,20 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-14
             cross: false
+          - target: x86_64-pc-windows-msvc
+            os: windows-2022
+            cross: false
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -63,6 +71,7 @@ jobs:
         shell: bash
         run: |
           TARGET=${{ matrix.target }}
+          export TARGET
           STAGING="tarsier-${TARGET}"
           mkdir -p "${STAGING}"
           cp "target/${TARGET}/release/tarsier" "${STAGING}/" 2>/dev/null || true
@@ -71,7 +80,17 @@ jobs:
           cp "target/${TARGET}/release/tarsier.exe" "${STAGING}/" 2>/dev/null || true
           cp "target/${TARGET}/release/tarsier-certcheck.exe" "${STAGING}/" 2>/dev/null || true
           tar czf "tarsier-${TARGET}.tar.gz" "${STAGING}"
-          shasum -a 256 "tarsier-${TARGET}.tar.gz" > "tarsier-${TARGET}.tar.gz.sha256"
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+
+          target = os.environ["TARGET"]
+          artifact = Path(f"tarsier-{target}.tar.gz")
+          sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+          Path(f"{artifact}.sha256").write_text(f"{sha}  {artifact.name}\n", encoding="utf-8")
+          print(f"Wrote checksum for {artifact.name}")
+          PY
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
@@ -183,7 +202,7 @@ jobs:
           failed=0
           for sha_file in *.sha256; do
             echo "Verifying checksum: ${sha_file}..."
-            if ! shasum -a 256 -c "${sha_file}"; then
+            if ! sha256sum -c "${sha_file}"; then
               echo "ERROR: checksum verification failed for ${sha_file}"
               failed=1
             fi

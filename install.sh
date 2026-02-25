@@ -2,7 +2,7 @@
 # Tarsier installer — downloads the latest release binary for your platform.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/tarsier-verify/tarsier/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/yaksetig/tarsier/main/install.sh | sh
 #
 # Environment variables:
 #   TARSIER_INSTALL_DIR  — installation directory (default: ~/.local/bin)
@@ -10,7 +10,7 @@
 
 set -eu
 
-REPO="tarsier-verify/tarsier"
+REPO="yaksetig/tarsier"
 INSTALL_DIR="${TARSIER_INSTALL_DIR:-$HOME/.local/bin}"
 
 # Detect OS

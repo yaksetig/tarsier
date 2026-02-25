@@ -1,0 +1,52 @@
+name: Verification regression
+description: Report a regression in verdicts, certificates, reproducibility, or soundness gates.
+title: "[Regression]: "
+labels:
+  - regression
+  - verification
+body:
+  - type: dropdown
+    id: regression_type
+    attributes:
+      label: Regression Type
+      options:
+        - Verdict changed unexpectedly
+        - Certificate replay/check failure
+        - Reproducibility drift
+        - Performance regression
+        - Soundness/trust boundary regression
+    validations:
+      required: true
+
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Last Known Good State
+      description: Provide commit/tag and previous expected outcome.
+      placeholder: |
+        Commit/Tag:
+        Command:
+        Expected verdict/artifact:
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current Failing State
+      description: Provide current commit/tag and observed outcome.
+      placeholder: |
+        Commit/Tag:
+        Command:
+        Observed verdict/artifact:
+    validations:
+      required: true
+
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Evidence Artifacts
+      description: Include JSON reports, cert bundles, traces, or benchmark outputs.
+      placeholder: Paths or snippets of key artifacts.
+    validations:
+      required: true

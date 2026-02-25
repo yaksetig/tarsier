@@ -2140,25 +2140,45 @@ pub(crate) fn run_analysis(
 // Command handler (extracted from Commands::Analyze match arm)
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_analyze_command(
-    file: &std::path::Path,
-    goal: Option<String>,
-    profile: &str,
-    advanced: bool,
-    mode: Option<String>,
-    solver: Option<String>,
-    depth: Option<usize>,
-    k: Option<usize>,
-    timeout: Option<u64>,
-    soundness: Option<String>,
-    fairness: Option<String>,
-    portfolio: bool,
-    format: &str,
-    report_out: Option<&std::path::Path>,
-    cli_network_mode: CliNetworkSemanticsMode,
-    por_mode: &str,
-) -> miette::Result<()> {
+pub(crate) struct AnalyzeCommandArgs<'a> {
+    pub(crate) file: &'a Path,
+    pub(crate) goal: Option<String>,
+    pub(crate) profile: &'a str,
+    pub(crate) advanced: bool,
+    pub(crate) mode: Option<String>,
+    pub(crate) solver: Option<String>,
+    pub(crate) depth: Option<usize>,
+    pub(crate) k: Option<usize>,
+    pub(crate) timeout: Option<u64>,
+    pub(crate) soundness: Option<String>,
+    pub(crate) fairness: Option<String>,
+    pub(crate) portfolio: bool,
+    pub(crate) format: &'a str,
+    pub(crate) report_out: Option<&'a Path>,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+    pub(crate) por_mode: &'a str,
+}
+
+pub(crate) fn run_analyze_command(args: AnalyzeCommandArgs<'_>) -> miette::Result<()> {
+    let AnalyzeCommandArgs {
+        file,
+        mut goal,
+        profile,
+        advanced,
+        mode,
+        solver,
+        depth,
+        k,
+        timeout,
+        soundness,
+        fairness,
+        portfolio,
+        format,
+        report_out,
+        cli_network_mode,
+        por_mode,
+    } = args;
+
     let source = sandbox_read_source(file)?;
     let filename = file.display().to_string();
 
@@ -2198,11 +2218,9 @@ pub(crate) fn run_analyze_command(
     }
 
     // V2-06: release-gate profile forces goal=release if none specified
-    let goal = if profile == "release-gate" && goal.is_none() {
-        Some("release".to_string())
-    } else {
-        goal
-    };
+    if profile == "release-gate" && goal.is_none() {
+        goal = Some("release".to_string());
+    }
 
     // V1-02: Resolve goal -> mode mapping
     let effective_mode_str = if let Some(ref goal_str) = goal {

@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Portfolio solver now uses channel-based first-result-wins racing instead of sequential join.
-- Replaced placeholder `your-org/tarsier` URLs with `tarsier-verify/tarsier` across all docs, scripts, and manifests.
+- Replaced placeholder `your-org/tarsier` URLs with `yaksetig/tarsier` across all docs, scripts, and manifests.
 - Added `description`, `rust-version`, `repository`, and `publish = false` metadata to all Cargo.toml files.
 - Moved workflow artifacts (`FINAL_COMPLETION_*.json`, `AGENT_EXECUTION_TICKETS.yaml`) from `docs/` to `.github/workflow-data/` to keep user-facing docs clean.
 

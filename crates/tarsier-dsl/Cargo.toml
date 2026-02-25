@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "PEG parser and AST for the Tarsier protocol specification language"
 keywords.workspace = true
 categories.workspace = true

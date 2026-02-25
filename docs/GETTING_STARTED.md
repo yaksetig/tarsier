@@ -19,20 +19,20 @@ Under the hood, Tarsier models your protocol as a **threshold automaton** — a 
 ### Option A: Shell installer
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tarsier-verify/tarsier/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yaksetig/tarsier/main/install.sh | sh
 ```
 
 ### Option B: Homebrew (macOS)
 
 ```bash
-brew tap tarsier-verify/tarsier
+brew tap yaksetig/tarsier
 brew install tarsier
 ```
 
 ### Option C: Download binary
 
 Download the latest release for your platform from
-[GitHub Releases](https://github.com/tarsier-verify/tarsier/releases).
+[GitHub Releases](https://github.com/yaksetig/tarsier/releases).
 
 Binaries are available for:
 - Linux x86_64 and aarch64
@@ -57,7 +57,7 @@ See [Building from Source](#building-from-source) below.
 ### Step 1: Install Tarsier
 
 ```bash
-git clone https://github.com/tarsier-verify/tarsier.git
+git clone https://github.com/yaksetig/tarsier.git
 cd tarsier
 CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build --release
 ```

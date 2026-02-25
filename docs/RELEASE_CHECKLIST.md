@@ -150,7 +150,7 @@ These checks enforce the beginner/pro UX contract (help text, report schema fiel
 
 - [ ] Push the tag: `git push origin vX.Y.Z`
 - [ ] Wait for `Release Binaries` workflow to complete. This automatically:
-  - Builds binaries for all targets (x86_64/aarch64, Linux/macOS).
+  - Builds binaries for all targets (x86_64/aarch64 Linux/macOS + x86_64 Windows).
   - Signs each artifact with Cosign (keyless OIDC).
   - Generates SPDX SBOM for each artifact.
   - Creates GitHub Artifact Attestation (SLSA provenance) for each artifact.

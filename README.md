@@ -9,20 +9,20 @@ It targets fast safety/liveness bug-finding and parameterized reasoning over `n`
 
 ```bash
 # Shell installer (Linux/macOS)
-curl -fsSL https://raw.githubusercontent.com/tarsier-verify/tarsier/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yaksetig/tarsier/main/install.sh | sh
 
 # Homebrew (macOS)
-brew tap tarsier-verify/tarsier && brew install tarsier
+brew tap yaksetig/tarsier && brew install tarsier
 
 # Or build from source
-git clone https://github.com/tarsier-verify/tarsier.git && cd tarsier
+git clone https://github.com/yaksetig/tarsier.git && cd tarsier
 CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build --release
 
 # Optional: enable governance-only commands
 CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build --release --features governance
 ```
 
-Pre-built binaries for Linux and macOS are available on [GitHub Releases](https://github.com/tarsier-verify/tarsier/releases).
+Pre-built binaries for Linux, macOS, and Windows are available on [GitHub Releases](https://github.com/yaksetig/tarsier/releases).
 
 ## Documentation
 

@@ -21,8 +21,8 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 rust-version = "1.92.0"
-repository = "https://github.com/tarsier-verify/tarsier"
-homepage = "https://github.com/tarsier-verify/tarsier"
+repository = "https://github.com/yaksetig/tarsier"
+homepage = "https://github.com/yaksetig/tarsier"
 keywords = ["formal-verification", "consensus", "byzantine", "model-checking", "threshold-automata"]
 categories = ["development-tools", "science"]
 

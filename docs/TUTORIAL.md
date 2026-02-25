@@ -10,7 +10,7 @@ A step-by-step guide to writing, verifying, and debugging consensus protocol mod
 ## 1. Install Tarsier
 
 ```bash
-git clone https://github.com/tarsier-verify/tarsier.git
+git clone https://github.com/yaksetig/tarsier.git
 cd tarsier
 CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build --release
 ```

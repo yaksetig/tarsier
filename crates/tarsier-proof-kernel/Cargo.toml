@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Minimal proof certificate validator with four dependencies"
 keywords.workspace = true
 categories.workspace = true

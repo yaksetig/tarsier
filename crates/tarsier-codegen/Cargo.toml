@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Code generation from verified protocol specifications"
 keywords.workspace = true
 categories.workspace = true
