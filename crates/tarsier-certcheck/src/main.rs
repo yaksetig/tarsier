@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use clap::Parser;
 use miette::{Context, IntoDiagnostic};
 use serde::Serialize;
@@ -5,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tarsier_proof_kernel::{check_bundle_integrity, CERTIFICATE_SCHEMA_VERSION};
+use tarsier_proof_kernel::{check_bundle_integrity, GovernanceProfile, CERTIFICATE_SCHEMA_VERSION};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -15,6 +17,13 @@ use tarsier_proof_kernel::{check_bundle_integrity, CERTIFICATE_SCHEMA_VERSION};
 struct Cli {
     /// Path to the certificate bundle directory.
     bundle: PathBuf,
+
+    /// Named governance profile (standard, reinforced, high-assurance).
+    /// Sets floor requirements; explicit flags can only strengthen.
+    /// high-assurance additionally requires `cvc5` in `--solvers` and
+    /// `TARSIER_REQUIRE_CARCARA=1` for external Alethe proof checking.
+    #[arg(long)]
+    profile: Option<String>,
 
     /// Comma-separated solver commands (e.g. z3,cvc5).
     #[arg(long, default_value = "z3,cvc5")]
@@ -61,6 +70,7 @@ struct ObligationReplayReport {
 struct CheckerReport {
     schema_version: u32,
     checker: String,
+    profile: Option<String>,
     bundle: String,
     cert_kind: String,
     proof_engine: String,
@@ -68,6 +78,7 @@ struct CheckerReport {
     solver_used: String,
     soundness: String,
     fairness: Option<String>,
+    foundational_proof_path_required: bool,
     solvers: Vec<String>,
     integrity_ok: bool,
     integrity_issues: Vec<String>,
@@ -109,6 +120,37 @@ fn parse_solver_list(raw: &str) -> Vec<String> {
     solvers.sort();
     solvers.dedup();
     solvers
+}
+
+fn is_truthy_flag(raw: &str) -> bool {
+    matches!(
+        raw.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+fn env_truthy(name: &str) -> bool {
+    match std::env::var(name) {
+        Ok(value) => is_truthy_flag(&value),
+        Err(_) => false,
+    }
+}
+
+fn enforce_foundational_profile_requirements(
+    solver_cmds: &[String],
+    require_carcara_env: bool,
+) -> miette::Result<()> {
+    if !solver_cmds.iter().any(|s| s == "cvc5") {
+        miette::bail!(
+            "high-assurance profile requires cvc5 in --solvers so an external Alethe proof checker can validate UNSAT proofs."
+        );
+    }
+    if require_carcara_env && !env_truthy("TARSIER_REQUIRE_CARCARA") {
+        miette::bail!(
+            "high-assurance profile requires TARSIER_REQUIRE_CARCARA=1 to enforce external cvc5 proof-object validation."
+        );
+    }
+    Ok(())
 }
 
 fn solver_output_excerpt(stdout: &str, max_chars: usize) -> String {
@@ -236,10 +278,20 @@ fn run_external_solver_with_proof(
     let mut cmd = Command::new(solver_cmd);
     match solver_cmd {
         "z3" => {
-            cmd.arg("-smt2").arg("-in");
+            cmd.arg("-smt2")
+                .arg("-in")
+                .arg("sat.euf=true")
+                .arg("tactic.default_tactic=smt")
+                .arg("solver.proof.check=true");
         }
         "cvc5" => {
-            cmd.arg("--lang").arg("smt2").arg("-");
+            cmd.arg("--lang")
+                .arg("smt2")
+                .arg("--check-proofs")
+                .arg("--proof-format-mode=alethe")
+                .arg("--proof-granularity=theory-rewrite")
+                .arg("--proof-alethe-res-pivots")
+                .arg("-");
         }
         _ => {
             miette::bail!(
@@ -392,15 +444,45 @@ fn record_solver_outcome(
 
 fn main() -> miette::Result<()> {
     let cli = Cli::parse();
+
+    // Parse and apply governance profile (floor requirements).
+    let mut require_two_solvers = cli.require_two_solvers;
+    let mut require_proofs = cli.require_proofs;
+    let mut require_foundational_proof_path = false;
+    if let Some(profile_name) = &cli.profile {
+        let profile: GovernanceProfile = profile_name
+            .parse()
+            .map_err(|e: String| miette::miette!("{}", e))?;
+        let reqs = profile.requirements();
+        if reqs.min_solvers >= 2 {
+            require_two_solvers = true;
+        }
+        if reqs.require_proofs {
+            require_proofs = true;
+        }
+        if reqs.require_proof_checker && cli.proof_checker.is_none() {
+            miette::bail!(
+                "--profile {} requires --proof-checker to be set.",
+                profile_name
+            );
+        }
+        if reqs.require_foundational_proof_path {
+            require_foundational_proof_path = true;
+        }
+    }
+
     let solver_cmds = parse_solver_list(&cli.solvers);
     if solver_cmds.is_empty() {
         miette::bail!("No solver commands provided. Use --solvers z3,cvc5");
     }
-    if cli.require_two_solvers && solver_cmds.len() < 2 {
+    if require_two_solvers && solver_cmds.len() < 2 {
         miette::bail!(
-            "--require-two-solvers needs at least 2 distinct solver commands; got {}.",
+            "--require-two-solvers (or profile) needs at least 2 distinct solver commands; got {}.",
             solver_cmds.len()
         );
+    }
+    if require_foundational_proof_path {
+        enforce_foundational_profile_requirements(&solver_cmds, true)?;
     }
     if let Some(checker) = &cli.proof_checker {
         if !checker.exists() {
@@ -408,7 +490,7 @@ fn main() -> miette::Result<()> {
         }
     }
     let need_proof_objects =
-        cli.emit_proofs.is_some() || cli.require_proofs || cli.proof_checker.is_some();
+        cli.emit_proofs.is_some() || require_proofs || cli.proof_checker.is_some();
     if let Some(root) = &cli.emit_proofs {
         fs::create_dir_all(root).into_diagnostic()?;
     }
@@ -429,6 +511,20 @@ fn main() -> miette::Result<()> {
     let mut per_solver: BTreeMap<String, SolverSummary> = BTreeMap::new();
     for solver in &solver_cmds {
         per_solver.insert(solver.clone(), SolverSummary::default());
+    }
+
+    // When --require-proofs is set, check that all UNSAT obligations have bound proof objects.
+    if require_proofs && integrity_issues.is_empty() {
+        for obligation in &metadata.obligations {
+            if obligation.expected == "unsat" && obligation.proof_sha256.is_none() {
+                let msg = format!(
+                    "[proof_binding] Obligation '{}' is missing proof_sha256 (required by --require-proofs).",
+                    obligation.name
+                );
+                integrity_issues.push(msg.clone());
+                println!("[FAIL] {msg}");
+            }
+        }
     }
 
     if integrity_issues.is_empty() {
@@ -460,8 +556,7 @@ fn main() -> miette::Result<()> {
                                 ensure_solver_summary(&mut per_solver, solver_cmd).proof_skipped +=
                                     1;
                                 outcome.proof_status = Some("skipped".into());
-                            } else if cli.require_proofs
-                                && !proof_object_looks_nontrivial(&proof_text)
+                            } else if require_proofs && !proof_object_looks_nontrivial(&proof_text)
                             {
                                 ensure_solver_summary(&mut per_solver, solver_cmd).proof_failed +=
                                     1;
@@ -693,6 +788,7 @@ fn main() -> miette::Result<()> {
     let report = CheckerReport {
         schema_version: CERTIFICATE_SCHEMA_VERSION,
         checker: "tarsier-certcheck".into(),
+        profile: cli.profile.clone(),
         bundle: cli.bundle.display().to_string(),
         cert_kind: metadata.kind,
         proof_engine: metadata.proof_engine,
@@ -700,6 +796,7 @@ fn main() -> miette::Result<()> {
         solver_used: metadata.solver_used,
         soundness: metadata.soundness,
         fairness: metadata.fairness,
+        foundational_proof_path_required: require_foundational_proof_path,
         solvers: solver_cmds,
         integrity_ok: integrity_issues.is_empty(),
         integrity_issues,
@@ -746,9 +843,10 @@ fn main() -> miette::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        augment_query_for_proof, parse_solver_list, parse_solver_result_prefix,
-        parse_solver_result_token, proof_object_looks_nontrivial, record_solver_outcome,
-        run_external_solver_on_file, SolverSummary,
+        augment_query_for_proof, enforce_foundational_profile_requirements, is_truthy_flag,
+        parse_solver_list, parse_solver_result_prefix, parse_solver_result_token,
+        proof_object_looks_nontrivial, record_solver_outcome, run_external_solver_on_file,
+        SolverSummary,
     };
     use miette::miette;
     use std::collections::BTreeMap;
@@ -760,6 +858,27 @@ mod tests {
     fn parse_solver_list_dedups_and_sorts() {
         let solvers = parse_solver_list("cvc5, z3,cvc5 ,,z3");
         assert_eq!(solvers, vec!["cvc5".to_string(), "z3".to_string()]);
+    }
+
+    #[test]
+    fn env_truthy_parses_expected_values() {
+        assert!(is_truthy_flag("1"));
+        assert!(is_truthy_flag("YES"));
+        assert!(is_truthy_flag("true"));
+        assert!(!is_truthy_flag("false"));
+        assert!(!is_truthy_flag(""));
+    }
+
+    #[test]
+    fn foundational_profile_requires_cvc5_solver_and_carcara_gate() {
+        let ok = vec!["z3".to_string(), "cvc5".to_string()];
+        enforce_foundational_profile_requirements(&ok, false)
+            .expect("z3+cvc5 with TARSIER_REQUIRE_CARCARA=1 should pass");
+
+        let missing_cvc5 = vec!["z3".to_string()];
+        let err = enforce_foundational_profile_requirements(&missing_cvc5, false)
+            .expect_err("missing cvc5 should fail foundational profile checks");
+        assert!(err.to_string().contains("requires cvc5"));
     }
 
     #[test]
@@ -914,5 +1033,26 @@ mod tests {
         assert!(err.to_string().contains("malformed solver output"));
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn certcheck_dependency_boundary_guard() {
+        let cargo_toml = include_str!("../Cargo.toml");
+        let forbidden = [
+            "tarsier-engine",
+            "tarsier-ir",
+            "tarsier-dsl",
+            "tarsier-smt",
+            "tarsier-prob",
+            "z3",
+        ];
+        for dep in &forbidden {
+            assert!(
+                !cargo_toml.contains(dep),
+                "tarsier-certcheck must not depend on '{}' — \
+                 the standalone checker must remain independent of engine internals",
+                dep
+            );
+        }
     }
 }

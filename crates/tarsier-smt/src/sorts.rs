@@ -13,3 +13,25 @@ impl std::fmt::Display for SmtSort {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn display_renders_standard_smt_sort_names() {
+        assert_eq!(SmtSort::Bool.to_string(), "Bool");
+        assert_eq!(SmtSort::Int.to_string(), "Int");
+    }
+
+    #[test]
+    fn sorts_are_hashable_and_distinct() {
+        let mut seen = HashSet::new();
+        seen.insert(SmtSort::Bool);
+        seen.insert(SmtSort::Int);
+        assert_eq!(seen.len(), 2);
+        assert!(seen.contains(&SmtSort::Bool));
+        assert!(seen.contains(&SmtSort::Int));
+    }
+}

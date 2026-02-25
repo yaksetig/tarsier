@@ -2,7 +2,16 @@
 name = "tarsier-prob"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Hypergeometric probability analysis for committee-based protocols"
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 num = "0.4"
 thiserror.workspace = true
+
+[dev-dependencies]
+proptest = "1"

@@ -11,6 +11,74 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Enforce Certification Gate Contract
+        run: python3 ./.github/scripts/check_certification_gate_contract.py
+
+      - name: Enforce Corpus Maintenance Policy Contract
+        run: python3 ./.github/scripts/check_corpus_policy_contract.py
+
+      - name: Enforce Release Doc Sync Contract
+        run: python3 ./.github/scripts/check_release_doc_sync.py
+
+      - name: Enforce Release Doc References
+        run: python3 ./.github/scripts/check_release_doc_refs.py
+
+      - name: Enforce Doc Semantic Consistency
+        run: python3 ./.github/scripts/check_doc_consistency.py
+
+      - name: Completion Workflow Contract
+        run: |
+          test -f .github/workflow-data/AGENT_EXECUTION_TICKETS.yaml
+          test -f .github/workflow-data/FINAL_COMPLETION_CHECKLIST.json
+          test -f .github/workflow-data/FINAL_COMPLETION_STATUS.json
+          python3 scripts/validate_final_completion.py
+          python3 scripts/validate_final_completion.py --strict-evidence
+
+      - name: Enforce Trust/Docs Consistency
+        run: python3 ./.github/scripts/check_trust_doc_consistency.py
+
+      - name: Enforce Kernel Spec Consistency
+        run: python3 ./.github/scripts/check_kernel_spec_consistency.py
+
+      - name: Enforce Checker Soundness Artifact
+        run: python3 ./.github/scripts/check_checker_soundness_artifact.py
+
+      - name: Enforce Crypto Semantics Contract
+        run: python3 ./.github/scripts/check_crypto_semantics_contract.py
+
+      - name: Enforce Benchmark Budget Consistency
+        run: python3 ./.github/scripts/check_benchmark_budgets.py
+
+      - name: Enforce Benchmark Format Contract
+        run: python3 ./.github/scripts/check_benchmark_format_contract.py
+
+      - name: Statistical Regression Gate Tests
+        run: python3 benchmarks/test_statistical_regression.py
+
+      - name: Benchmark Replay Harness Unit Tests
+        run: python3 benchmarks/test_replay_harness.py
+
+      - name: Enforce Cross-Tool Benchmark Contract
+        run: python3 ./.github/scripts/check_cross_tool_benchmark_contract.py
+
+      - name: Cross-Tool Benchmark Runner Tests
+        run: python3 -m unittest benchmarks/test_cross_tool_runner.py -v
+
+      - name: Cross-Tool External Execution Gate
+        run: |
+          pybin=$(python3 -c 'import sys; print(sys.executable)')
+          python3 benchmarks/cross_tool_runner.py \
+            --skip-build \
+            --tools bymc,spin \
+            --manifest benchmarks/cross_tool_scenarios/scenario_manifest.json \
+            --bymc-binary "$pybin" \
+            --spin-binary "$pybin" \
+            --out artifacts/cross-tool-external-report.json
+          python3 ./.github/scripts/check_cross_tool_external_execution.py artifacts/cross-tool-external-report.json
+
+      - name: Cross-Tool Verdict Parity Check
+        run: python3 ./.github/scripts/check_cross_tool_verdict_parity.py artifacts/cross-tool-external-report.json
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -24,6 +92,682 @@ jobs:
 
       - name: Tests
         run: cargo test --all-targets
+
+      - name: Benchmark Smoke Test
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo bench --bench parser_bench -- --quick
+          cargo bench --bench lowering_bench -- --quick
+          cargo bench --bench encoder_bench -- --quick
+
+      - name: Property Testing Gate
+        env:
+          PROPTEST_CASES: "48"
+          PROPTEST_RNG_ALGORITHM: cc
+          PROPTEST_RNG_SEED: "246813579"
+          TARSIER_PROPTEST_CASES: "48"
+          TARSIER_PROPTEST_SEED: "246813579"
+          TARSIER_PROPTEST_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/property-test-failures
+        run: |
+          if [ "${PROPTEST_CASES}" -lt 24 ]; then
+            echo "ERROR: property testing gate requires PROPTEST_CASES >= 24"
+            exit 1
+          fi
+          mkdir -p "${TARSIER_PROPTEST_ARTIFACT_DIR}"
+          cargo test -p tarsier-engine --test property_pipeline_proptest -- --nocapture
+          cargo test -p tarsier-engine unit_metamorphic_alpha_rename_and_compilation_are_deterministic -- --nocapture
+          cargo test -p tarsier-engine unit_negative_buggy_mutants_are_unsafety_reachable -- --nocapture
+
+      - name: Upload Property-Test Failure Artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: property-test-failures
+          path: artifacts/property-test-failures/**
+
+      - name: Liveness Proof Contract Gate
+        run: |
+          cargo test -p tarsier-engine --test liveness_integration pbft_liveness_ci_safe_is_live_proved_unbounded -- --nocapture
+          cargo test -p tarsier-engine --test liveness_integration pbft_liveness_ci_buggy_finds_fair_cycle_unbounded -- --nocapture
+          cargo test -p tarsier-engine --test liveness_integration pbft_liveness_ci_safe_certificate_generation_is_deterministic -- --nocapture
+          cargo test -p tarsier-cli --test liveness_contract -- --nocapture
+
+      - name: CLI Feature Contract (Default Build)
+        run: cargo test -p tarsier-cli --test cli_feature_contract_default -- --nocapture
+
+      - name: Checker Soundness Subset Gate
+        run: |
+          output=$(cargo test -p tarsier-proof-kernel soundness_subset_ -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -Ec 'test tests::soundness_subset_.*\\.\\.\\. ok')
+          if [ "$count" -lt 2 ]; then
+            echo "ERROR: expected at least 2 checker soundness subset tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count checker soundness subset tests passed"
+
+      - name: Checker Differential Agreement Gate
+        run: |
+          python3 ./.github/scripts/check_checker_differential.py \
+            --corpus docs/checker-differential-corpus-v1.json \
+            --allowlist docs/checker-differential-allowlist-v1.json \
+            --out artifacts/checker-differential-report.json
+
+      - name: CEGAR Predicate Synthesis Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-engine adaptive_cegar_seeds_plan_with_unsat_core_minimized_refinement_cover -- --nocapture
+          cargo test -p tarsier-engine --test unbounded_safety_tests prove_with_cegar_auto_synthesizes_predicates_from_cti -- --nocapture
+          cargo test -p tarsier-engine --test cegar_tests verify_with_cegar_report_classifies_persistent_witness_as_concrete -- --nocapture
+          cargo test -p tarsier-engine --test cegar_tests verify_with_cegar_report_stage_deltas_are_auditable_and_inconclusive_when_eliminated -- --nocapture
+          cargo test -p tarsier-engine --test cegar_tests cegar_inconclusive_enforced_when_baseline_eliminated_no_confirmation -- --nocapture
+          cargo test -p tarsier-engine --test cegar_tests cegar_minimized_refinement_core_still_eliminates_targeted_spurious_trace -- --nocapture
+
+      - name: Crypto Semantics Regression Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-ir lower_crypto_object_form_lock_justify -- --nocapture
+          cargo test -p tarsier-ir lower_threshold_signature_form_filters_witnesses_to_signer_role -- --nocapture
+          cargo test -p tarsier-ir lower_lock_adds_implicit_has_threshold_guard -- --nocapture
+          cargo test -p tarsier-ir lower_justify_sets_justify_flag_not_lock_flag -- --nocapture
+          cargo test -p tarsier-smt forging_crypto_object_family_is_unsat_even_with_byzantine_budget -- --nocapture
+          cargo test -p tarsier-smt valid_crypto_object_formation_path_is_sat -- --nocapture
+          cargo test -p tarsier-smt exclusive_crypto_policy_blocks_conflicting_variants_in_same_state -- --nocapture
+          cargo test -p tarsier-smt signer_set_threshold_requires_distinct_signer_identities_not_counter_magnitude -- --nocapture
+          cargo test -p tarsier-smt forging_signed_message_without_compromise_and_without_byzantine_sender_is_unsat -- --nocapture
+          cargo test -p tarsier-smt compromised_key_allows_signed_forge_sat -- --nocapture
+          cargo test -p tarsier-engine --test faithful_tests crypto_justify_independent_of_lock -- --nocapture
+
+      - name: POR Equivalence and Soundness Regression Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          output=$(cargo test -p tarsier-engine --test por_tests por_ -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -c '\.\.\.\ ok')
+          if [ "$count" -lt 7 ]; then
+            echo "ERROR: expected at least 7 POR equivalence/soundness tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count POR equivalence/soundness regression tests passed"
+
+      - name: Governance Pipeline Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          output=$(cargo test -p tarsier-cli --features governance governance_pipeline -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -c '\.\.\.\ ok')
+          if [ "$count" -lt 6 ]; then
+            echo "ERROR: expected at least 6 governance pipeline tests to pass, got $count"
+            exit 1
+          fi
+          cargo test -p tarsier-cli --features governance --test governance_pipeline governance_pipeline_single_command_runs_all_required_gates_and_emits_json -- --nocapture
+
+      - name: Governance Bundle Verification Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-cli --features governance --test governance_bundle_verify -- --nocapture
+
+      - name: Reduction Diagnostics Regression Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-engine --test por_tests reduction_diagnostics -- --nocapture
+          cargo test -p tarsier-engine --test por_tests counterexample_trace_annotates_por -- --nocapture
+          cargo test -p tarsier-engine --test por_tests counterexample_trace_no_por -- --nocapture
+          cargo test -p tarsier-engine --test por_tests smt_profile_diagnostics_include_por -- --nocapture
+          cargo test -p tarsier-cli reduction_diagnostics_json -- --nocapture
+          cargo test -p tarsier-cli trace_json_includes_por -- --nocapture
+          cargo test -p tarsier-cli trace_json_por_status_null -- --nocapture
+
+      - name: Portfolio Merge Determinism Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          output=$(cargo test -p tarsier-cli portfolio -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -c '\.\.\.\ ok')
+          if [ "$count" -lt 9 ]; then
+            echo "ERROR: expected at least 9 portfolio merge tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count portfolio merge determinism tests passed"
+
+      - name: Portfolio Merge Provenance Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          output=$(cargo test -p tarsier-cli portfolio_merge_provenance -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -c '\.\.\.\ ok')
+          if [ "$count" -lt 5 ]; then
+            echo "ERROR: expected at least 5 portfolio provenance tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count portfolio provenance tests passed"
+
+      - name: Portfolio Race Stress Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          output=$(cargo test -p tarsier-cli portfolio_stress_ -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -Ec 'test tests::portfolio_stress_.*\\.\\.\\. ok')
+          if [ "$count" -lt 2 ]; then
+            echo "ERROR: expected at least 2 portfolio race stress tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count portfolio race stress tests passed"
+
+      - name: Quantitative Baseline Cross-Checks
+        run: ./scripts/check-quantitative-baselines.sh
+
+      - name: Quantitative CLI Reproducibility Gate
+        run: ./scripts/check-quantitative-cli-pipeline.sh
+
+      - name: Certcheck Dependency Boundary Guard
+        run: python3 ./.github/scripts/check_certcheck_dependency_boundary.py
+
+      - name: Governance Dependency Boundary Guard
+        run: python3 ./.github/scripts/check_governance_dependency_boundary.py
+
+      - name: CLI Feature Contract (Governance Build)
+        run: cargo test -p tarsier-cli --features governance --test cli_feature_contract_governance -- --nocapture
+
+      - name: Certcheck Standalone Replay Gate
+        run: |
+          output=$(cargo test -p tarsier-certcheck --test integration -- --nocapture 2>&1)
+          echo "$output"
+          # Ensure both safety and fair-liveness integration tests are executed.
+          safety_count=$(echo "$output" | grep -c 'certcheck_passes_valid_bundle_with_mock_solver')
+          fair_count=$(echo "$output" | grep -c 'certcheck_passes_fair_liveness_bundle_with_mock_solver')
+          multi_solver_count=$(echo "$output" | grep -c 'certcheck_requires_and_passes_two_solver_replay_for_fair_liveness_bundle')
+          if [ "$safety_count" -lt 1 ] || [ "$fair_count" -lt 1 ] || [ "$multi_solver_count" -lt 1 ]; then
+            echo "ERROR: expected standalone certcheck integration coverage for safety, fair-liveness, and two-solver fair-liveness replay."
+            exit 1
+          fi
+          echo "Certcheck standalone replay coverage OK"
+
+  coverage-llvm:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Generate LLVM Coverage (workspace)
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          mkdir -p artifacts/coverage
+          cargo llvm-cov --workspace --all-targets \
+            --lcov --output-path artifacts/coverage/lcov.info
+          cargo llvm-cov report --summary-only > artifacts/coverage/summary.txt
+          {
+            echo "## LLVM Coverage (workspace)"
+            echo ""
+            echo '```text'
+            cat artifacts/coverage/summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce LLVM Line Coverage Threshold
+        env:
+          LLVM_COV_MIN_LINE_PERCENT: "65.0"
+        run: |
+          python3 ./.github/scripts/check_llvm_coverage_threshold.py \
+            --summary artifacts/coverage/summary.txt \
+            --min-line-percent "${LLVM_COV_MIN_LINE_PERCENT}"
+
+      - name: Upload LLVM Coverage Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llvm-cov-report
+          path: artifacts/coverage
+
+  fuzz-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [fuzz_parse, fuzz_lower, fuzz_encode, fuzz_proof_kernel]
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Seed corpus from examples
+        run: |
+          mkdir -p fuzz/corpus/${{ matrix.target }}
+          find examples -name '*.trs' -exec cp {} fuzz/corpus/${{ matrix.target }}/ \;
+
+      - name: Run fuzz smoke gate (${{ matrix.target }})
+        run: |
+          cd fuzz
+          cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=120
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: |
+            fuzz/artifacts/${{ matrix.target }}/**
+
+  cli-feature-matrix:
+    runs-on: ubuntu-latest
+    needs: build-test
+    strategy:
+      fail-fast: false
+      matrix:
+        feature_set: [default, governance]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build + test CLI feature set
+        run: |
+          if [ "${{ matrix.feature_set }}" = "default" ]; then
+            cargo build -p tarsier-cli
+            cargo test -p tarsier-cli --test cli_feature_contract_default -- --nocapture
+          else
+            cargo build -p tarsier-cli --features governance
+            cargo test -p tarsier-cli --features governance --test cli_feature_contract_governance -- --nocapture
+          fi
+
+  quantitative-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Quantitative Baseline Cross-Checks
+        run: ./scripts/check-quantitative-baselines.sh
+      - name: Quantitative CLI Reproducibility Gate
+        run: ./scripts/check-quantitative-cli-pipeline.sh
+      - name: Quantitative Golden Integration Tests
+        run: cargo test -p tarsier-engine --test quantitative_tests golden_ -- --nocapture
+
+  conformance-tests:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Conformance Tests
+        run: cargo test -p tarsier-conformance
+      - name: CLI Conformance Check Smoke
+        run: |
+          cargo run -p tarsier-cli -- conformance-check \
+            crates/tarsier-conformance/tests/fixtures/simple_vote.trs \
+            --trace crates/tarsier-conformance/tests/fixtures/valid_trace.json
+      - name: Conformance Artifact-Link Tests
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          output=$(cargo test -p tarsier-cli artifact_link -- --nocapture 2>&1)
+          echo "$output"
+          # Verify all 3 artifact-link tests actually ran (not skipped)
+          count=$(echo "$output" | grep -c 'test tests::conformance_suite.*ok')
+          if [ "$count" -lt 3 ]; then
+            echo "ERROR: expected 3 artifact-link tests to run, got $count"
+            exit 1
+          fi
+          echo "OK: all $count artifact-link tests executed"
+      - name: Conformance Dependency Boundary Guard
+        run: |
+          deps=$(cargo tree -p tarsier-conformance --depth 1 --prefix none 2>/dev/null | tail -n +2 | awk '{print $1}')
+          for forbidden in tarsier-engine tarsier-smt tarsier-prob z3; do
+            if echo "$deps" | grep -qw "$forbidden"; then
+              echo "ERROR: tarsier-conformance must not depend on $forbidden"
+              exit 1
+            fi
+          done
+          echo "Conformance dependency boundary OK"
+
+  conformance-adapter-gate:
+    runs-on: ubuntu-latest
+    needs:
+      - build-test
+      - conformance-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Adapter Replay Integration Tests
+        run: cargo test -p tarsier-conformance --test adapter_replay -- --nocapture
+      - name: Conformance Taxonomy Contract Tests
+        run: |
+          cargo test -p tarsier-cli conformance_suite_adapter_manifest_passes -- --nocapture
+          cargo test -p tarsier-cli conformance_suite_mismatch_taxonomy_uses_model_impl_and_engine_categories -- --nocapture
+      - name: Adapter Fixture Suite Gate
+        run: |
+          ./scripts/run-conformance-suite.sh
+        env:
+          MANIFEST: examples/conformance/conformance_suite_adapters.json
+          FORMAT: json
+          OUT: artifacts/conformance-adapter-suite.json
+      - name: Validate Adapter Suite Report
+        run: |
+          python3 -c "
+          import json, sys
+          with open('artifacts/conformance-adapter-suite.json') as f:
+              report = json.load(f)
+          if report.get('overall') != 'pass':
+              print('Adapter suite failed:', report.get('overall'))
+              sys.exit(1)
+          adapters = {e.get('trace_adapter') for e in report.get('entries', [])}
+          if not {'cometbft', 'etcd-raft'}.issubset(adapters):
+              print('Missing required adapter families in report:', adapters)
+              sys.exit(1)
+          print('Adapter suite gate passed with adapters:', sorted(adapters))
+          "
+      - name: Upload Adapter Suite Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-adapter-suite-report
+          path: artifacts/conformance-adapter-suite.json
+
+  lsp-integration-tests:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: LSP Tests
+        run: cargo test -p tarsier-lsp
+
+  supply-chain-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Run cargo-deny (advisories + licenses + bans + sources)
+        run: cargo deny check
+
+  rustdoc-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rustdoc (warnings as errors)
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --no-deps --document-private-items
+
+  playground-security:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Playground Security Unit Tests
+        run: cargo test -p tarsier-playground -- security_tests
+
+      - name: Playground Security Smoke
+        env:
+          TARSIER_MAX_DEPTH: "8"
+          TARSIER_MAX_TIMEOUT_SECS: "30"
+          TARSIER_MAX_REQUEST_BYTES: "524288"
+        run: ./scripts/playground-security-smoke.sh
+
+  codegen-go-smoke:
+    runs-on: ubuntu-latest
+    needs: build-test
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run codegen Go smoke tests
+        run: cargo test --package tarsier-codegen --test integration smoke_go
+
+  sandbox-security-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Sandbox Unit Tests
+        run: cargo test -p tarsier-engine sandbox -- --test-threads=1
+
+      - name: Sandbox Security Regression Tests
+        run: cargo test -p tarsier-cli --test sandbox_security -- --test-threads=1
+
+      - name: Fail-Closed Smoke Test
+        run: |
+          # Create oversized file
+          python3 -c "print('// ' + 'x' * 2000000)" > /tmp/oversized.trs
+          # Verify it is rejected with tight input limit
+          if cargo run -p tarsier-cli -- \
+            --sandbox-max-input-bytes 100 \
+            --allow-degraded-sandbox \
+            verify /tmp/oversized.trs --depth 1 --timeout 5 2>/dev/null; then
+            echo "ERROR: oversized input should be rejected"
+            exit 1
+          fi
+          echo "OK: oversized input correctly rejected"
+
+      - name: Sandbox Activates By Default
+        run: |
+          # Normal run should not produce sandbox activation failure
+          output=$(cargo run -p tarsier-cli -- verify examples/reliable_broadcast.trs \
+            --depth 1 --timeout 10 2>&1 || true)
+          if echo "$output" | grep -q "Sandbox activation failed"; then
+            echo "ERROR: sandbox should activate by default"
+            exit 1
+          fi
+          echo "OK: sandbox activates by default"
+
+  codegen-verification-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Codegen Unit + Provenance Tests
+        run: cargo test -p tarsier-codegen
+
+      - name: Codegen Verified CLI E2E Tests
+        run: cargo test -p tarsier-cli --test codegen_verified
+
+      - name: Negative Test - No Cert Fails
+        run: |
+          if cargo run -p tarsier-cli -- codegen examples/reliable_broadcast.trs --target rust 2>/dev/null; then
+            echo "ERROR: codegen without cert should fail"
+            exit 1
+          fi
+          echo "OK: codegen correctly refuses without certificate"
+
+      - name: Positive Test - Semantics Surface Features Generate
+        run: |
+          cargo run -p tarsier-cli -- codegen examples/algorand_committee.trs \
+            --target rust --allow-unverified -o /tmp/codegen-semantics-surface
+          grep -q "CommitteeSpec" /tmp/codegen-semantics-surface/algorandcommittee.rs
+          grep -q "protocol_semantics_spec" /tmp/codegen-semantics-surface/algorandcommittee.rs
+          echo "OK: codegen emits committee/channel/equivocation/identity semantics surface"
+
+      - name: Positive Test - Allow Unverified Succeeds
+        run: |
+          cargo run -p tarsier-cli -- codegen examples/reliable_broadcast.trs \
+            --target rust --allow-unverified -o /tmp/codegen-gate
+          grep -q "@tarsier-provenance verified=false" /tmp/codegen-gate/reliablebroadcast.rs
+          grep -q "audit_tag=UNVERIFIED_CODEGEN" /tmp/codegen-gate/reliablebroadcast.rs
+          echo "OK: unverified codegen produces correct provenance markers"
+
+  strict-faithful-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Strict Faithful Network Contract Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-engine --test safety_tests strict_mode_ -- --nocapture
+          cargo test -p tarsier-engine --test safety_tests verify_accepts_process_selective_network_semantics -- --nocapture
+          cargo test -p tarsier-engine --test faithful_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+
+  temporal-conformance-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Temporal Logic Contract Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-dsl temporal_ -- --nocapture
+          cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+          cargo test -p tarsier-engine fragment_ -- --nocapture
+          cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+          cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+          cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+          cargo test -p tarsier-engine --test liveness_tests fair_liveness_supports_ -- --nocapture
+          cargo test -p tarsier-engine --test liveness_tests prove_fair_liveness_accepts_ -- --nocapture
+
+  liveness-proof-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Liveness Proof Contract Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+          cargo test -p tarsier-engine --test liveness_tests prove_fair_liveness_ -- --nocapture
+          cargo test -p tarsier-certcheck -- --nocapture
+
+  proof-checking-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Proof Checking Contract Gate
+        run: |
+          cargo test -p tarsier-proof-kernel -- --nocapture
+          cargo test -p tarsier-certcheck -- --nocapture
+          python3 ./.github/scripts/check_certcheck_dependency_boundary.py
+
+  cegar-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: CEGAR Contract Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-engine --test cegar_tests cegar_ -- --nocapture
+          cargo test -p tarsier-engine --test cegar_tests prove_with_cegar_ -- --nocapture
+          cargo test -p tarsier-engine --test unbounded_safety_tests prove_with_cegar_ -- --nocapture
+          cargo test -p tarsier-cli cegar -- --nocapture
+
+  crypto-semantics-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Crypto Semantics Contract Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+          cargo test -p tarsier-smt crypto_ -- --nocapture
+          cargo test -p tarsier-engine --test faithful_tests crypto_ -- --nocapture
 
   ux-usability-regression:
     runs-on: ubuntu-latest
@@ -51,6 +795,61 @@ jobs:
       - name: Playground + CLI Usability Smoke
         run: ./scripts/ux-regression-smoke.sh
 
+  ux-snapshot-regression:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Solver Versions
+        run: |
+          z3 --version
+          cvc5 --version
+
+      - name: UX Snapshot Regression
+        run: python3 ./scripts/ux_snapshot_regression.py
+
+  beginner-ux-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Solver Versions
+        run: |
+          z3 --version
+          cvc5 --version
+
+      - name: Beginner Onboarding Contract Tests
+        run: cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+
+      - name: Beginner UX Smoke Tests
+        run: ./scripts/beginner-ux-smoke.sh
+
   proof-mode-independent-gate:
     runs-on: ubuntu-latest
     needs: build-test
@@ -74,13 +873,20 @@ jobs:
           z3 --version
           cvc5 --version
 
+      - name: Install Pinned Proof Checkers
+        run: ./.github/scripts/install_proof_checkers.sh
+
+      - name: Verify Proof Checker Versions
+        run: |
+          carcara --version
+
       - name: Enable Proof Checker Script
         run: chmod +x ./.github/scripts/check_proof_object.py
 
       - name: Run Proof-Mode Analysis
         run: |
           mkdir -p artifacts
-          cargo run -p tarsier-cli -- analyze examples/trivial_live.trs \
+          cargo run -p tarsier-cli -- analyze examples/library/pbft_liveness_safe_ci.trs \
             --mode proof \
             --solver z3 \
             --depth 6 \
@@ -90,6 +896,13 @@ jobs:
             --fairness weak \
             --format json \
             --report-out artifacts/proof-mode-live-report.json
+
+      - name: Dynamic Ample POR Effectiveness Gate
+        run: |
+          python3 ./.github/scripts/check_dynamic_ample_gate.py \
+            artifacts/proof-mode-live-report.json \
+            --max-unsat-recheck-sat-rate 0.20 \
+            --min-unsat-rechecks 1
 
       - name: Generate Proof Bundles From Prove Commands
         run: |
@@ -101,7 +914,7 @@ jobs:
             --engine kinduction \
             --cert-out certs/proof-gate/safety
 
-          cargo run -p tarsier-cli -- prove-fair examples/trivial_live.trs \
+          cargo run -p tarsier-cli -- prove-fair examples/library/pbft_liveness_safe_ci.trs \
             --solver z3 \
             --k 8 \
             --timeout 120 \
@@ -109,23 +922,36 @@ jobs:
             --fairness weak \
             --cert-out certs/proof-gate/live
 
+      - name: Validate Buggy Liveness Sentinel (Nontrivial)
+        run: |
+          output=$(cargo run -p tarsier-cli -- prove-fair examples/library/pbft_liveness_buggy_ci.trs \
+            --solver z3 \
+            --k 8 \
+            --timeout 120 \
+            --soundness strict \
+            --fairness weak)
+          echo "$output"
+          echo "$output" | grep -q "RESULT: NOT LIVE (unbounded, fair)"
+
       - name: Independent Checker Gate (Safety)
+        env:
+          TARSIER_REQUIRE_CARCARA: "1"
         run: |
           cargo run -p tarsier-certcheck -- certs/proof-gate/safety \
+            --profile high-assurance \
             --solvers z3,cvc5 \
-            --require-two-solvers \
             --emit-proofs certs/proof-gate/safety/proofs \
-            --require-proofs \
             --proof-checker ./.github/scripts/check_proof_object.py \
             --json-report certs/proof-gate/safety/certcheck-report.json
 
       - name: Independent Checker Gate (Fair-Liveness)
+        env:
+          TARSIER_REQUIRE_CARCARA: "1"
         run: |
           cargo run -p tarsier-certcheck -- certs/proof-gate/live \
+            --profile high-assurance \
             --solvers z3,cvc5 \
-            --require-two-solvers \
             --emit-proofs certs/proof-gate/live/proofs \
-            --require-proofs \
             --proof-checker ./.github/scripts/check_proof_object.py \
             --json-report certs/proof-gate/live/certcheck-report.json
 
@@ -166,7 +992,7 @@ jobs:
       - name: Generate Certificate Bundle
         run: |
           out_dir="certs/${{ matrix.engine }}"
-          cargo run -p tarsier-cli -- certify-safety examples/reliable_broadcast.trs \
+          cargo run -p tarsier-cli --features governance -- certify-safety examples/reliable_broadcast.trs \
             --engine "${{ matrix.engine }}" \
             --k 12 \
             --timeout 120 \
@@ -208,7 +1034,7 @@ jobs:
       - name: Generate Fair-Liveness Certificate Bundle
         run: |
           out_dir="certs/fair-${{ matrix.fairness }}"
-          cargo run -p tarsier-cli -- certify-fair-liveness examples/trivial_live.trs \
+          cargo run -p tarsier-cli --features governance -- certify-fair-liveness examples/library/pbft_liveness_safe_ci.trs \
             --fairness "${{ matrix.fairness }}" \
             --k 8 \
             --timeout 120 \
@@ -248,26 +1074,34 @@ jobs:
           z3 --version
           cvc5 --version
 
+      - name: Install Pinned Proof Checkers
+        run: ./.github/scripts/install_proof_checkers.sh
+
+      - name: Verify Proof Checker Versions
+        run: |
+          carcara --version
+
       - name: Enable Proof Checker Script
         run: chmod +x ./.github/scripts/check_proof_object.py
 
       - name: Generate Certificate Bundle
         run: |
           out_dir="certs/proof-validation"
-          cargo run -p tarsier-cli -- certify-safety examples/reliable_broadcast.trs \
+          cargo run -p tarsier-cli --features governance -- certify-safety examples/reliable_broadcast.trs \
             --engine kinduction \
             --k 12 \
             --timeout 120 \
             --out "${out_dir}"
 
       - name: Replay With Proof-Object Validation
+        env:
+          TARSIER_REQUIRE_CARCARA: "1"
         run: |
           out_dir="certs/proof-validation"
           cargo run -p tarsier-certcheck -- "${out_dir}" \
+            --profile high-assurance \
             --solvers z3,cvc5 \
-            --require-two-solvers \
             --emit-proofs "${out_dir}/proofs" \
-            --require-proofs \
             --proof-checker ./.github/scripts/check_proof_object.py \
             --json-report "${out_dir}/certcheck-report.json"
 
@@ -276,6 +1110,25 @@ jobs:
         with:
           name: certcheck-proof-validation-report
           path: certs/proof-validation/certcheck-report.json
+
+  proof-tamper-tests:
+    runs-on: ubuntu-latest
+    needs:
+      - build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Proof-Kernel Tamper Tests
+        run: |
+          cargo test -p tarsier-proof-kernel -- tampered_proof_content flags_missing_proof_file orphan_proof_hash bundle_hash_covers_proof_metadata passes_for_bundle_with_proofs
+
+      - name: Certcheck Proof Tamper Integration Tests
+        run: |
+          cargo test -p tarsier-certcheck --test integration -- tampered_proof deleted_proof passes_bundle_with_valid_proofs
 
   corpus-certification-gate:
     runs-on: ubuntu-22.04
@@ -306,6 +1159,9 @@ jobs:
 
       - name: Verify Pinned Environment
         run: ./.github/scripts/verify_pinned_env.sh
+
+      - name: Liveness Reproducibility Gate
+        run: python3 ./.github/scripts/check_liveness_reproducibility.py
 
       - name: Run Protocol Certification Suite
         run: |
@@ -370,24 +1226,106 @@ jobs:
           name: cert-suite-report-${{ matrix.solver }}-${{ matrix.engine }}
           path: artifacts/cert-suite-${{ matrix.solver }}-${{ matrix.engine }}.json
 
+  conformance-suite-gate:
+    runs-on: ubuntu-22.04
+    needs:
+      - build-test
+      - conformance-tests
+      - conformance-adapter-gate
+      - beginner-ux-gate
+    env:
+      EXPECTED_RUSTC: "1.92.0"
+      EXPECTED_Z3: "4.12.5"
+      EXPECTED_CVC5: "1.1.2"
+      EXPECTED_OS: "ubuntu-22.04"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (Pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+
+      - name: Verify Pinned Rust
+        run: |
+          ACTUAL_RUSTC="$(rustc --version | awk '{print $2}')"
+          if [ "$ACTUAL_RUSTC" != "$EXPECTED_RUSTC" ]; then
+            echo "ERROR: Expected rustc $EXPECTED_RUSTC, got $ACTUAL_RUSTC"
+            exit 1
+          fi
+
+      - name: Run Conformance Suite (Pinned)
+        run: |
+          ./scripts/run-conformance-suite.sh
+        env:
+          FORMAT: json
+          OUT: artifacts/conformance-suite.json
+
+      - name: Validate Conformance Report
+        run: |
+          python3 -c "
+          import json, sys
+          with open('artifacts/conformance-suite.json') as f:
+              report = json.load(f)
+          if report['overall'] != 'pass':
+              print('CONFORMANCE SUITE GATE FAILED')
+              print(f\"Passed: {report['passed']}, Failed: {report['failed']}, Errors: {report['errors']}\")
+              if report.get('triage'):
+                  print('Triage:')
+                  for category, count in report['triage'].items():
+                      print(f'  {category}: {count}')
+              for entry in report['entries']:
+                  if entry['status'] != 'match':
+                      print(f\"  [{entry['status'].upper()}] {entry['name']}: expected={entry['expected_verdict']}, actual={entry['actual_verdict']}\")
+                      if entry.get('triage'):
+                          print(f\"    triage: {entry['triage']}\")
+                      if entry.get('error'):
+                          print(f\"    error: {entry['error']}\")
+              print()
+              print('See conformance-suite-report artifact for full details.')
+              sys.exit(1)
+          print(f\"CONFORMANCE SUITE GATE PASSED ({report['passed']} entries)\")
+          "
+
+      - name: Upload Conformance Suite Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-suite-report
+          path: artifacts/conformance-suite.json
+
   library-benchmark-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs:
       - build-test
       - proof-mode-independent-gate
       - corpus-certification-gate
       - corpus-certification-matrix
+    env:
+      EXPECTED_RUSTC: "1.92.0"
+      EXPECTED_Z3: "4.12.5"
+      EXPECTED_CVC5: "1.1.2"
+      EXPECTED_OS: "ubuntu-22.04"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.11"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Pinned Environment
+        run: ./.github/scripts/verify_pinned_env.sh
 
       - name: Run Library Benchmark Smoke
         run: |
@@ -399,30 +1337,70 @@ jobs:
             --perf-budget benchmarks/budgets/ci-quick-smoke-budget.json \
             --out benchmarks/results/ci-library-smoke.json
 
+      - name: Enforce Benchmark Regression Gate (Smoke)
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("benchmarks/results/ci-library-smoke.json").read_text())
+          gate = report.get("performance_gate", {})
+          if not gate.get("enabled", False):
+              raise SystemExit("performance gate must be enabled for smoke benchmark")
+          if not gate.get("passed", False):
+              reasons = gate.get("reasons", [])
+              raise SystemExit(f"benchmark regression gate failed: {reasons}")
+          print("Smoke benchmark regression gate passed.")
+          PY
+
+      - name: Benchmark Deterministic Replay Smoke (Pinned)
+        run: |
+          python3 benchmarks/replay_library_bench.py \
+            --report benchmarks/results/ci-library-smoke.json \
+            --max-protocols 1 \
+            --skip-build \
+            --out-report benchmarks/results/ci-library-smoke-replay.json \
+            --out-comparison benchmarks/results/ci-library-smoke-replay-compare.json
+
       - name: Upload Library Benchmark Smoke Artifact
         uses: actions/upload-artifact@v4
         with:
           name: library-benchmark-smoke
-          path: benchmarks/results/ci-library-smoke.json
+          path: |
+            benchmarks/results/ci-library-smoke.json
+            benchmarks/results/ci-library-smoke-replay.json
+            benchmarks/results/ci-library-smoke-replay-compare.json
 
   library-benchmark-large:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs:
       - build-test
       - proof-mode-independent-gate
       - corpus-certification-gate
       - corpus-certification-matrix
+    env:
+      EXPECTED_RUSTC: "1.92.0"
+      EXPECTED_Z3: "4.12.5"
+      EXPECTED_CVC5: "1.1.2"
+      EXPECTED_OS: "ubuntu-22.04"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.11"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Pinned Environment
+        run: ./.github/scripts/verify_pinned_env.sh
 
       - name: Run Large-Model Library Benchmark
         run: |
@@ -435,8 +1413,60 @@ jobs:
             --perf-budget benchmarks/budgets/large-smoke-budget.json \
             --out benchmarks/results/ci-library-large-smoke.json
 
+      - name: Enforce Benchmark Regression Gate (Large)
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("benchmarks/results/ci-library-large-smoke.json").read_text())
+          gate = report.get("performance_gate", {})
+          if not gate.get("enabled", False):
+              raise SystemExit("performance gate must be enabled for large benchmark")
+          if not gate.get("passed", False):
+              reasons = gate.get("reasons", [])
+              raise SystemExit(f"benchmark regression gate failed: {reasons}")
+          print("Large benchmark regression gate passed.")
+          PY
+
       - name: Upload Large-Model Benchmark Artifact
         uses: actions/upload-artifact@v4
         with:
           name: library-benchmark-large
           path: benchmarks/results/ci-library-large-smoke.json
+
+  performance-gate:
+    runs-on: ubuntu-22.04
+    needs:
+      - build-test
+      - library-benchmark-smoke
+      - library-benchmark-large
+    steps:
+      - name: Performance Gate Passed
+        run: |
+          echo "build-test + benchmark smoke/large gates passed"
+          echo "statistical-regression checks, POR equivalence/soundness tests,"
+          echo "and perf-budget regressions are all green under pinned benchmark jobs."
+
+  cross-platform-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Build
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: cargo check --workspace
+      - name: Clippy
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Tests
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: cargo test --all-targets

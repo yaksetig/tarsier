@@ -551,6 +551,13 @@ property progress: liveness {
 }
 ```
 
+Temporal operator coverage is consistent across bounded and unbounded liveness flows:
+
+- Bounded: `liveness`, `fair-liveness`
+- Unbounded: `prove-fair`
+
+All of these support the same temporal operators listed below (`X`, `[]`, `<>`, `U`, `W`, `R`, `~>`).
+
 ### Temporal operators
 
 | Operator | Syntax | Meaning |
@@ -563,6 +570,21 @@ property progress: liveness {
 | Release | `phi R psi` | `psi` holds until `phi` releases it |
 | Leads-to | `phi ~> psi` | whenever `phi` holds, `psi` eventually follows |
 | Not | `! phi` | negation |
+
+### Temporal precedence and associativity
+
+Formula parsing is deterministic with the following rules:
+
+1. Parentheses bind first: `( ... )`.
+2. Prefix operators bind tighter than infix operators: `!`, `X`, `[]`, `<>`, `next`, `always`, `eventually`.
+3. All infix operators share one precedence level and are left-associative:
+   `&&`, `||`, `==>`, `<=>`, `U`, `W`, `R`, `~>`.
+
+Examples:
+
+- `a U b R c` parses as `(a U b) R c`.
+- `[] a && b` parses as `([] a) && b`.
+- `a U (b R c)` keeps the parenthesized right side.
 
 ### Logical connectives in formulas
 
@@ -583,6 +605,35 @@ exists p: Replica. <formula>
 ```
 
 The quantified variable can access the role's local state via dot notation: `p.decided`, `p.round`, `p.decision`.
+
+### Verification fragment support and fail-fast diagnostics
+
+Parsing accepts both `forall` and `exists`, but verification is intentionally fragment-restricted:
+
+- `agreement`: requires exactly two universal quantifiers over the same role.
+- `safety` / `invariant` / `validity`: require exactly one universal quantifier.
+- `liveness`: requires exactly one universal quantifier.
+- Existential quantifiers are rejected during verification.
+- Temporal operators are rejected in non-liveness property kinds.
+
+Unsupported shapes fail fast with actionable diagnostics (`property name`, `message`, `hint`) before solving.
+There is no silent weakening or fallback rewrite of unsupported formulas.
+
+LTL conformance and fail-fast regression tests are part of the CI test gate (`cargo test --all-targets`).
+
+### Multi-property runs (engine API)
+
+Use `verify_all_properties` to check all named properties in one run, independently and in declaration order.
+
+- Safety and liveness declarations are both supported.
+- Each property gets its own verdict.
+- Run diagnostics include deterministic property-compilation trace entries:
+  source formula hash + compiled artifact hash (safety property, temporal monitor, and/or encoded constraints).
+- Run diagnostics also include machine-readable per-property results under `property_results`:
+  - `property_id`, `property_name`, `property_kind`, `fragment`, `verdict`
+  - `assumptions` (`solver`, `soundness`, `max_depth`, `network_semantics`, `committee_bounds`, optional `failure_probability_bound`)
+  - optional `witness` metadata (`witness_kind`, `trace_steps`, `violation_step`)
+  - temporal failures include `witness.temporal_monitor` step snapshots (`active_states`, `true_atoms`, `acceptance_sets_hit`) to explain why the property failed.
 
 ---
 
@@ -709,6 +760,14 @@ lock QC;
 ```
 justify QC;
 ```
+
+### Symbolic-Crypto Scope Boundary
+
+Cryptographic reasoning in Tarsier is **symbolic**:
+- In scope: identity/key ownership constraints, compromise-gated signing admissibility, signer-set threshold checks, and conflict admissibility (`conflicts exclusive`).
+- Out of scope: computational cryptography guarantees (for example EUF-CMA reductions, concrete security bounds), randomness quality, and implementation-level cryptographic side-channel analysis.
+
+Interpretation rule: `SAFE`/`PROVED` means secure in the declared symbolic model assumptions, not a computational cryptography proof about a concrete implementation. See `docs/SEMANTICS.md` and `docs/TRUST_BOUNDARY.md` for the formal trust boundary.
 
 ---
 
@@ -865,6 +924,7 @@ Whitespace (spaces, tabs, newlines) is ignored between tokens.
 | `--solver z3\|cvc5` | SMT solver backend |
 | `--soundness strict\|permissive` | Soundness profile |
 | `--timeout <secs>` | Per-protocol timeout |
+| `--liveness-memory-budget-mb <MiB>` | RSS guardrail for unbounded fair-liveness proving (`0` disables) |
 | `--format text\|json` | Output format |
 | `--network-semantics dsl\|faithful` | Network semantics mode |
 
@@ -884,6 +944,51 @@ Whitespace (spaces, tabs, newlines) is ignored between tokens.
 | `Safe` | Inductive proof found (unbounded) |
 | `Unsafe` | Counterexample found |
 | `NotProved` | Induction failed (may include CTI witness) |
+
+For `prove-fair` machine-readable outputs, inconclusive outcomes include a stable
+`reason_code` alongside the human-readable `reason`.
+
+Current `reason_code` values:
+- `timeout`
+- `memory_budget_exceeded`
+- `cube_budget_exhausted`
+- `lasso_recovery_failed`
+- `cegar_refinement_inconclusive`
+- `cegar_ladder_exhausted`
+- `solver_unknown`
+
+`prove-fair` machine-readable outputs also include `details.convergence` with a
+stable convergence classification:
+- `outcome=converged` with `frontier_frame`
+- `outcome=counterexample` with `counterexample_depth` / `loop_start`
+- `outcome=not_converged` with `frontier_frame` and `bound_exhausted=true`
+- `outcome=inconclusive` with `reason_code`
+
+For `analyze --mode proof|audit`, the JSON report includes
+`liveness_governance`:
+- `fairness_model` (formal weak/strong fairness semantics)
+- `gst_assumptions` (timing model, GST parameter, post-GST assumption)
+- `obligations_checked` (fair-liveness certificate obligations replayed)
+
+For CEGAR-enabled JSON outputs (`--cegar-report-out`), the report now also carries:
+- `provenance.fingerprint_sha256` (stable hash of a canonical CEGAR report projection)
+- `diff_friendly` (canonical report projection with volatile timing fields removed, currently `termination.elapsed_ms`)
+
+For counterexample traces in machine-readable outputs (`verify --format json`,
+`prove --format json`, `prove-fair --format json`, and CEGAR stage traces), each
+delivery includes explicit identity/auth provenance fields:
+- `sender` / `recipient` with `role`, `process`, and optional `key`
+- `auth.channel_auth`
+- `auth.signature_key`
+- `auth.key_owner_role`
+- `auth.key_compromised`
+- `auth.provenance`
+
+Schema contract: `docs/schemas/counterexample-trace-schema-v1.json`.
+
+For crypto-object deliveries, timeline/trace views also include threshold witness
+summary metadata (`crypto.kind`, `crypto.source`, `crypto.signer_role`,
+`crypto.conflicts`, `crypto.threshold` with observed distinct signer support).
 
 ---
 

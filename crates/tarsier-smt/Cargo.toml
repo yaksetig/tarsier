@@ -2,12 +2,26 @@
 name = "tarsier-smt"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "SMT encoding and solver backends for threshold automata verification"
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
-tarsier-ir = { path = "../tarsier-ir" }
+tarsier-ir = { path = "../tarsier-ir", version = "0.1.0" }
 z3 = { version = "0.19", features = ["static-link-z3"] }
 thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 indexmap.workspace = true
+criterion.workspace = true
+proptest = "1"
+tarsier-dsl = { path = "../tarsier-dsl", version = "0.1.0" }
+tarsier-ir = { path = "../tarsier-ir", version = "0.1.0", features = ["proptest"] }
+
+[[bench]]
+name = "encoder_bench"
+harness = false

@@ -1,6 +1,7 @@
 # Protocol Library
 
 This folder contains the canonical protocol corpus for BFT/CFT consensus-family checks.
+Maintenance ownership/cadence/SLA policy is defined in `docs/CORPUS_MAINTENANCE_POLICY.md`.
 
 Current scope:
 - The models are compact safety/liveness kernels, not byte-for-byte implementations.
@@ -19,8 +20,10 @@ Current scope:
 - Expected-outcome values are schema-checked by check type (for example `safe`/`unsafe`/`unknown`, `live`/`not_live`, etc.).
 - Schema contract docs: `docs/CERT_SUITE_SCHEMA.md` and `docs/cert-suite-schema-v2.json`.
 
-Protocols included (40):
+Protocols included (42):
 - `pbft_core.trs`
+- `pbft_liveness_safe_ci.trs`
+- `pbft_liveness_buggy_ci.trs`
 - `pbft_view_change.trs`
 - `pbft_simple_safe.trs` (minimal, variant_group: pbft_simple_safe)
 - `pbft_simple_safe_faithful.trs` (faithful, variant_group: pbft_simple_safe)

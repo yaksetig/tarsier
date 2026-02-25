@@ -1,0 +1,84 @@
+\section{Preliminaries}\label{sec:prelim}
+
+We recall the threshold-automata framework of Konnov et
+al.~\cite{KonnovVW2015, KonnovLVW2017} and fix notation.
+
+\subsection{Threshold Automata}
+
+A \emph{threshold automaton} is a tuple
+$\ta = (\mathcal{L}, \mathcal{R}, \Gamma, \Pi, \Phi, \mathcal{I})$ where:
+\begin{itemize}
+  \item $\mathcal{L}$ is a finite set of \emph{locations} (control states
+    of a process template);
+  \item $\Pi = \{p_0, \ldots, p_m\}$ is a set of \emph{parameters}
+    (e.g.\ $n$, $t$, $f$);
+  \item $\Phi$ is a \emph{resilience condition}, a conjunction of linear
+    inequalities over $\Pi$ (e.g.\ $n > 3t \wedge f \leq t$);
+  \item $\Gamma = \{\gamma_0, \ldots, \gamma_s\}$ is a set of \emph{shared
+    variables} (message counters);
+  \item $\mathcal{R}$ is a set of \emph{rules}; each rule
+    $r = (\ell, \ell', g, u)$ has source location $\ell \in \mathcal{L}$,
+    target location $\ell'$, a threshold guard $g$, and an update $u$;
+  \item $\mathcal{I} \subseteq \mathcal{L}$ is the set of initial
+    locations.
+\end{itemize}
+
+A \emph{threshold guard} $g$ is a conjunction of atoms of the form
+$\sum_{i} \gamma_i \geq c_0 + \sum_j c_j \cdot p_j$, where $c_0, c_j$ are
+integer constants.  An \emph{update} $u$ specifies, for each shared
+variable $\gamma$, either $\gamma' = \gamma + 1$ (increment) or
+$\gamma' = \gamma$ (unchanged).
+
+\subsection{Counter Abstraction}\label{sec:counter-abstraction}
+
+The key insight is that symmetric threshold-guarded protocols can be
+analyzed via \emph{counter abstraction}~\cite{EmersonNamjoshi1995}: instead
+of tracking the state of each of the $n$ processes individually, we track
+the number of processes in each location.
+
+A \emph{counter system configuration} is a pair
+$(\vec\kappa, \vec\gamma)$ where $\kappa[\ell] \in \mathbb{N}$ counts the
+number of processes at location~$\ell$, subject to the conservation
+invariant $\sum_{\ell} \kappa[\ell] = n$.  The shared variables
+$\vec\gamma$ record global message counts.
+
+\paragraph{Step relation.}
+At each step~$k$, some number $\delta[k,r] \geq 0$ of processes fire each
+rule $r$.  The counters update as:
+\begin{align}
+  \kappa'[\ell] &= \kappa[\ell]
+    - \sum_{\{r : \mathit{src}(r)=\ell\}} \delta[k,r]
+    + \sum_{\{r : \mathit{dst}(r)=\ell\}} \delta[k,r]
+  \label{eq:kappa-update}
+\end{align}
+Shared variables update according to each rule's update function, with an
+additional \emph{adversary injection} term
+$\adv[k,\gamma] \geq 0$ that models Byzantine message forgery, bounded
+globally by the fault parameter:
+$\sum_{k} \adv[k,\gamma] \leq f$ for each~$\gamma$.
+
+\paragraph{Cutoff results.}
+Konnov et al.~\cite{KonnovLVW2017} showed that for the class of symmetric
+threshold-guarded protocols, there exists a \emph{cutoff}: a system size
+beyond which no new behaviors arise.  Counter abstraction is therefore
+\emph{exact} for this class---the symbolic encoding over parameters
+$n, t, f$ captures all behaviors of every concrete instantiation satisfying
+the resilience condition~$\Phi$.
+
+\subsection{Bounded Model Checking and Induction}
+
+\tarsier{} employs three verification strategies:
+
+\paragraph{Bounded model checking (BMC).}
+Unrolls the step relation for $k$ steps and checks reachability of a bad
+state~\cite{BiereCCSZ1999}.  Sound for bug-finding; incomplete for proofs.
+
+\paragraph{$k$-Induction.}
+Combines BMC with an inductive step: if no bad state is reachable in $k$
+steps from \emph{any} configuration satisfying the safety property, then
+the property holds universally~\cite{SheehySSS2000}.
+
+\paragraph{Property-directed reachability (PDR/IC3).}
+Iteratively constructs an inductive invariant by blocking reachable
+predecessors of bad states~\cite{Bradley2011}.  Fully automatic invariant
+discovery, often more efficient than $k$-induction on complex protocols.

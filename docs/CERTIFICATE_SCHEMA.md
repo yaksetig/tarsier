@@ -29,6 +29,25 @@ If schema changes:
 3. Update this document and the JSON schema file.
 4. Add migration/release notes.
 
+## Changelog
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v1 | 2025-01 | Initial schema: `certificate.json` with obligations, SHA256 hashes, and bundle hash. No `fairness`, no `committee_bounds`, no proof-profile obligation completeness. |
+| v2 | 2025-03 | Added `fairness` field (required for `fair_liveness_proof`). Added `committee_bounds` array. Introduced proof-profile obligation completeness checks by `(kind, proof_engine)`. Added `deny_unknown_fields` enforcement. Domain-tagged bundle hash (`tarsier-certificate-v2\n` prefix). |
+| v2.1 | 2026-02 | Added optional `proof_file` and `proof_sha256` fields to obligations for binding solver proof objects to certificates. Bundle hash now covers proof metadata. |
+
+## Cross-References
+
+| Artifact | Path | Relationship |
+|----------|------|-------------|
+| Machine-readable JSON schema | `docs/certificate-schema-v2.json` | Formal schema for `certificate.json` validation |
+| Proof kernel implementation | `crates/tarsier-proof-kernel/src/lib.rs` | Rust implementation of integrity checks, hash computation, and obligation profiles |
+| Trust boundary documentation | `docs/TRUST_BOUNDARY.md` | Documents what is verified vs trusted, residual assumptions, and governance profiles |
+| Proof kernel specification | `docs/KERNEL_SPEC.md` | Formal specification of kernel semantics, trusted base, and obligation-to-check mapping |
+| Checker soundness artifact | `docs/CHECKER_SOUNDNESS_ARGUMENT.md` | Soundness argument, machine-checked subset proof links, and explicit non-goals |
+| Standalone checker binary | `crates/tarsier-certcheck/` | Minimal binary for independent certificate replay (depends only on `tarsier-proof-kernel`) |
+
 ## Stability Contract
 
 For schema version 2:
@@ -36,7 +55,7 @@ For schema version 2:
 - `certificate.json` uses strict decoding (`deny_unknown_fields`), so unknown fields are rejected.
 - Obligation file paths must be safe relative paths inside the bundle.
 - Each obligation must include a SHA256 hash.
-- Bundle integrity includes a deterministic `bundle_sha256` over metadata + obligation hashes.
+- Bundle integrity includes a deterministic `bundle_sha256` over metadata + obligation hashes. The hash is computed with the domain tag `tarsier-certificate-v2\n` prepended to prevent cross-protocol hash collisions.
 - Certificate emission canonicalizes obligation ordering, committee-bound ordering, and SMT declaration/assertion ordering for deterministic output.
 - The trusted checker enforces proof-profile obligation completeness by `(kind, proof_engine)` (no missing or extra obligations).
 - All proof obligations must use `expected = "unsat"` to support independent replay.
@@ -63,6 +82,8 @@ Each obligation object:
 - `expected: string` (must be `"unsat"`)
 - `file: string` (relative `.smt2` filename)
 - `sha256: string` (hex)
+- `proof_file: string|null` (optional; relative `.proof` filename for bound proof object)
+- `proof_sha256: string|null` (optional; hex SHA-256 of the proof object file)
 
 ## Required Obligation Profiles
 
@@ -85,6 +106,11 @@ Additional profile checks:
 - `induction_k` is required for all proof certificates (for fair-liveness this is the converged frame).
 - `fairness` must be absent for safety certificates.
 - `fairness` must be `"weak"` or `"strong"` for fair-liveness certificates.
+
+Standalone replay contract (`tarsier-certcheck`):
+- Replays **both** safety and fair-liveness obligation bundles with external solvers.
+- Fails closed if required obligations for a profile are missing (`missing_required_obligation`) or extra (`unexpected_obligation_name`).
+- Remains engine-independent: `tarsier-certcheck` depends only on `tarsier-proof-kernel` plus external solver invocation.
 
 ## Minimal Example
 

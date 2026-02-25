@@ -1,0 +1,6 @@
+# CI gate scripts use only Python standard library modules.
+# This file pins the Python version expectation and documents
+# that no third-party packages are required.
+#
+# If a script later needs a third-party package, add it here
+# and update CI to run: pip install -r .github/scripts/requirements.txt

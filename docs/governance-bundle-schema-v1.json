@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/governance-bundle-v1.json",
+  "title": "Tarsier Governance Bundle",
+  "description": "Schema for the governance artifact bundle produced by `tarsier analyze --goal release`.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tarsier_version",
+    "environment",
+    "model_source_sha256",
+    "analysis_report",
+    "certificates",
+    "artifacts",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "tarsier_version": {
+      "type": "string",
+      "description": "Version of tarsier-cli that produced this bundle."
+    },
+    "environment": {
+      "type": "object",
+      "required": ["os", "arch"],
+      "properties": {
+        "os": { "type": "string", "description": "Operating system (e.g., 'macos', 'linux')." },
+        "arch": { "type": "string", "description": "CPU architecture (e.g., 'x86_64', 'aarch64')." }
+      }
+    },
+    "model_source_sha256": {
+      "type": "string",
+      "description": "SHA256 hash of the source protocol file."
+    },
+    "analysis_report": {
+      "description": "The full analysis report object (see analysis-report-schema-v1.json)."
+    },
+    "certificates": {
+      "type": "array",
+      "description": "References to generated certificate bundles.",
+      "items": {
+        "type": "object",
+        "required": ["kind", "bundle_dir", "integrity_ok"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["safety", "fair_liveness"],
+            "description": "Certificate type."
+          },
+          "bundle_dir": {
+            "type": "string",
+            "description": "Path to the certificate bundle directory."
+          },
+          "bundle_sha256": {
+            "type": ["string", "null"],
+            "description": "SHA256 of the certificate bundle, if available."
+          },
+          "integrity_ok": {
+            "type": "boolean",
+            "description": "Whether the bundle passed integrity checks."
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "Bundle artifact references with integrity hashes.",
+      "items": {
+        "type": "object",
+        "required": ["name", "kind", "path", "sha256"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Artifact logical name (e.g. analysis_report, certificate_safety)."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["report", "certificate"],
+            "description": "Artifact category."
+          },
+          "path": {
+            "type": "string",
+            "description": "Path to artifact file."
+          },
+          "sha256": {
+            "type": "string",
+            "description": "SHA256 hash of the artifact file."
+          }
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "required": ["algorithm", "public_key_hex", "signature_hex", "signed_payload_sha256"],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "ed25519",
+          "description": "Signature algorithm."
+        },
+        "public_key_hex": {
+          "type": "string",
+          "description": "Signer public key encoded as hex."
+        },
+        "signature_hex": {
+          "type": "string",
+          "description": "Detached signature over canonical bundle payload (hex)."
+        },
+        "signed_payload_sha256": {
+          "type": "string",
+          "description": "SHA256 of the signed payload (bundle excluding signature field)."
+        }
+      }
+    }
+  }
+}

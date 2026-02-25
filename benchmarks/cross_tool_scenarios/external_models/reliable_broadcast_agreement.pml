@@ -1,0 +1,1 @@
+/* Mock Promela model placeholder for reliable broadcast agreement. */

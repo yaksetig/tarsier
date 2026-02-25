@@ -3,6 +3,120 @@
 Tarsier is a bounded model checker for BFT protocol models written in a threshold-automata DSL.
 It targets fast safety/liveness bug-finding and parameterized reasoning over `n`, `t`, `f`-style systems.
 
+**New to Tarsier?** Start with the [Getting Started Guide](docs/GETTING_STARTED.md) for a hands-on walkthrough.
+
+## Installation
+
+```bash
+# Shell installer (Linux/macOS)
+curl -fsSL https://raw.githubusercontent.com/tarsier-verify/tarsier/main/install.sh | sh
+
+# Homebrew (macOS)
+brew tap tarsier-verify/tarsier && brew install tarsier
+
+# Or build from source
+git clone https://github.com/tarsier-verify/tarsier.git && cd tarsier
+CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build --release
+
+# Optional: enable governance-only commands
+CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build --release --features governance
+```
+
+Pre-built binaries for Linux and macOS are available on [GitHub Releases](https://github.com/tarsier-verify/tarsier/releases).
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Getting Started](docs/GETTING_STARTED.md) | End-to-end walkthrough: install, write, verify, debug |
+| [Tutorial](docs/TUTORIAL.md) | Detailed feature-by-feature guide |
+| [Example Catalog](docs/EXAMPLE_CATALOG.md) | Annotated guide to all 48 example protocols |
+| [Language Reference](docs/LANGUAGE_REFERENCE.md) | Complete DSL syntax and semantics |
+| [Parameterized Verification](docs/PARAMETERIZED_VERIFICATION.md) | When results generalize beyond fixed parameters |
+| [Semantics](docs/SEMANTICS.md) | Formal semantics and soundness assumptions |
+| [Trust Boundary](docs/TRUST_BOUNDARY.md) | What is trusted vs. independently verified |
+| [Architecture](docs/ARCHITECTURE.md) | 12-crate pipeline map and trust boundary overview |
+| [API Stability](docs/API_STABILITY.md) | SemVer guarantees and compatibility policy |
+| [Certificate Schema](docs/CERTIFICATE_SCHEMA.md) | Proof certificate bundle format |
+
+## Core Flow (Start Here)
+
+### Beginner (Canonical Path)
+
+```bash
+# 1. Assist — scaffold a protocol skeleton from a template
+tarsier assist --kind hotstuff --out my_protocol.trs
+
+# 2. Analyze — primary entry point
+tarsier analyze my_protocol.trs --goal safety
+
+# 3. Visualize — inspect counterexample traces if bugs are found
+tarsier visualize my_protocol.trs --check verify --format markdown --out cex.md
+```
+
+### Pro (Advanced Knobs)
+
+```bash
+tarsier analyze my_protocol.trs --profile pro --depth 20 --k 16 --timeout 600
+tarsier analyze my_protocol.trs --goal safety+liveness --profile pro
+tarsier prove my_protocol.trs --k 12
+```
+
+### Governance (Feature Build Only)
+
+```bash
+CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build -p tarsier-cli --features governance
+tarsier analyze my_protocol.trs --profile governance --goal release --format json
+tarsier certify-safety my_protocol.trs --out certs/my_protocol
+```
+
+Goals select what to check: `bughunt`, `safety`, `safety+liveness`, `release`.
+Profiles select expertise level: `beginner` (default), `pro`, `governance`, `ci-fast`, `ci-proof`, `release-gate`.
+
+Beginner/proof usage note: `analyze --goal safety` and `analyze --goal safety+liveness` already pick strict soundness and proof-mode defaults. You do not need solver/engine/depth flags unless you opt into `--advanced` or `--profile pro`.
+
+### CI Integration
+
+```bash
+# Fast CI gate (quick mode, depth 4, 60s timeout)
+tarsier analyze my_protocol.trs --profile ci-fast --format json
+
+# CI proof gate (proof mode, depth 10, k 12, 300s timeout)
+tarsier analyze my_protocol.trs --profile ci-proof --format json
+
+# Release gating (audit mode, depth 12, k 14, 600s timeout, portfolio enabled)
+tarsier analyze my_protocol.trs --profile release-gate --format json --report-out release/
+```
+
+### Mapping Legacy Commands
+
+| Legacy command | Equivalent `analyze` invocation |
+|---|---|
+| `verify file.trs --depth 10` | `analyze file.trs --goal bughunt` |
+| `prove file.trs --k 12 --engine pdr` | `analyze file.trs --goal safety` |
+| `prove-fair file.trs --k 8 --fairness weak` | `analyze file.trs --goal safety+liveness` |
+| `analyze file.trs --mode audit` | `analyze file.trs --goal release` |
+
+The legacy commands (`verify`, `prove`, `prove-fair`, etc.) remain available for expert use with `--profile pro`.
+See [docs/MIGRATION.md](docs/MIGRATION.md) for the full V2 migration guide.
+
+### Governance Feature Build (Optional)
+
+Governance-only commands compile only when `tarsier-cli` is built with `--features governance`.
+
+```bash
+CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build -p tarsier-cli --features governance
+```
+
+Governance-only commands:
+- `cert-suite`
+- `certify-safety`
+- `certify-fair-liveness`
+- `check-certificate`
+- `generate-trust-report`
+- `governance-pipeline`
+- `verify-governance-bundle`
+
 ## What It Supports
 
 - Safety checks (agreement/invariant fragments).
@@ -19,7 +133,13 @@ It targets fast safety/liveness bug-finding and parameterized reasoning over `n`
 - First-class cryptographic objects (`certificate`, `threshold_signature`) with `form`/`has`/`lock`/`justify`.
 - Committee tail-bound analysis (hypergeometric) with SMT bound injection.
 - Sound communication-complexity reporting (role-aware protocol bounds and adversary-aware injection bounds).
-- Quantitative finality estimates (success lower bounds, expected rounds, 90%/99% confidence rounds, and message upper-bound projections).
+- Quantitative finality estimates (success lower bounds, expected rounds, 90%/99% confidence rounds, message upper-bound projections, and sensitivity-derived confidence intervals for probabilistic metrics).
+- Per-metric quantitative bound annotations with explicit `upper_bound`/`lower_bound`/`estimate` tags, evidence classes (`theorem_backed` vs `heuristic_estimate`), and attached assumptions.
+- Unsupported quantitative extrapolations are rejected explicitly (metrics set to `null` + `assumption_notes` error reason).
+- Versioned quantitative JSON schema for `comm --format json` outputs (`schema_version == 2`).
+- Quantitative schema docs at `docs/QUANTITATIVE_SCHEMA.md` and machine-readable schema at `docs/quantitative-schema-v2.json`.
+- CI/release quantitative baseline gate via `scripts/check-quantitative-baselines.sh` (analytic formula cross-checks).
+- CI reproducibility gate for quantitative CLI artifacts via `scripts/check-quantitative-cli-pipeline.sh` (stable model hash + reproducibility fingerprint across identical runs).
 - Unbounded safety proof attempts (`prove` command) with `kinduction` and full IC3/PDR (`pdr`) engines.
 - `prove` auto-dispatch: if a model declares only `property ...: liveness`, `prove` runs unbounded fair-liveness proof (weak/strong fairness) instead of safety proof.
 - Round/view cutoff evidence generation via bound sweeps (`round-sweep`) for capped-round models.
@@ -28,7 +148,7 @@ It targets fast safety/liveness bug-finding and parameterized reasoning over `n`
 - Bounded fair-liveness counterexample search (`fair-liveness --fairness weak|strong`).
 - Unbounded fair-liveness proof attempts (`prove-fair --fairness weak|strong`) with fair-cycle IC3/PDR.
 - Round-erasure fair-liveness proofs for unbounded rounds (`prove-fair-round`, over-approximation).
-- Safety and fair-liveness proof certificate bundles (`certify-safety`, `certify-fair-liveness`, `check-certificate`).
+- Safety and fair-liveness proof certificate bundles (`certify-safety`, `certify-fair-liveness`, `check-certificate`) in governance feature builds.
 - Optional raw solver proof-object extraction during certificate checks.
 - Deterministic multi-layer analysis modes with machine-readable JSON (`analyze --mode ...`).
 - End-to-end timeout budgets (including CEGAR/fair-liveness search loops), not just per-query solver time limits.
@@ -58,6 +178,7 @@ cargo run -p tarsier-cli -- prove-fair examples/pbft_simple.trs --k 0 --fairness
 cargo run -p tarsier-cli -- prove-fair examples/pbft_simple.trs --k 0 --fairness strong --cegar-iters 2 --cegar-report-out artifacts/pbft-prove-fair-cegar.json
 cargo run -p tarsier-cli -- prove-fair-round examples/pbft_faithful_liveness.trs --k 20 --fairness strong --round-vars view,round,epoch,height
 cargo run -p tarsier-cli -- prove-fair examples/trivial_live.trs --k 8 --fairness weak --cert-out certs/live-weak
+# Governance feature build required for the commands below.
 cargo run -p tarsier-cli -- certify-safety examples/pbft_simple.trs --k 12 --engine kinduction --out certs/pbft
 cargo run -p tarsier-cli -- certify-safety examples/pbft_simple.trs --k 12 --engine pdr --out certs/pbft-pdr
 cargo run -p tarsier-cli -- certify-fair-liveness examples/trivial_live.trs --k 8 --fairness weak --out certs/live-weak
@@ -70,9 +191,10 @@ cargo run -p tarsier-cli -- visualize examples/reliable_broadcast_buggy.trs --ch
 cargo run -p tarsier-cli -- debug-cex examples/reliable_broadcast_buggy.trs --check verify --depth 8
 cargo run -p tarsier-cli -- lint examples/pbft_simple.trs --soundness strict
 cargo run -p tarsier-cli -- assist --kind hotstuff --out examples/hotstuff_skeleton.trs
+# Governance feature build required.
 cargo run -p tarsier-cli -- cert-suite --manifest examples/library/cert_suite.json --engine kinduction --k 8 --format text
 cargo run -p tarsier-cli -- show-ta examples/pbft_simple.trs
-cargo run -p tarsier-cli -- comm examples/pbft_simple.trs --depth 10
+cargo run -p tarsier-cli -- comm examples/pbft_simple.trs --depth 10 --format json --out artifacts/pbft-comm.json
 python3 benchmarks/run_library_bench.py --mode standard
 cargo run -p tarsier-playground
 ```
@@ -237,11 +359,23 @@ cargo clippy --all-targets -- -D warnings
 cargo test --all-targets
 ```
 
+Property-based randomized pipeline tests (parse -> lower -> encode -> solve):
+
+```bash
+PROPTEST_CASES=48 PROPTEST_RNG_ALGORITHM=cc PROPTEST_RNG_SEED=246813579 \
+  cargo test -p tarsier-engine --test property_pipeline_proptest -- --nocapture
+```
+
+Testing-layer guarantees and scope are documented in `docs/TESTING_STRATEGY.md`.
+
 CI now also runs safety and fair-liveness certificate generation/checking with pinned solver binaries:
 - Z3 `4.12.5`
 - cvc5 `1.1.2`
 - Optional proof-object validation path (`tarsier-certcheck --proof-checker .github/scripts/check_proof_object.py`) on CI-supported solvers.
+- CI proof-object validation now uses solver-backed replay checks for both solvers and
+  external Alethe checking (Carcara) for cvc5 proofs.
 - Proof-mode merge gate: CI runs `analyze --mode proof` and then requires `tarsier-certcheck` to independently validate produced proof bundles (two solvers + proof-object checker) before downstream jobs continue.
+- Release certification includes the same independent high-assurance proof gate (`--profile high-assurance`, `TARSIER_REQUIRE_CARCARA=1`) before release artifacts are accepted.
 
 ## Analysis Modes
 
@@ -266,6 +400,39 @@ cargo run -p tarsier-cli -- analyze examples/pbft_simple.trs --mode proof --port
 
 `analyze` exits with code `0` on overall pass and `2` otherwise.
 
+### Governance Pipeline (One Command)
+
+Run governance proof/cert/corpus/perf gates in one command:
+
+```bash
+cargo run -p tarsier-cli -- governance-pipeline examples/library/reliable_broadcast_safe.trs \
+  --cert-manifest examples/library/cert_suite.json \
+  --conformance-manifest examples/conformance/conformance_suite.json \
+  --benchmark-report artifacts/benchmark-report.json \
+  --format json \
+  --out artifacts/governance-pipeline-report.json
+```
+
+The command emits a machine-readable gate report (`proof`, `cert`, `corpus`, `perf`) with
+per-gate status/details and top-level `overall` pass/fail.
+Schema: `docs/governance-pipeline-report-schema-v1.json`.
+
+### Signed Governance Bundle + Verifier
+
+When running release/governance analysis with `--report-out`, Tarsier also writes
+`governance-bundle.json` in the same directory. The bundle includes:
+- analysis report metadata
+- certificate artifact references and hashes
+- detached Ed25519 signature metadata
+
+Verify signature + schema + artifact completeness:
+
+```bash
+cargo run -p tarsier-cli -- verify-governance-bundle artifacts/governance-bundle.json --format json
+```
+
+Bundle schema: `docs/governance-bundle-schema-v1.json`.
+
 JSON reports now include per-layer profiling diagnostics under
 `layers[*].details.abstractions`:
 - `phase_profiles`: parse/lower/check/encode/solve timings (`elapsed_ms`) plus `rss_bytes`
@@ -276,15 +443,24 @@ JSON reports now include per-layer profiling diagnostics under
   metrics (`incremental_depth_reuse_steps`, reuse-hit counters), and symmetry
   pruning metrics (`symmetry_candidates`, `symmetry_pruned`, `symmetry_prune_rate`),
   including stutter-signature collapse counts (`stutter_signature_normalizations`),
+  PDR pending-obligation dedup hits (`por_pending_obligation_dedup_hits`), and
+  dynamic POR ample-query metrics (`por_dynamic_ample_queries`,
+  `por_dynamic_ample_fast_sat`, `por_dynamic_ample_unsat_rechecks`,
+  `por_dynamic_ample_unsat_recheck_sat`),
   with explicit enablement flags (`symmetry_enabled`, `incremental_enabled`).
+- `por_dynamic_ample`: deterministic effectiveness summary with context and
+  total rates (`total_fast_sat_rate`, `total_unsat_recheck_rate`,
+  `total_unsat_recheck_sat_rate`) for CI gating.
 - `lowerings[*]` now includes partial-order/fallback visibility:
   `independent_rule_pairs`, `por_enabled`, `fallback_applied`, `fallback_steps`,
   `fallback_exhausted`, `network_fallback_state`, plus transition-pruning stats
   (`por_stutter_rules_pruned`, `por_commutative_duplicate_rules_pruned`,
-  `por_effective_rule_count`).
+  `por_guard_dominated_rules_pruned`, `por_effective_rule_count`).
 - POR now performs exact transition pruning in the SMT relation:
   pure stutter rules and commutative duplicate rules are disabled (`delta=0`)
   with no reachability loss for safety/liveness traces under the counter semantics.
+- CI helper for dynamic ample effectiveness:
+  `python3 .github/scripts/check_dynamic_ample_gate.py <report.json>`.
 
 Quick tuning guidance by mode:
 - `quick`: low depth, fast bug-finding; use for every PR.
@@ -322,7 +498,7 @@ Large-model benchmark profile (proof mode, faithful-heavy subset):
 python3 benchmarks/run_library_bench.py --mode proof --k 16 --timeout 240 \
   --samples 3 \
   --protocols benchmarks/protocols-large.txt \
-  --perf-budget benchmarks/budgets/proof-large-budget.json \
+  --perf-budget benchmarks/budgets/large-smoke-budget.json \
   --out benchmarks/results/proof-large.json
 ```
 
@@ -364,7 +540,7 @@ cargo run -p tarsier-cli -- visualize examples/reliable_broadcast_buggy.trs \
   --out artifacts/reliable-broadcast-cex.md
 
 # Fair-liveness lasso counterexample
-cargo run -p tarsier-cli -- visualize examples/fair_nonterminating.trs \
+cargo run -p tarsier-cli -- visualize examples/library/reliable_broadcast_live_buggy.trs \
   --check fair-liveness \
   --depth 10 \
   --fairness strong \
@@ -396,6 +572,7 @@ Under `timing: partial_synchrony`, fair-liveness loops are required to be post-G
 
 Formal semantics and soundness assumptions are documented in `docs/SEMANTICS.md`.
 Explicit trust boundary (what is trusted vs independently verified) is documented in `docs/TRUST_BOUNDARY.md`.
+Cryptography claims are symbolic (identity/key ownership, non-forgeability under uncompromised keys, threshold signer-set constraints), not computational-cryptography proofs; see `docs/SEMANTICS.md` and the "Cryptography Scope Boundary" section in `docs/TRUST_BOUNDARY.md`.
 
 For scalability-focused bug triage, `verify`, `prove`, and `prove-fair` support adaptive CEGAR (`--cegar-iters`) with optional JSON artifact output (`--cegar-report-out`).
 Refinement starts from the global atom set (`equivocation:none`, `auth:signed`, `values:exact`, `network:identity_selective`, `network:process_selective`) and now also synthesizes message-scoped refinements from counterexample evidence (for example `equivocation(Vote)=none`, `channel(Vote)=authenticated`).
@@ -404,6 +581,7 @@ When evidence signals are present, Tarsier now computes a solver-backed UNSAT-co
 When multi-atom refinements eliminate a witness, Tarsier greedily shrinks to a minimal elimination core and emits both effective predicates and a derived conjunction predicate (`cegar.core.min(...)`).
 CEGAR reports now include explicit termination metadata (iteration budget/usage, timeout budget, elapsed time, stable termination reason) and deterministic stage ordering for CI diffability.
 CEGAR reports include stage-by-stage outcomes, explicit model changes, eliminated traces, inferred trace-signal notes, discovered refinement predicates (stage-local and aggregate), explicit counterexample analysis (`concrete` / `potentially_spurious` / `inconclusive`), and a final classification (`safe`, `unsafe_unrefined`, `unsafe_confirmed`, `timeout`, `inconclusive`).
+CEGAR JSON artifacts now include `provenance.fingerprint_sha256` computed from a canonical diff-friendly projection (`diff_friendly`) that strips volatile timing fields (`termination.elapsed_ms`), so CI diffs stay stable across runs.
 Scalability regression coverage includes a multi-case false-alarm reduction check (`scalability_refinement_materially_reduces_false_alarms_on_harder_models`) to ensure CEGAR materially lowers spurious UNSAFE alarms across harder approximation-sensitive models.
 `prove` and `prove-fair` CEGAR report APIs (`prove_*_with_cegar_report`) now emit full stage-by-stage refinement traces (labels, refinements, model changes, eliminated traces, discovered predicates, stage outcome, stage/overall counterexample analysis, deterministic termination metadata) in addition to baseline/final outcomes and explicit refinement controls for CI/governance tooling.
 For `prove` with k-induction, CEGAR now also performs CTI-driven predicate synthesis: it mines candidate location-unreachability predicates from the induction witness, proves candidates, and reruns the proof with those synthesized invariants.
@@ -432,8 +610,15 @@ cargo run -p tarsier-cli -- cert-suite --manifest examples/library/cert_suite.js
 - variant groups marked as paired must include both `minimal` and `faithful` models.
 - strict schema contract is documented in `docs/CERT_SUITE_SCHEMA.md` with machine-readable schema `docs/cert-suite-schema-v2.json`.
 - each entry pins `model_sha256` (file fingerprint) for deterministic failure triage.
+- `enforce_model_hash_consistency=true` (in `examples/library/cert_suite.json`) verifies
+  pinned `model_sha256` values against current protocol files before checks run.
 - `enforce_library_coverage=true` (in `examples/library/cert_suite.json`) requires that every
   `examples/library/*.trs` protocol has a manifest expectation entry.
+- `enforce_corpus_breadth=true` (in `examples/library/cert_suite.json`) enforces canonical corpus diversity:
+  at least 12 families and at least one `byzantine`, `omission`, and `crash` model.
+- `enforce_known_bug_sentinels=true` (with `required_known_bug_families` and
+  `required_variant_groups`) keeps known-bug regression sentinels and required
+  minimal+faithful variant groups from regressing out of the canonical corpus.
 - this makes new protocol additions fail certification until expectations/tests are added.
 
 Per-protocol outputs now include:
@@ -441,12 +626,14 @@ Per-protocol outputs now include:
 - explicit execution `assumptions` (solver/engine/soundness/fairness/network/depth/k/timeout/cegar),
 - `artifact_links` for per-check outputs and entry summaries.
 - failure `triage` labels: `model_change`, `engine_regression`, or `expected_update`.
+- triage category contract is enforced; unknown labels fail certification report generation.
 
 Use `--format json --out artifacts/cert-suite.json --artifacts-dir artifacts/cert-suite` for CI artifacts.
 After intentional model edits, refresh manifest fingerprints with:
 `python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json`.
 `./scripts/certify-corpus.sh` now runs a hash-consistency check by default before certification.
 CI includes `corpus-certification-gate`, which runs `./scripts/certify-corpus.sh` on pinned solver environments and gates downstream certificate/benchmark jobs.
+Workflow contract drift is guarded by `.github/scripts/check_certification_gate_contract.py` (enforced in CI and release workflows).
 Release process is additionally gated by the `Release Certification` workflow (tag `v*`), which runs corpus certification on pinned environment versions:
 - OS: `ubuntu-22.04`
 - Rust: `1.92.0`
@@ -468,6 +655,29 @@ cargo run -p tarsier-cli -- lint examples/pbft_simple.trs --soundness strict
 cargo run -p tarsier-cli -- debug-cex examples/reliable_broadcast_buggy.trs --check verify --depth 8
 ```
 
+- Interactive TUI trace explorer:
+
+```bash
+cargo run -p tarsier-cli -- explore examples/reliable_broadcast_buggy.trs
+```
+
+Three-panel TUI showing location occupancy, shared variables, and message deliveries. Navigate with `n`/`p`, toggle diff with `d`, quit with `q`.
+
+- Graphviz automaton export:
+
+```bash
+cargo run -p tarsier-cli -- export-dot examples/reliable_broadcast.trs --out automaton.dot
+cargo run -p tarsier-cli -- export-dot examples/reliable_broadcast.trs --svg --out automaton.svg
+```
+
+- Compositional module verification:
+
+```bash
+cargo run -p tarsier-cli -- compose-check my_protocol.trs
+```
+
+Checks assume-guarantee contracts between protocol modules for coverage and acyclicity.
+
 - Guided protocol scaffolds:
 
 ```bash
@@ -476,7 +686,21 @@ cargo run -p tarsier-cli -- assist --kind hotstuff --out examples/hotstuff_new.t
 cargo run -p tarsier-cli -- assist --kind raft --out examples/raft_new.trs
 ```
 
+## VS Code Extension
+
+Tarsier includes a VS Code extension for `.trs` files in `editors/vscode/` with:
+- Syntax highlighting (keywords, operators, comments, numbers)
+- Real-time diagnostics via LSP (parse errors and lowering errors as you type)
+- Bracket matching and auto-close
+- Code snippets for protocol skeletons, phases, transitions, and properties
+
+Setup: build `cargo build --release -p tarsier-lsp`, open `editors/vscode/` in VS Code, press `F5`.
+See [Tutorial](docs/TUTORIAL.md#13-vs-code-extension) for details.
+
 ## Proof Certificates
+
+These commands are available only in governance feature builds:
+`cargo build -p tarsier-cli --features governance`.
 
 Generate a certificate bundle:
 
@@ -510,7 +734,8 @@ cargo run -p tarsier-certcheck -- certs/pbft --solvers z3,cvc5
 cargo run -p tarsier-certcheck -- certs/pbft --solvers z3,cvc5 --require-two-solvers --json-report certcheck-report.json
 # optional proof-object replay/validation path
 chmod +x .github/scripts/check_proof_object.py
-cargo run -p tarsier-certcheck -- certs/pbft --solvers z3,cvc5 --require-two-solvers --emit-proofs certs/pbft/proofs --require-proofs --proof-checker .github/scripts/check_proof_object.py
+# high-assurance profile (requires cvc5 + TARSIER_REQUIRE_CARCARA=1)
+TARSIER_REQUIRE_CARCARA=1 cargo run -p tarsier-certcheck -- certs/pbft --profile high-assurance --solvers z3,cvc5 --emit-proofs certs/pbft/proofs --proof-checker .github/scripts/check_proof_object.py
 ```
 
 `check-certificate` first runs a trusted integrity kernel (schema/version checks, safe obligation paths, per-obligation hash checks, bundle hash check, and SMT script sanity checks) before invoking external solvers.
@@ -564,7 +789,7 @@ python3 benchmarks/run_library_bench.py --mode standard --depth 8 --timeout 120
 
 ## Soundness Profiles
 
-- `strict` (default): rejects underspecified models (missing safety property for `verify`, missing adversary bound when faults are modeled, unbounded integer locals). Distinct sender guards are modeled with automatic sender-uniqueness tracking. Under Byzantine `equivocation: full`, strict mode requires monotone threshold guards (`>=` or `>`). Linting in strict mode requires at least identity-coupled Byzantine networking (`network: identity_selective`, `cohort_selective`, or `process_selective`).
+- `strict` (default): rejects underspecified models (missing safety property for `verify`, missing adversary bound when faults are modeled, unbounded integer locals). Distinct sender guards are modeled with automatic sender-uniqueness tracking. Under Byzantine `equivocation: full`, strict mode requires monotone threshold guards (`>=` or `>`). For faithful networking, strict lint/verify requires explicit identity+key declarations, explicit auth semantics (global auth or per-message channels), and explicit Byzantine equivocation policy (`full` or `none`).
 - `permissive`: keeps prototype-friendly fallbacks.
 
 Use:

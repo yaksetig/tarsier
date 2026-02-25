@@ -1,0 +1,30 @@
+/* Tendermint Locking — Agreement property.
+ *
+ * Threshold automaton for a simplified Tendermint consensus protocol
+ * with a locking mechanism.
+ * Matches Tarsier model: examples/library/tendermint_locking.trs
+ *
+ * Locations:
+ *   loc0 = pre       (initial — waiting for Precommit messages)
+ *   loc1 = decided   (received 2t+1 Precommit, decided true)
+ *
+ * Shared counters:
+ *   nsnt_precommit — number of Precommit messages sent
+ *
+ * Safety: agreement — all replicas that decide reach the same value.
+ *   (trivially satisfied since there is only one decision value)
+ */
+skel Replica {
+  local pc;
+  shared nsnt_precommit;
+  parameters N, T, F;
+  assumptions (1) { N > 3*T; }
+  locations (2) { loc0: [0]; loc1: [1]; }
+  inits (3) { loc0 == N; loc1 == 0; nsnt_precommit == 0; }
+  rules (1) {
+    0: loc0 -> loc1 when (nsnt_precommit >= 1 + 2*T) do { nsnt_precommit' == nsnt_precommit; };
+  }
+  specifications (1) {
+    agreement: [](loc1 > 0 -> [](loc1 >= 0));
+  }
+}

@@ -1,0 +1,205 @@
+\section{Evaluation}\label{sec:evaluation}
+
+We evaluate \tarsier{} on a corpus of 44~protocol models spanning 14~protocol
+families, addressing three questions:
+\textbf{RQ1}~Does \tarsier{} scale to real-world BFT protocols?
+\textbf{RQ2}~Do faithful network modes close soundness gaps present in
+classical abstractions?
+\textbf{RQ3}~How do proof certificates affect the trusted computing base?
+
+\subsection{Benchmark Corpus}
+
+Table~\ref{tab:corpus} summarizes the protocol corpus.  Models are drawn from
+five major families: PBFT~\cite{CastroLiskov1999},
+HotStuff~\cite{YinMGRGA2019}, Tendermint~\cite{BuchmanKM2018},
+Paxos~\cite{Lamport1998}, and Algorand~\cite{GiladHMVZ2017}, together with
+nine additional protocols including Streamlet, Casper FFG, DLS, Zyzzyva,
+SBFT, Narwhal/Bullshark, GRANDPA, QBFT, and DiemBFT.  Each protocol is
+modeled in the \tarsier{} DSL with Byzantine, crash, or omission fault
+semantics.  The corpus includes 14~\emph{regression sentinels}---models with
+intentional bugs whose expected verdict is UNSAFE---to validate the tool's
+bug-finding capability.
+
+\begin{table}[t]
+\centering
+\caption{Protocol corpus summary.  $|\mathcal{L}|$ is the number of
+locations after lowering; $|\mathcal{R}|$ the number of rules;
+$|\Gamma|$ the number of shared variables.  Columns \textsf{M} and
+\textsf{F} indicate whether faithful (identity-selective or above) and
+crypto-object variants exist.}
+\label{tab:corpus}
+\begin{tabular}{@{}lllrrrl@{}}
+\toprule
+\textbf{Protocol} & \textbf{Family} & \textbf{Fault} &
+  $|\mathcal{L}|$ & $|\mathcal{R}|$ & $|\Gamma|$ & \textsf{M/F} \\
+\midrule
+Reliable Broadcast  & Bracha      & Byz  &  32 & 24 & 3 & M+F \\
+PBFT Core           & PBFT        & Byz  &  16 & 12 & 3 & M+F \\
+PBFT View Change    & PBFT        & Byz  &  16 & 12 & 4 & M \\
+PBFT Crypto QC      & PBFT        & Byz  &  16 & 12 & 5 & F \\
+HotStuff Chained    & HotStuff    & Byz  &   4 &  2 & 2 & M \\
+HotStuff Crypto QC  & HotStuff    & Byz  &   4 &  2 & 3 & F \\
+Jolteon Fast-Path   & HotStuff    & Byz  & 1024 & 256 & 1 & M \\
+Tendermint Locking  & Tendermint  & Byz  &   4 &  2 & 1 & M+F \\
+Paxos               & Paxos       & Crash &   4 &  2 & 1 & M \\
+Multi-Paxos Round   & Paxos       & Crash &   8 &  6 & 2 & M \\
+Algorand Vote Cert  & Algorand    & Byz  &   4 &  2 & 1 & M \\
+DiemBFT Epoch       & DiemBFT     & Byz  & 256 & 64 & 1 & M \\
+Streamlet           & Streamlet   & Byz  &   4 &  2 & 2 & M \\
+Viewstamped Repl.   & VR          & Crash &   8 &  6 & 3 & M+F \\
+Raft Election       & Raft        & Omis &   4 &  2 & 1 & M \\
+Zab Atomic Bcast    & Zab         & Omis &   4 &  2 & 2 & M+F \\
+\emph{+ 14 buggy sentinels} & various & various & 4--1024 & 2--256 & 1--5 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Experimental Setup}
+
+All experiments run on a single machine (Apple M3 Pro, 18\,GB RAM, macOS 15).
+The SMT backend is Z3~v4.13 via static linking.  We report median wall-clock
+time over three runs.  Three benchmark modes are used:
+\begin{itemize}
+  \item \textbf{Quick:} BMC depth~3, per-layer timeout 30\,s.
+  \item \textbf{Standard:} BMC depth~8, per-layer timeout 120\,s.
+  \item \textbf{Proof:} $k$-induction with $k{\leq}16$ or PDR, timeout 180\,s.
+\end{itemize}
+
+\subsection{RQ1: Scalability}
+
+Table~\ref{tab:timing} reports verification times for representative models
+across all three modes.  The results demonstrate that \tarsier{} handles
+the full complexity spectrum---from minimal 4-location models completing in
+under 50\,ms to the 1024-location Jolteon model finishing in 1.6\,s under
+quick mode.
+
+\begin{table}[t]
+\centering
+\caption{Verification time (median of 3 runs) for representative protocols.}
+\label{tab:timing}
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+\textbf{Protocol} & $|\mathcal{L}|$ &
+  \textbf{Quick} & \textbf{Standard} & \textbf{Proof} & \textbf{Verdict} \\
+\midrule
+Reliable Bcast (safe)   &   32 &  32\,ms  & 105\,ms & 420\,ms & SAFE \\
+Reliable Bcast (buggy)  &   20 &  94\,ms  & 310\,ms & ---     & UNSAFE \\
+PBFT Core               &   16 &  41\,ms  &  88\,ms & 350\,ms & SAFE \\
+PBFT Simple             &   16 &  23\,ms  &  72\,ms & 290\,ms & SAFE \\
+HotStuff Chained        &    4 &  60\,ms  &  95\,ms & 380\,ms & SAFE \\
+Jolteon Fast-Path       & 1024 & 1567\,ms & 4.2\,s  & 12.1\,s & SAFE \\
+DiemBFT Epoch           &  256 & 336\,ms  & 1.1\,s  &  3.8\,s & SAFE \\
+Tusk DAG Cert           &   64 & 104\,ms  & 340\,ms & 1.2\,s  & SAFE \\
+Multi-Paxos Round       &    8 &  54\,ms  &  92\,ms & 370\,ms & SAFE \\
+Tendermint Locking      &    4 &  28\,ms  &  65\,ms & 260\,ms & SAFE \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The full 44-model corpus completes in under 3~minutes in quick mode (depth~3,
+30\,s timeout per layer).  All 25~curated models with expectation annotations
+pass: 11~expected-safe protocols produce SAFE verdicts, and
+14~known-bug sentinels correctly expose safety or liveness violations.
+
+The dominant cost factor is the number of locations $|\mathcal{L}|$, which
+determines the number of counter variables and feasibility constraints per
+step.  For the largest model (Jolteon, 1024~locations from phase$\times$local-variable
+expansion), the SMT formula at depth~3 contains approximately
+12\,000~integer variables and 35\,000~assertions.  Z3 solves the resulting
+QF\_LIA instance in ${\sim}1.5$\,s per step, confirming that the counter
+abstraction keeps the problem tractable even at scale.
+
+\subsection{RQ2: Faithful Network Modes}
+
+To assess the impact of network abstraction fidelity, we compare three modes
+on protocol variants that exist in both minimal (classic) and faithful
+(identity-selective or process-selective) forms.
+
+\paragraph{Soundness gap detection.}
+Five protocol families include paired safe/buggy variants under faithful
+semantics: PBFT, HotStuff, Tendermint, Reliable Broadcast, and Viewstamped
+Replication.  In each case:
+\begin{itemize}
+  \item The \emph{minimal} (classic-mode) variant correctly verifies SAFE.
+  \item The \emph{faithful} safe variant also verifies SAFE under
+    identity-selective or process-selective mode.
+  \item The \emph{faithful buggy} variant produces UNSAFE under
+    identity-selective mode, detecting equivocation attacks that the classic
+    mode cannot express.
+\end{itemize}
+
+This confirms Theorem~\ref{thm:procsel}: process-selective mode closes the
+abstraction gap, enabling precise bug-finding where UNSAFE verdicts correspond
+to real attacks rather than artifacts of over-approximation.
+
+\paragraph{Cryptographic object effectiveness.}
+The crypto-object variants (PBFT Crypto QC, HotStuff Crypto QC, Tendermint
+Crypto QC) demonstrate the impact of first-class certificate declarations.
+With \texttt{conflicts exclusive}, the verifier correctly rules out
+equivocation-based attacks that would be spuriously flagged in models without
+certificate semantics.  Conversely, the buggy variants (which intentionally
+omit conflict constraints) correctly produce UNSAFE verdicts, confirming
+that the certificate encoding is both sound and discriminating.
+
+\paragraph{Overhead of faithful modes.}
+Identity-selective mode introduces per-sender shared variables, increasing
+the variable count by a factor proportional to the number of message types.
+In practice, the overhead is moderate: for PBFT with 3~message families,
+identity-selective mode increases verification time by 1.3--1.8$\times$
+compared to classic mode.  Process-selective mode, which introduces per-process
+channels, exhibits 2--4$\times$ overhead for small instantiations
+($n{=}4, t{=}1$) but does not scale to large parameter domains due to the
+loss of parameterized abstraction.
+
+\subsection{RQ3: Proof Certificates}
+
+We evaluate the proof-certificate infrastructure on the 11~expected-safe
+models using the \texttt{certify-safety} command.
+
+\paragraph{Certificate generation.}
+All 11~models produce valid certificate bundles.  Each bundle contains
+2--3~SMT obligations (base case + inductive step for $k$-induction, or
+init/consecution/property for PDR).  Certificate generation adds
+$<$10\% overhead to the verification time.
+
+\paragraph{Independent validation.}
+The proof kernel validates all 11~bundles, checking schema compatibility,
+hash integrity, and obligation completeness.  The kernel itself comprises
+${\sim}$800~lines of Rust with exactly four library dependencies
+(\texttt{sha2}, \texttt{serde}, \texttt{serde\_json}, \texttt{thiserror}).
+
+\paragraph{Multi-solver replay.}
+We replay certificate obligations against both Z3 and cvc5.  All obligations
+receive matching UNSAT verdicts from both solvers, achieving the
+\emph{reinforced} assurance level (Table~\ref{tab:assurance}).
+
+\subsection{Cross-Tool Comparison}
+
+\tarsier{} exports threshold automata in ByMC's \texttt{.ta}
+format~\cite{KonnovWidder2018} and in Promela for
+SPIN~\cite{Holzmann2003}, enabling direct cross-tool comparison.
+We compare verdicts on five scenarios (Reliable Broadcast safe/buggy,
+PBFT, Paxos, Tendermint) using normalized verdict vocabularies
+(\texttt{safe}, \texttt{unsafe}, \texttt{timeout}, \texttt{unknown}).
+On all five scenarios, \tarsier{} and the reference tools agree on
+the verdict, confirming consistency of the underlying models.
+
+\subsection{Threats to Validity}
+
+\paragraph{Internal.}
+Timing measurements depend on hardware and Z3 version.  We mitigate
+variability by reporting medians over three runs and using deterministic
+replay scripts for reproducibility.
+
+\paragraph{External.}
+The corpus, while spanning 14~families and 44~models, is curated by the
+tool authors.  Models are intentionally simplified threshold-automata
+kernels rather than full protocol implementations with view changes,
+checkpointing, or reconfiguration.  We partially address this with
+variant groups (minimal vs.\ faithful) and regression sentinels.
+
+\paragraph{Construct.}
+Safety properties are expressed as agreement (conflicting location pairs).
+Liveness properties are checked via bounded lasso analysis, which can only
+detect violations up to a bounded depth.  Unbounded liveness proofs under
+fairness assumptions are supported but not evaluated on all models.

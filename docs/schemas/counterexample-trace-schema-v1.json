@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/counterexample-trace-v1",
+  "title": "Tarsier Counterexample Trace Schema v1",
+  "description": "Machine-readable trace payload emitted in verify/prove/prove-fair JSON outputs and CEGAR trace artifacts.",
+  "type": "object",
+  "required": ["params", "initial", "steps"],
+  "properties": {
+    "params": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [{ "type": "string" }, { "type": "integer" }],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "initial": {
+      "type": "object",
+      "required": ["kappa", "gamma"],
+      "properties": {
+        "kappa": { "type": "array", "items": { "type": "integer" } },
+        "gamma": { "type": "array", "items": { "type": "integer" } }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/TraceStep" }
+    }
+  },
+  "$defs": {
+    "IdentityRef": {
+      "type": "object",
+      "required": ["role", "process", "key"],
+      "properties": {
+        "role": { "type": "string" },
+        "process": { "type": ["integer", "null"] },
+        "key": { "type": ["string", "null"] }
+      }
+    },
+    "PayloadRef": {
+      "type": "object",
+      "required": ["family", "fields", "variant"],
+      "properties": {
+        "family": { "type": "string" },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [{ "type": "string" }, { "type": "string" }],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "variant": { "type": "string" }
+      }
+    },
+    "AuthProvenance": {
+      "type": "string",
+      "enum": [
+        "OwnedKey",
+        "CompromisedKey",
+        "ByzantineSigner",
+        "UnauthenticatedChannel",
+        "Unknown"
+      ]
+    },
+    "AuthMetadata": {
+      "type": "object",
+      "required": [
+        "authenticated_channel",
+        "signature_key",
+        "key_owner_role",
+        "key_compromised",
+        "provenance"
+      ],
+      "properties": {
+        "authenticated_channel": { "type": "boolean" },
+        "signature_key": { "type": ["string", "null"] },
+        "key_owner_role": { "type": ["string", "null"] },
+        "key_compromised": { "type": "boolean" },
+        "provenance": { "$ref": "#/$defs/AuthProvenance" }
+      }
+    },
+    "Delivery": {
+      "type": "object",
+      "required": [
+        "kind",
+        "count",
+        "shared_var",
+        "shared_var_name",
+        "sender",
+        "recipient",
+        "payload",
+        "auth"
+      ],
+      "properties": {
+        "kind": { "type": "string" },
+        "count": { "type": "integer", "minimum": 0 },
+        "shared_var": { "type": "integer", "minimum": 0 },
+        "shared_var_name": { "type": "string" },
+        "sender": { "$ref": "#/$defs/IdentityRef" },
+        "recipient": { "$ref": "#/$defs/IdentityRef" },
+        "payload": { "$ref": "#/$defs/PayloadRef" },
+        "auth": { "$ref": "#/$defs/AuthMetadata" }
+      }
+    },
+    "TraceStep": {
+      "type": "object",
+      "required": [
+        "step",
+        "smt_step",
+        "rule_id",
+        "delta",
+        "deliveries",
+        "kappa",
+        "gamma",
+        "por_status"
+      ],
+      "properties": {
+        "step": { "type": "integer", "minimum": 1 },
+        "smt_step": { "type": "integer", "minimum": 0 },
+        "rule_id": { "type": "integer", "minimum": 0 },
+        "delta": { "type": "integer", "minimum": 0 },
+        "deliveries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Delivery" }
+        },
+        "kappa": { "type": "array", "items": { "type": "integer" } },
+        "gamma": { "type": "array", "items": { "type": "integer" } },
+        "por_status": {
+          "description": "Optional POR annotation for reduced transitions.",
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

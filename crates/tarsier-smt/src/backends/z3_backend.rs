@@ -238,7 +238,10 @@ impl SmtSolver for Z3Solver {
     ) -> Result<(SatResult, Option<Model>), Z3Error> {
         match self.solver.check() {
             Z3SatResult::Sat => {
-                let z3_model = self.solver.get_model().unwrap();
+                let z3_model = self
+                    .solver
+                    .get_model()
+                    .ok_or_else(|| Z3Error::Internal("SAT but no model available".into()))?;
                 let mut values = HashMap::new();
 
                 for &(name, sort) in var_names {
@@ -325,13 +328,14 @@ impl SmtSolver for Z3Solver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     #[test]
-    fn z3_basic_sat() {
+    fn z3_basic_sat() -> TestResult {
         let mut solver = Z3Solver::with_default_config();
 
-        solver.declare_var("x", &SmtSort::Int).unwrap();
-        solver.declare_var("y", &SmtSort::Int).unwrap();
+        solver.declare_var("x", &SmtSort::Int)?;
+        solver.declare_var("y", &SmtSort::Int)?;
 
         // x > 0 && y > 0 && x + y == 10
         let term = SmtTerm::and(vec![
@@ -341,65 +345,153 @@ mod tests {
                 .add(SmtTerm::var("y"))
                 .eq(SmtTerm::int(10)),
         ]);
-        solver.assert(&term).unwrap();
-        let result = solver.check_sat().unwrap();
+        solver.assert(&term)?;
+        let result = solver.check_sat()?;
         assert_eq!(result, SatResult::Sat);
+        Ok(())
     }
 
     #[test]
-    fn z3_basic_unsat() {
+    fn z3_basic_unsat() -> TestResult {
         let mut solver = Z3Solver::with_default_config();
 
-        solver.declare_var("x", &SmtSort::Int).unwrap();
+        solver.declare_var("x", &SmtSort::Int)?;
 
         // x > 0 && x < 0
         let term = SmtTerm::and(vec![
             SmtTerm::var("x").gt(SmtTerm::int(0)),
             SmtTerm::var("x").lt(SmtTerm::int(0)),
         ]);
-        solver.assert(&term).unwrap();
-        let result = solver.check_sat().unwrap();
+        solver.assert(&term)?;
+        let result = solver.check_sat()?;
         assert_eq!(result, SatResult::Unsat);
+        Ok(())
     }
 
     #[test]
-    fn z3_model_extraction() {
+    fn z3_model_extraction() -> TestResult {
         let mut solver = Z3Solver::with_default_config();
 
-        solver.declare_var("x", &SmtSort::Int).unwrap();
-        solver
-            .assert(&SmtTerm::var("x").eq(SmtTerm::int(42)))
-            .unwrap();
+        solver.declare_var("x", &SmtSort::Int)?;
+        solver.assert(&SmtTerm::var("x").eq(SmtTerm::int(42)))?;
 
         let vars = vec![("x", &SmtSort::Int)];
-        let (result, model) = solver.check_sat_with_model(&vars).unwrap();
+        let (result, model) = solver.check_sat_with_model(&vars)?;
         assert_eq!(result, SatResult::Sat);
-        let model = model.unwrap();
+        let model = model.ok_or_else(|| {
+            std::io::Error::other("expected model for SAT result in z3_model_extraction")
+        })?;
         assert_eq!(model.get_int("x"), Some(42));
+        Ok(())
     }
 
     #[test]
-    fn z3_assumption_unsat_core_roundtrip() {
+    fn z3_assumption_unsat_core_roundtrip() -> TestResult {
         let mut solver = Z3Solver::with_default_config();
-        solver.declare_var("x", &SmtSort::Int).unwrap();
-        solver.declare_var("a", &SmtSort::Bool).unwrap();
-        solver.declare_var("b", &SmtSort::Bool).unwrap();
+        solver.declare_var("x", &SmtSort::Int)?;
+        solver.declare_var("a", &SmtSort::Bool)?;
+        solver.declare_var("b", &SmtSort::Bool)?;
 
         // a => x > 0, b => x < 0
-        solver
-            .assert(&SmtTerm::var("a").implies(SmtTerm::var("x").gt(SmtTerm::int(0))))
-            .unwrap();
-        solver
-            .assert(&SmtTerm::var("b").implies(SmtTerm::var("x").lt(SmtTerm::int(0))))
-            .unwrap();
+        solver.assert(&SmtTerm::var("a").implies(SmtTerm::var("x").gt(SmtTerm::int(0))))?;
+        solver.assert(&SmtTerm::var("b").implies(SmtTerm::var("x").lt(SmtTerm::int(0))))?;
 
-        let sat = solver
-            .check_sat_assuming(&["a".to_string(), "b".to_string()])
-            .unwrap();
+        let sat = solver.check_sat_assuming(&["a".to_string(), "b".to_string()])?;
         assert_eq!(sat, SatResult::Unsat);
 
-        let core = solver.get_unsat_core_assumptions().unwrap();
+        let core = solver.get_unsat_core_assumptions()?;
         assert!(core.contains(&"a".to_string()));
         assert!(core.contains(&"b".to_string()));
+        Ok(())
+    }
+
+    #[test]
+    fn z3_timeout_configuration_survives_reset() -> TestResult {
+        let mut solver = Z3Solver::with_timeout_secs(2);
+        assert!(
+            solver._params.is_some(),
+            "timeout-backed solver should persist params for reset()"
+        );
+
+        solver.declare_var("x", &SmtSort::Int)?;
+        solver.assert(&SmtTerm::var("x").eq(SmtTerm::int(1)))?;
+        assert_eq!(solver.check_sat()?, SatResult::Sat);
+
+        solver.reset()?;
+        solver.declare_var("x", &SmtSort::Int)?;
+        solver.assert(&SmtTerm::var("x").eq(SmtTerm::int(2)))?;
+        assert_eq!(solver.check_sat()?, SatResult::Sat);
+        assert!(
+            solver._params.is_some(),
+            "timeout parameters should still be available after reset()"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn z3_declare_var_redeclaration_overwrites() -> TestResult {
+        let mut solver = Z3Solver::with_default_config();
+        solver.declare_var("x", &SmtSort::Int)?;
+        // Redeclare with same sort — should overwrite cleanly
+        solver.declare_var("x", &SmtSort::Int)?;
+        solver.assert(&SmtTerm::var("x").eq(SmtTerm::int(5)))?;
+        assert_eq!(solver.check_sat()?, SatResult::Sat);
+        Ok(())
+    }
+
+    #[test]
+    fn z3_translate_nested_ite() -> TestResult {
+        let mut solver = Z3Solver::with_default_config();
+        solver.declare_var("a", &SmtSort::Bool)?;
+        solver.declare_var("b", &SmtSort::Bool)?;
+        solver.declare_var("x", &SmtSort::Int)?;
+
+        // x == ite(a, ite(b, 1, 2), 3)
+        let inner_ite = SmtTerm::Ite(
+            Box::new(SmtTerm::var("b")),
+            Box::new(SmtTerm::int(1)),
+            Box::new(SmtTerm::int(2)),
+        );
+        let outer_ite = SmtTerm::Ite(
+            Box::new(SmtTerm::var("a")),
+            Box::new(inner_ite),
+            Box::new(SmtTerm::int(3)),
+        );
+        let constraint = SmtTerm::var("x").eq(outer_ite);
+        solver.assert(&constraint)?;
+
+        // a = true, b = true => x = 1
+        solver.assert(&SmtTerm::var("a").eq(SmtTerm::bool(true)))?;
+        solver.assert(&SmtTerm::var("b").eq(SmtTerm::bool(true)))?;
+
+        let vars = vec![("x", &SmtSort::Int)];
+        let (result, model) = solver.check_sat_with_model(&vars)?;
+        assert_eq!(result, SatResult::Sat);
+        let model = model.ok_or_else(|| {
+            std::io::Error::other("expected model for SAT result in z3_translate_nested_ite")
+        })?;
+        assert_eq!(model.get_int("x"), Some(1));
+        Ok(())
+    }
+
+    #[test]
+    fn z3_quantifier_rejection() -> TestResult {
+        let mut solver = Z3Solver::with_default_config();
+        solver.declare_var("x", &SmtSort::Int)?;
+
+        let forall = SmtTerm::ForAll(
+            vec![("y".to_string(), SmtSort::Int)],
+            Box::new(SmtTerm::var("x").gt(SmtTerm::var("y"))),
+        );
+        let result = solver.assert(&forall);
+        assert!(result.is_err(), "ForAll should be rejected by z3 backend");
+
+        let exists = SmtTerm::Exists(
+            vec![("y".to_string(), SmtSort::Int)],
+            Box::new(SmtTerm::var("x").gt(SmtTerm::var("y"))),
+        );
+        let result = solver.assert(&exists);
+        assert!(result.is_err(), "Exists should be rejected by z3 backend");
+        Ok(())
     }
 }

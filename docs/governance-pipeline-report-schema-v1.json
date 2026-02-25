@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/governance-pipeline-report-v1.json",
+  "title": "Tarsier Governance Pipeline Report",
+  "description": "Machine-readable report produced by `tarsier governance-pipeline`, with gate-by-gate results for proof, cert, corpus, and perf gates.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tarsier_version",
+    "gates",
+    "overall",
+    "elapsed_ms"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "tarsier_version": {
+      "type": "string",
+      "description": "Version of tarsier-cli that produced this report."
+    },
+    "gates": {
+      "type": "array",
+      "description": "Gate-by-gate results.",
+      "items": {
+        "$ref": "#/$defs/gate_result"
+      }
+    },
+    "overall": {
+      "type": "string",
+      "enum": ["pass", "fail"],
+      "description": "Overall pipeline status. 'pass' iff all gates are 'pass' or 'skip'."
+    },
+    "elapsed_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total pipeline wall-clock time in milliseconds."
+    }
+  },
+  "$defs": {
+    "gate_result": {
+      "type": "object",
+      "required": ["gate", "status", "elapsed_ms", "details"],
+      "properties": {
+        "gate": {
+          "type": "string",
+          "enum": ["proof", "cert", "corpus", "perf"],
+          "description": "Gate identifier."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "skip", "error"],
+          "description": "Gate outcome."
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Gate wall-clock time in milliseconds."
+        },
+        "details": {
+          "type": "object",
+          "description": "Gate-specific details (varies by gate type)."
+        },
+        "error": {
+          "type": "string",
+          "description": "Error message when status is 'error'. Omitted otherwise."
+        }
+      }
+    }
+  }
+}

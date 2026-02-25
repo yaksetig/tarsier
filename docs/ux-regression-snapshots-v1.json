@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "snapshot_kind": "ux-regression-v1",
+  "snapshots": {
+    "cli_assist_pbft": {
+      "contains_protocol_keyword": true,
+      "line_count": 56
+    },
+    "cli_lint_pbft_simple": {
+      "issue_count": 3,
+      "issues": [
+        {
+          "code": "byzantine_network_not_identity_selective",
+          "has_fix": false,
+          "has_soundness_impact": true,
+          "has_span": true,
+          "has_suggestion": true,
+          "severity": "error"
+        },
+        {
+          "code": "missing_liveness_property",
+          "has_fix": false,
+          "has_soundness_impact": false,
+          "has_span": true,
+          "has_suggestion": true,
+          "severity": "info"
+        },
+        {
+          "code": "missing_pacemaker",
+          "has_fix": false,
+          "has_soundness_impact": false,
+          "has_span": true,
+          "has_suggestion": true,
+          "severity": "info"
+        }
+      ]
+    },
+    "cli_visualize_buggy_verify": {
+      "has_mermaid_sequence_diagram": true,
+      "has_timeline_steps": true,
+      "result": "unsafe",
+      "trace": {
+        "has_deliveries": true,
+        "has_payload_fields": true,
+        "has_steps": true
+      }
+    },
+    "playground_lint_missing_core": {
+      "issue_codes": [
+        "byzantine_network_not_identity_selective",
+        "missing_fault_bound",
+        "missing_liveness_property",
+        "missing_resilience",
+        "missing_safety_property"
+      ],
+      "issues": [
+        {
+          "code": "byzantine_network_not_identity_selective",
+          "has_fix": true,
+          "has_soundness_impact": true,
+          "has_span": true,
+          "has_suggestion": true,
+          "severity": "warn"
+        },
+        {
+          "code": "missing_fault_bound",
+          "has_fix": true,
+          "has_soundness_impact": true,
+          "has_span": true,
+          "has_suggestion": true,
+          "severity": "warn"
+        },
+        {
+          "code": "missing_liveness_property",
+          "has_fix": true,
+          "has_soundness_impact": false,
+          "has_span": true,
+          "has_suggestion": true,
+          "severity": "info"
+        },
+        {
+          "code": "missing_resilience",
+          "has_fix": true,
+          "has_soundness_impact": true,
+          "has_span": true,
+          "has_suggestion": true,
+          "severity": "warn"
+        },
+        {
+          "code": "missing_safety_property",
+          "has_fix": true,
+          "has_soundness_impact": true,
+          "has_span": true,
+          "has_suggestion": true,
+          "severity": "warn"
+        }
+      ],
+      "ok": true
+    },
+    "playground_lint_pbft_simple": {
+      "issue_count": 2,
+      "ok": true,
+      "warn_or_error_with_soundness_impact": true
+    },
+    "playground_run_buggy_verify": {
+      "has_mermaid_sequence_diagram": true,
+      "has_timeline_steps": true,
+      "ok": false,
+      "result": "unsafe",
+      "trace": {
+        "has_deliveries": true,
+        "has_payload_fields": true,
+        "has_steps": true
+      }
+    }
+  }
+}

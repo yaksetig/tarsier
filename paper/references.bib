@@ -1,0 +1,293 @@
+% ---- Threshold Automata & Counter Abstraction ----
+
+@article{KonnovLVW2017,
+  author    = {Igor Konnov and Marijana Lazi{\'c} and Helmut Veith and Josef Widder},
+  title     = {A Short Counterexample Property for Safety and Liveness Verification of Fault-Tolerant Distributed Algorithms},
+  journal   = {Logical Methods in Computer Science},
+  volume    = {13},
+  number    = {3},
+  year      = {2017},
+  pages     = {1--28},
+  doi       = {10.23638/LMCS-13(3:18)2017},
+}
+
+@inproceedings{KonnovVW2015,
+  author    = {Igor Konnov and Helmut Veith and Josef Widder},
+  title     = {{SMT} and {POR} Beat Counter Abstraction: Parameterized Model Checking of Threshold-Based Distributed Algorithms},
+  booktitle = {CAV 2015},
+  series    = {LNCS},
+  volume    = {9206},
+  pages     = {85--102},
+  publisher = {Springer},
+  year      = {2015},
+  doi       = {10.1007/978-3-319-21690-4_6},
+}
+
+@inproceedings{ByMC2017,
+  author    = {Igor Konnov and Marijana Lazi{\'c} and Helmut Veith and Josef Widder},
+  title     = {Para$^2$: Parameterized Path Reduction, Acceleration, and {SMT} for Reachability in Threshold-Guarded Distributed Algorithms},
+  booktitle = {FMCAD 2017},
+  pages     = {85--92},
+  publisher = {IEEE},
+  year      = {2017},
+  doi       = {10.23919/FMCAD.2017.8102246},
+}
+
+@inproceedings{KonnovWidder2018,
+  author    = {Igor Konnov and Josef Widder},
+  title     = {{ByMC}: Byzantine Model Checker},
+  booktitle = {ISoLA 2018},
+  series    = {LNCS},
+  volume    = {11246},
+  pages     = {327--342},
+  publisher = {Springer},
+  year      = {2018},
+  doi       = {10.1007/978-3-030-03424-5_22},
+}
+
+% ---- Byzantine Fault Tolerance Protocols ----
+
+@inproceedings{CastroLiskov1999,
+  author    = {Miguel Castro and Barbara Liskov},
+  title     = {Practical {B}yzantine Fault Tolerance},
+  booktitle = {OSDI 1999},
+  pages     = {173--186},
+  publisher = {USENIX},
+  year      = {1999},
+}
+
+@inproceedings{YinMGRGA2019,
+  author    = {Maofan Yin and Dahlia Malkhi and Michael K. Reiter and Guy Golan-Gueta and Ittai Abraham},
+  title     = {{HotStuff}: {BFT} Consensus with Linearity and Responsiveness},
+  booktitle = {PODC 2019},
+  pages     = {347--356},
+  publisher = {ACM},
+  year      = {2019},
+  doi       = {10.1145/3293611.3331591},
+}
+
+@article{BuchmanKM2018,
+  author    = {Ethan Buchman and Jae Kwon and Zarko Milosevic},
+  title     = {The Latest Gossip on {BFT} Consensus},
+  journal   = {arXiv preprint arXiv:1807.04938},
+  year      = {2018},
+}
+
+@article{Lamport1998,
+  author    = {Leslie Lamport},
+  title     = {The Part-Time Parliament},
+  journal   = {ACM Transactions on Computer Systems},
+  volume    = {16},
+  number    = {2},
+  year      = {1998},
+  pages     = {133--169},
+  doi       = {10.1145/279227.279229},
+}
+
+@inproceedings{GiladHMVZ2017,
+  author    = {Yossi Gilad and Rotem Hemo and Silvio Micali and Georgios Vlachos and Nickolai Zeldovich},
+  title     = {Algorand: Scaling {B}yzantine Agreements for Cryptocurrencies},
+  booktitle = {SOSP 2017},
+  pages     = {51--68},
+  publisher = {ACM},
+  year      = {2017},
+  doi       = {10.1145/3132747.3132757},
+}
+
+@article{Bracha1987,
+  author    = {Gabriel Bracha},
+  title     = {Asynchronous {B}yzantine Agreement Protocols},
+  journal   = {Information and Computation},
+  volume    = {75},
+  number    = {2},
+  pages     = {130--143},
+  year      = {1987},
+}
+
+% ---- SMT Solvers ----
+
+@inproceedings{DeMoura2008,
+  author    = {Leonardo de Moura and Nikolaj Bj{\o}rner},
+  title     = {{Z3}: An Efficient {SMT} Solver},
+  booktitle = {TACAS 2008},
+  series    = {LNCS},
+  volume    = {4963},
+  pages     = {337--340},
+  publisher = {Springer},
+  year      = {2008},
+  doi       = {10.1007/978-3-540-78800-3_24},
+}
+
+@inproceedings{BarbosaBBKLMMMN2022,
+  author    = {Haniel Barbosa and Clark Barrett and Martin Brain and Gereon Kremer and Hanna Lachnitt and Makai Mann and Abdalrhman Mohamed and Mudathir Mohamed and Aina Niemetz and Andres N{\"o}tzli and others},
+  title     = {{cvc5}: A Versatile and Industrial-Strength {SMT} Solver},
+  booktitle = {TACAS 2022},
+  series    = {LNCS},
+  volume    = {13243},
+  pages     = {415--442},
+  publisher = {Springer},
+  year      = {2022},
+  doi       = {10.1007/978-3-030-99524-9_24},
+}
+
+% ---- Model Checking ----
+
+@book{Holzmann2003,
+  author    = {Gerard J. Holzmann},
+  title     = {The {SPIN} Model Checker: Primer and Reference Manual},
+  publisher = {Addison-Wesley},
+  year      = {2003},
+}
+
+@book{LamportTLA2002,
+  author    = {Leslie Lamport},
+  title     = {Specifying Systems: The {TLA+} Language and Tools for Hardware and Software Engineers},
+  publisher = {Addison-Wesley},
+  year      = {2002},
+}
+
+@inproceedings{BiereCCSZ1999,
+  author    = {Armin Biere and Alessandro Cimatti and Edmund M. Clarke and Yunshan Zhu},
+  title     = {Symbolic Model Checking without {BDDs}},
+  booktitle = {TACAS 1999},
+  series    = {LNCS},
+  volume    = {1579},
+  pages     = {193--207},
+  publisher = {Springer},
+  year      = {1999},
+  doi       = {10.1007/3-540-49059-0_14},
+}
+
+@inproceedings{Bradley2011,
+  author    = {Aaron R. Bradley},
+  title     = {{SAT}-Based Model Checking without Unrolling},
+  booktitle = {VMCAI 2011},
+  series    = {LNCS},
+  volume    = {6538},
+  pages     = {70--87},
+  publisher = {Springer},
+  year      = {2011},
+  doi       = {10.1007/978-3-642-18275-4_7},
+}
+
+@inproceedings{SheehySSS2000,
+  author    = {Mary Sheeran and Satnam Singh and Gunnar St{\aa}lmarck},
+  title     = {Checking Safety Properties Using Induction and a {SAT} Solver},
+  booktitle = {FMCAD 2000},
+  series    = {LNCS},
+  volume    = {1954},
+  pages     = {127--144},
+  publisher = {Springer},
+  year      = {2000},
+}
+
+% ---- Partial-Order Reduction ----
+
+@book{Godefroid1996,
+  author    = {Patrice Godefroid},
+  title     = {Partial-Order Methods for the Verification of Concurrent Systems},
+  series    = {LNCS},
+  volume    = {1032},
+  publisher = {Springer},
+  year      = {1996},
+}
+
+@inproceedings{Peled1993,
+  author    = {Doron Peled},
+  title     = {All from One, One for All: On Model Checking Using Representatives},
+  booktitle = {CAV 1993},
+  series    = {LNCS},
+  volume    = {697},
+  pages     = {409--423},
+  publisher = {Springer},
+  year      = {1993},
+}
+
+% ---- Distributed Protocol Verification ----
+
+@inproceedings{PadonMPSS2016,
+  author    = {Oded Padon and Kenneth L. McMillan and Aurojit Panda and Mooly Sagiv and Sharon Shoham},
+  title     = {{Ivy}: Safety Verification by Interactive Generalization},
+  booktitle = {PLDI 2016},
+  pages     = {614--630},
+  publisher = {ACM},
+  year      = {2016},
+  doi       = {10.1145/2908080.2908118},
+}
+
+@inproceedings{MaGJKKS2019,
+  author    = {Haojun Ma and Aman Goel and Jean-Baptiste Jeannin and Manos Kapritsos and Baris Kasikci and Karem A. Sakallah},
+  title     = {{I4}: Incremental Inference of Inductive Invariants for Verification of Distributed Protocols},
+  booktitle = {SOSP 2019},
+  pages     = {370--384},
+  publisher = {ACM},
+  year      = {2019},
+}
+
+@inproceedings{BertrandKLW2021,
+  author    = {Nathalie Bertrand and Igor Konnov and Marijana Lazi{\'c} and Josef Widder},
+  title     = {Verification of Threshold-Based Distributed Algorithms by Decomposition},
+  booktitle = {VMCAI 2021},
+  series    = {LNCS},
+  volume    = {12597},
+  pages     = {245--267},
+  publisher = {Springer},
+  year      = {2021},
+  doi       = {10.1007/978-3-030-67067-2_12},
+}
+
+% ---- Proof-Carrying Verification & Certificates ----
+
+@inproceedings{Necula1997,
+  author    = {George C. Necula},
+  title     = {Proof-Carrying Code},
+  booktitle = {POPL 1997},
+  pages     = {106--119},
+  publisher = {ACM},
+  year      = {1997},
+}
+
+@inproceedings{Carcara2023,
+  author    = {Bruno {Andreotti} and Hanna {Lachnitt} and Haniel {Barbosa}},
+  title     = {Carcara: An Efficient Proof Checker and Elaborator for {SMT} Proofs in the {Alethe} Format},
+  booktitle = {TACAS 2023},
+  series    = {LNCS},
+  volume    = {13993},
+  pages     = {367--386},
+  publisher = {Springer},
+  year      = {2023},
+}
+
+% ---- Algorand Committee / Hypergeometric ----
+
+@article{Micali2017,
+  author    = {Silvio Micali},
+  title     = {{ALGORAND}: The Efficient and Democratic Ledger},
+  journal   = {arXiv preprint arXiv:1607.01341},
+  year      = {2017},
+}
+
+% ---- Counter Abstraction ----
+
+@inproceedings{EmersonNamjoshi1995,
+  author    = {E. Allen Emerson and A. Prasad Namjoshi},
+  title     = {Reasoning about Rings},
+  booktitle = {POPL 1995},
+  pages     = {85--94},
+  publisher = {ACM},
+  year      = {1995},
+  doi       = {10.1145/199448.199468},
+}
+
+% ---- CEGAR ----
+
+@inproceedings{ClarkeGJLV2000,
+  author    = {Edmund M. Clarke and Orna Grumberg and Somesh Jha and Yuan Lu and Helmut Veith},
+  title     = {Counterexample-Guided Abstraction Refinement},
+  booktitle = {CAV 2000},
+  series    = {LNCS},
+  volume    = {1855},
+  pages     = {154--169},
+  publisher = {Springer},
+  year      = {2000},
+}

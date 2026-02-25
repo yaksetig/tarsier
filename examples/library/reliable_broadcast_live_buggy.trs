@@ -1,0 +1,62 @@
+protocol ReliableBroadcastLiveBuggy {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message Init;
+    message Echo;
+    message Ready;
+
+    role Process {
+        var accepted: bool = false;
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init waiting;
+
+        phase waiting {
+            when received >= 1 Init => {
+                accepted = true;
+                send Echo;
+                goto phase echoed;
+            }
+        }
+
+        phase echoed {
+            // Bug: self-loop that keeps process in echoed forever
+            // Under weak fairness, this can fire indefinitely preventing
+            // the higher-threshold rule from being taken.
+            when received >= 1 Echo => {
+                goto phase echoed;
+            }
+            when received >= 2*t+1 Echo => {
+                send Ready;
+                goto phase readied;
+            }
+        }
+
+        phase readied {
+            when received >= 2*t+1 Ready => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+
+    property termination: liveness {
+        forall p: Process. p.decided == true
+    }
+}

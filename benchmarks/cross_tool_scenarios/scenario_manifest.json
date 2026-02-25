@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "description": "Cross-tool benchmark scenario manifest. Each scenario specifies a property to check, the Tarsier model, optional external-tool model files, and normalization metadata.",
+  "scenarios": [
+    {
+      "id": "pbft_agreement",
+      "name": "PBFT Agreement",
+      "protocol_family": "pbft",
+      "property": "agreement",
+      "property_description": "No two honest replicas decide different values in the same view.",
+      "expected_verdict": "safe",
+      "assumptions": {
+        "fault_model": "byzantine",
+        "fault_bound": "n >= 3f+1",
+        "network": "partially_synchronous",
+        "message_loss": false
+      },
+      "tool_inputs": {
+        "tarsier": {
+          "file": "examples/library/pbft_simple_safe.trs",
+          "mode": "proof",
+          "depth": 10,
+          "k": 12,
+          "timeout_secs": 120
+        },
+        "bymc": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/pbft_agreement.ta",
+          "command_template": "{binary} benchmarks/mock_tools/mock_bymc.py {model_file} --bound {depth}",
+          "command_template_real": "{binary} {model_file} --spec all --timeout 300",
+          "execution_mode": "mock",
+          "notes": "Real ByMC threshold automaton model (swap command_template + --bymc-binary for real ByMC runs)"
+        },
+        "spin": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/pbft_agreement.pml",
+          "command_template": "{binary} benchmarks/mock_tools/mock_spin.py {model_file}",
+          "execution_mode": "mock",
+          "notes": "Deterministic SPIN-compatible adapter (swap command_template + --spin-binary for real SPIN runs)"
+        }
+      }
+    },
+    {
+      "id": "reliable_broadcast_agreement",
+      "name": "Reliable Broadcast Agreement",
+      "protocol_family": "reliable_broadcast",
+      "property": "agreement",
+      "property_description": "If any correct process delivers, all correct processes deliver the same value.",
+      "expected_verdict": "safe",
+      "assumptions": {
+        "fault_model": "byzantine",
+        "fault_bound": "n >= 3f+1",
+        "network": "asynchronous",
+        "message_loss": false
+      },
+      "tool_inputs": {
+        "tarsier": {
+          "file": "examples/library/reliable_broadcast_safe.trs",
+          "mode": "proof",
+          "depth": 10,
+          "k": 12,
+          "timeout_secs": 120
+        },
+        "bymc": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/reliable_broadcast_agreement.ta",
+          "command_template": "{binary} benchmarks/mock_tools/mock_bymc.py {model_file} --bound {depth}",
+          "command_template_real": "{binary} {model_file} --spec all --timeout 300",
+          "execution_mode": "mock",
+          "notes": "Deterministic ByMC-compatible adapter"
+        },
+        "spin": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/reliable_broadcast_agreement.pml",
+          "command_template": "{binary} benchmarks/mock_tools/mock_spin.py {model_file}",
+          "execution_mode": "mock",
+          "notes": "Deterministic SPIN-compatible adapter"
+        }
+      }
+    },
+    {
+      "id": "reliable_broadcast_buggy_disagreement",
+      "name": "Reliable Broadcast (Buggy) Disagreement",
+      "protocol_family": "reliable_broadcast",
+      "property": "agreement",
+      "property_description": "Buggy variant: expected to violate agreement.",
+      "expected_verdict": "unsafe",
+      "assumptions": {
+        "fault_model": "byzantine",
+        "fault_bound": "n >= 3f+1",
+        "network": "asynchronous",
+        "message_loss": false
+      },
+      "tool_inputs": {
+        "tarsier": {
+          "file": "examples/library/reliable_broadcast_buggy.trs",
+          "mode": "standard",
+          "depth": 10,
+          "k": 12,
+          "timeout_secs": 120
+        },
+        "bymc": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/reliable_broadcast_buggy_disagreement.ta",
+          "command_template": "{binary} benchmarks/mock_tools/mock_bymc.py {model_file} --bound {depth}",
+          "command_template_real": "{binary} {model_file} --spec all --timeout 300",
+          "execution_mode": "mock",
+          "notes": "Deterministic ByMC-compatible adapter"
+        },
+        "spin": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/reliable_broadcast_buggy_disagreement.pml",
+          "command_template": "{binary} benchmarks/mock_tools/mock_spin.py {model_file}",
+          "execution_mode": "mock",
+          "notes": "Deterministic SPIN-compatible adapter"
+        }
+      }
+    },
+    {
+      "id": "paxos_agreement",
+      "name": "Paxos Agreement",
+      "protocol_family": "paxos",
+      "property": "agreement",
+      "property_description": "No two acceptors decide on different values.",
+      "expected_verdict": "safe",
+      "assumptions": {
+        "fault_model": "crash",
+        "fault_bound": "n >= 2f+1",
+        "network": "partially_synchronous",
+        "message_loss": false
+      },
+      "tool_inputs": {
+        "tarsier": {
+          "file": "examples/library/paxos_basic.trs",
+          "mode": "proof",
+          "depth": 10,
+          "k": 12,
+          "timeout_secs": 120
+        },
+        "bymc": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/paxos_agreement.ta",
+          "command_template": "{binary} benchmarks/mock_tools/mock_bymc.py {model_file} --bound {depth}",
+          "command_template_real": "{binary} {model_file} --spec all --timeout 300",
+          "execution_mode": "mock",
+          "notes": "Deterministic ByMC-compatible adapter"
+        },
+        "spin": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/paxos_agreement.pml",
+          "command_template": "{binary} benchmarks/mock_tools/mock_spin.py {model_file}",
+          "execution_mode": "mock",
+          "notes": "Deterministic SPIN-compatible adapter"
+        }
+      }
+    },
+    {
+      "id": "tendermint_agreement",
+      "name": "Tendermint Agreement",
+      "protocol_family": "tendermint",
+      "property": "agreement",
+      "property_description": "No two correct processes decide different values in the same round.",
+      "expected_verdict": "safe",
+      "assumptions": {
+        "fault_model": "byzantine",
+        "fault_bound": "n >= 3f+1",
+        "network": "partially_synchronous",
+        "message_loss": false
+      },
+      "tool_inputs": {
+        "tarsier": {
+          "file": "examples/library/tendermint_locking.trs",
+          "mode": "proof",
+          "depth": 10,
+          "k": 12,
+          "timeout_secs": 120
+        },
+        "bymc": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/tendermint_agreement.ta",
+          "command_template": "{binary} benchmarks/mock_tools/mock_bymc.py {model_file} --bound {depth}",
+          "command_template_real": "{binary} {model_file} --spec all --timeout 300",
+          "execution_mode": "mock",
+          "notes": "Deterministic ByMC-compatible adapter"
+        },
+        "spin": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/tendermint_agreement.pml",
+          "command_template": "{binary} benchmarks/mock_tools/mock_spin.py {model_file}",
+          "execution_mode": "mock",
+          "notes": "Deterministic SPIN-compatible adapter"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/conformance-manifest-schema-v1.json",
+  "title": "Tarsier Conformance Test Suite Manifest (v1)",
+  "description": "Machine-readable schema for conformance test suite manifests. See docs/CONFORMANCE_MANIFEST_SCHEMA.md for the full specification, versioning policy, and stability contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "suite_name", "entries"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "suite_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "protocol_file", "trace_file", "expected_verdict"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol_file": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\.trs$"
+        },
+        "trace_file": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\.json$"
+        },
+        "trace_adapter": {
+          "type": "string",
+          "enum": ["runtime", "cometbft", "etcd-raft"],
+          "default": "runtime"
+        },
+        "checker_mode": {
+          "type": "string",
+          "enum": ["permissive", "strict"],
+          "default": "permissive"
+        },
+        "expected_verdict": {
+          "type": "string",
+          "enum": ["pass", "fail"]
+        },
+        "model_sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "mismatch_hint": {
+          "type": "string",
+          "enum": ["model_change", "engine_regression", "impl_divergence"]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

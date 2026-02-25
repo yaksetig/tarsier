@@ -2,6 +2,12 @@
 name = "tarsier-dsl"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "PEG parser and AST for the Tarsier protocol specification language"
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 pest = "2"
@@ -9,3 +15,16 @@ pest_derive = "2"
 thiserror.workspace = true
 miette.workspace = true
 tracing.workspace = true
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion.workspace = true
+proptest = "1"
+
+[features]
+default = []
+serialize = ["serde"]
+
+[[bench]]
+name = "parser_bench"
+harness = false

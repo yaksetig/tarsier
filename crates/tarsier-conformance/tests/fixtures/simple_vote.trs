@@ -1,0 +1,45 @@
+// Minimal voting protocol for conformance testing.
+//
+// After lowering (with `decided: bool, decision: bool`), produces:
+//   Locations: Process_waiting[decided=false,decision=false] (initial),
+//              Process_done[decided=true,decision=true],
+//              Process_aborted[decided=false,decision=false]
+//   Shared var: cnt_Vote@Process
+//   Rules: R0 (waiting->done, guard: cnt_Vote@Process >= t+1),
+//          R1 (waiting->aborted, guard: cnt_Vote@Process >= 0, trivially true)
+
+protocol SimpleVote {
+    params n, t, f;
+    resilience: n > 2*t;
+    adversary { model: byzantine; bound: f; }
+
+    message Vote;
+
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init waiting;
+
+        phase waiting {
+            when received >= t+1 Vote => {
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done;
+            }
+
+            when received >= 0 Vote => {
+                goto phase aborted;
+            }
+        }
+
+        phase done {}
+        phase aborted {}
+    }
+
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "protocol_name": "SimpleVote",
+  "params": [["n", 4], ["t", 1], ["f", 1]],
+  "nodes": [
+    {
+      "node_id": 0,
+      "role": "Process",
+      "events": [
+        {
+          "kind": "init",
+          "seq": 0,
+          "location": "Process_waiting[decided=false,decision=false]"
+        },
+        {
+          "kind": "recv",
+          "seq": 1,
+          "msg": "MysteryVote",
+          "from": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+\section{Verification Engine}\label{sec:verification}
+
+\tarsier{} translates threshold automata into SMT formulae and applies
+bounded model checking, $k$-induction, and PDR.  This section describes the
+encoding, optimizations, and the proof-certificate architecture.
+
+\subsection{SMT Encoding}
+
+Given a threshold automaton $\ta$ with locations $\mathcal{L}$, shared
+variables $\Gamma$, rules $\mathcal{R}$, and parameters $\Pi$, the encoder
+produces a quantifier-free linear integer arithmetic (QF\_LIA) formula for
+each unrolling depth~$k$.
+
+\paragraph{Variables.}
+For each step $i \in [0, k]$:
+\begin{itemize}
+  \item $\kappa_i[\ell] \geq 0$ for each location $\ell$
+    (process counts);
+  \item $\gamma_i[g] \geq 0$ for each shared variable $g$;
+  \item $\delta_i[r] \geq 0$ for each rule $r$
+    (number of processes firing $r$ at step $i$);
+  \item $\adv_i[g] \geq 0$ for each shared variable $g$
+    (adversary injection at step $i$).
+\end{itemize}
+Parameters $n, t, f$ are declared as symbolic integer constants.
+
+\paragraph{Initial state.}
+\begin{equation}
+  \bigwedge_{\ell \in \mathcal{I}} \kappa_0[\ell] = n
+  \;\;\wedge\;\;
+  \bigwedge_{\ell \notin \mathcal{I}} \kappa_0[\ell] = 0
+  \;\;\wedge\;\;
+  \bigwedge_{g} \gamma_0[g] = 0
+\end{equation}
+
+\paragraph{Step transition.}
+For each step $i$, the encoder asserts:
+\begin{enumerate}
+  \item \emph{Guard satisfaction:}
+    $\delta_i[r] > 0 \Rightarrow g_r(\vec\gamma_i, \vec\pi)$,
+    where $g_r$ is the threshold guard of rule $r$.
+  \item \emph{Counter update:} Eq.~\eqref{eq:kappa-update} from
+    Sect.~\ref{sec:counter-abstraction}.
+  \item \emph{Shared variable update:}
+    $\gamma_{i+1}[g] = \gamma_i[g] + \sum_r u_r^g \cdot \delta_i[r]
+    + \adv_i[g]$,
+    where $u_r^g \in \{0, 1\}$ is the increment specified by rule $r$.
+  \item \emph{Feasibility:}
+    $\sum_{\{r : \mathit{src}(r)=\ell\}} \delta_i[r] \leq \kappa_i[\ell]$
+    (cannot fire more processes than available).
+  \item \emph{Adversary bound:}
+    $\sum_{i=0}^{k} \adv_i[g] \leq f$ for each $g$ (total injection
+    bounded by the fault parameter across all steps).
+\end{enumerate}
+
+\paragraph{Safety property.}
+For agreement, the encoder generates a disjunction of \emph{bad-state
+atoms}: $\bigvee_{(a,b) \in C} (\kappa_k[a] > 0 \wedge \kappa_k[b] > 0)$,
+where $C$ is the set of conflicting location pairs extracted during
+lowering (Sect.~\ref{sec:lowering}).
+
+The formula is satisfiable iff a bad state is reachable within $k$ steps.
+An UNSAT result means no bug exists up to depth $k$; $k$-induction or PDR
+then extends this to an unbounded proof.
+
+\subsection{Optimizations}\label{sec:optimizations}
+
+\paragraph{Structural hashing.}
+The encoder canonicalizes SMT terms by computing string keys for each
+sub-expression (with canonical ordering for commutative operators).
+Duplicate assertions are eliminated before submission to the solver,
+typically reducing the assertion count by 30--70\%.
+
+\paragraph{Incremental solving.}
+For $k$-induction, the encoder extends the solver state from depth $k$
+to $k{+}1$ without re-encoding previous steps.  Variable declarations and
+step-transition assertions from earlier depths are reused via incremental
+push/pop scopes.  This amortizes encoding cost across depths.
+
+\paragraph{Partial-order reduction (POR).}
+\tarsier{} implements both static and dynamic POR:
+\begin{itemize}
+  \item \emph{Static:} Rules that commute (disjoint source/target
+    locations, no shared-variable read/write conflicts) are pruned via
+    representative selection~\cite{Peled1993, Godefroid1996}.
+  \item \emph{Dynamic ample sets:} During PDR, rules whose guards are
+    independent of the current cube's constrained variables are disabled,
+    reducing the branching factor per iteration.
+\end{itemize}
+
+\paragraph{Symmetry reduction.}
+In PDR, cubes that are symmetric under parameter permutation are
+deduplicated, pruning 10--40\% of redundant candidates.
+
+\subsection{Proof Certificates}\label{sec:certificates}
+
+To address trust concern~(3) from Sect.~\ref{sec:intro}, \tarsier{}
+generates \emph{proof certificates} that can be independently validated.
+
+\paragraph{Certificate structure.}
+A certificate bundle contains:
+\begin{itemize}
+  \item A \emph{manifest} recording the protocol source hash, engine
+    parameters, solver version, and timestamp.
+  \item A set of \emph{SMT obligations}---the actual formulae submitted to
+    the solver---together with the solver's verdict (UNSAT for valid proofs).
+  \item SHA-256 hashes of each obligation, and a domain-tagged bundle hash
+    covering all obligation metadata.
+  \item Optionally, \emph{proof objects} (in the Alethe format) emitted by
+    the solver.
+\end{itemize}
+
+The obligation set depends on the proof engine:
+\begin{itemize}
+  \item \textbf{$k$-Induction:} base case (BMC up to $k$) and inductive
+    step.
+  \item \textbf{PDR:} $\mathit{init} \Rightarrow \mathit{inv}$,
+    $\mathit{inv} \wedge \mathit{trans} \Rightarrow \mathit{inv}'$,
+    and $\mathit{inv} \Rightarrow \mathit{safe}$.
+\end{itemize}
+
+\paragraph{Minimal proof kernel.}
+The \texttt{tarsier-proof-kernel} crate validates certificate bundles with
+\emph{only four library dependencies} (\texttt{sha2}, \texttt{serde},
+\texttt{serde\_json}, \texttt{thiserror}).  It does not depend on Z3,
+the DSL parser, or the verification engine.  The kernel checks:
+\begin{enumerate}
+  \item Schema version compatibility (exact match).
+  \item Obligation integrity: SHA-256 hashes match the embedded SMT
+    content.
+  \item Bundle hash: a domain-tagged hash
+    (\texttt{tarsier-certificate-v2\textbackslash n} $\|$ data) covers all
+    obligation metadata.
+  \item Obligation completeness: all required obligations for the proof
+    engine are present.
+  \item Path safety: no path-traversal attacks in file references.
+\end{enumerate}
+
+\paragraph{Multi-solver replay.}
+The \texttt{tarsier-certcheck} tool replays each obligation against
+multiple solvers (e.g.\ Z3 and cvc5).  A \emph{reinforced} assurance level
+requires agreement from at least two independent solvers.  A
+\emph{high-assurance} level additionally validates solver proof objects
+via the Carcara proof checker~\cite{Carcara2023}.
+
+\subsection{Assurance Levels}
+
+Table~\ref{tab:assurance} summarizes the four assurance levels and their
+trust assumptions.
+
+\begin{table}[t]
+\centering
+\caption{Assurance levels and their trusted computing base (TCB).}
+\label{tab:assurance}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Level} & \textbf{Mechanism} & \textbf{TCB} & \textbf{Guarantee} \\
+\midrule
+Standard       & Single-solver BMC/$k$-ind & Engine + solver & Local verification \\
+Certificate    & Kernel hash validation     & Kernel (4 deps) & Integrity \\
+Reinforced     & Two-solver replay          & Solver soundness & Redundancy \\
+High-assurance & + Proof-object validation  & Proof checker   & Formal proof \\
+\bottomrule
+\end{tabular}
+\end{table}

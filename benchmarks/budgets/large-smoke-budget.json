@@ -89,6 +89,28 @@
       ]
     }
   },
+  "scale_bands": {
+    "description": "Expected scale behavior bands classify protocols by computational cost. Each protocol's baseline median must fall within its assigned band.",
+    "bands": {
+      "small":  { "min_ms": 0,    "max_ms": 100,  "description": "Simple protocols, low state space" },
+      "medium": { "min_ms": 100,  "max_ms": 500,  "description": "Moderate complexity, faithful models without crypto QC" },
+      "large":  { "min_ms": 500,  "max_ms": 2000, "description": "Crypto-heavy faithful models, QC witnesses" }
+    },
+    "protocol_bands": {
+      "examples/library/diembft_epoch.trs": "medium",
+      "examples/library/hotstuff_crypto_qc_bug_faithful.trs": "large",
+      "examples/library/hotstuff_crypto_qc_safe_faithful.trs": "large",
+      "examples/library/jolteon_fast_hotstuff.trs": "large",
+      "examples/library/narwhal_bullshark_vote.trs": "small",
+      "examples/library/pbft_crypto_qc_bug_faithful.trs": "large",
+      "examples/library/pbft_crypto_qc_safe_faithful.trs": "large",
+      "examples/library/pbft_simple_safe_faithful.trs": "medium",
+      "examples/library/reliable_broadcast_safe_faithful.trs": "medium",
+      "examples/library/tendermint_crypto_qc_bug_faithful.trs": "large",
+      "examples/library/tendermint_crypto_qc_safe_faithful.trs": "large",
+      "examples/library/viewstamped_replication_faithful.trs": "medium"
+    }
+  },
   "thresholds": {
     "per_protocol_regression_pct": 50.0,
     "per_protocol_regression_ms": 300.0,

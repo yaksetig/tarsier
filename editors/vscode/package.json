@@ -1,0 +1,98 @@
+{
+  "name": "tarsier-vscode",
+  "displayName": "Tarsier",
+  "description": "Language support for Tarsier threshold automata (.trs files)",
+  "version": "0.1.0",
+  "publisher": "tarsier",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:tarsier"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "tarsier",
+        "aliases": ["Tarsier", "trs"],
+        "extensions": [".trs"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tarsier",
+        "scopeName": "source.tarsier",
+        "path": "./syntaxes/tarsier.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "tarsier",
+        "path": "./snippets/tarsier.code-snippets"
+      }
+    ],
+    "configuration": {
+      "title": "Tarsier",
+      "properties": {
+        "tarsier.lsp.path": {
+          "type": "string",
+          "default": "tarsier-lsp",
+          "description": "Path to the tarsier-lsp binary"
+        },
+        "tarsier.cli.path": {
+          "type": "string",
+          "default": "tarsier",
+          "description": "Path to the tarsier CLI binary"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "tarsier.verify",
+        "title": "Tarsier: Verify Current File",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "tarsier.checkLiveness",
+        "title": "Tarsier: Check Liveness",
+        "icon": "$(pulse)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "tarsier.verify",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "editorLangId == tarsier"
+      },
+      {
+        "command": "tarsier.checkLiveness",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l",
+        "when": "editorLangId == tarsier"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "tarsier.verify",
+          "when": "editorLangId == tarsier",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.0"
+  }
+}

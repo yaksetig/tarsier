@@ -1,0 +1,20 @@
+[package]
+name = "tarsier-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Runtime conformance checking against protocol specifications"
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+tarsier-ir = { path = "../tarsier-ir", version = "0.1.0", features = ["serialize"] }
+tarsier-dsl = { path = "../tarsier-dsl", version = "0.1.0" }
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+indexmap.workspace = true

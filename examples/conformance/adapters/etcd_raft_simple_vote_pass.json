@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "protocol_name": "SimpleVote",
+  "params": [["n", 4], ["t", 1], ["f", 1]],
+  "peers": [
+    {
+      "peer_id": 0,
+      "role": "Process",
+      "steps": [
+        {
+          "event": "boot",
+          "index": 0,
+          "state": "Process_waiting[decided=false,decision=false]"
+        },
+        {
+          "event": "recv",
+          "index": 1,
+          "msg": "Vote",
+          "from": 1,
+          "counter": "cnt_Vote@Process"
+        },
+        {
+          "event": "recv",
+          "index": 2,
+          "msg": "Vote",
+          "from": 2,
+          "counter": "cnt_Vote@Process"
+        },
+        {
+          "event": "advance",
+          "index": 3,
+          "from_state": "Process_waiting[decided=false,decision=false]",
+          "to_state": "Process_done[decided=true,decision=true]"
+        },
+        {
+          "event": "commit",
+          "index": 4,
+          "value": "true"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+\section{The \tarsier{} Specification Language}\label{sec:language}
+
+\tarsier{} provides a domain-specific language (DSL) for specifying
+distributed protocols.  The language is designed to be close to the
+pseudo-code found in protocol papers while remaining formal enough for
+automated verification.  A complete protocol specification is contained in
+a single \texttt{.trs} file and is automatically lowered to a threshold
+automaton.
+
+\subsection{Protocol Structure}
+
+A protocol declaration introduces symbolic parameters, a resilience
+condition, an adversary model, message types, roles, and properties.
+Fig.~\ref{fig:rb-spec} shows a simplified reliable broadcast
+protocol~\cite{Bracha1987}.
+
+\begin{figure}[t]
+\begin{lstlisting}
+protocol ReliableBroadcast {
+  params n, t, f;
+  resilience: n > 3*t;
+  adversary { model: byzantine; bound: f; }
+
+  message Init();
+  message Echo();
+  message Ready();
+
+  role Process {
+    var decided: bool = false;
+    init waiting;
+
+    phase waiting {
+      when received >= 1 Init() =>
+        { send Echo(); goto phase echoed; }
+    }
+    phase echoed {
+      when received >= 2*t+1 Echo() =>
+        { send Ready(); goto phase readied; }
+    }
+    phase readied {
+      when received >= 2*t+1 Ready() =>
+        { decided = true; goto phase done; }
+    }
+    phase done {}
+  }
+
+  property agreement: agreement {
+    forall p: Process. forall q: Process.
+      p.decided == q.decided
+  }
+}
+\end{lstlisting}
+\caption{Bracha reliable broadcast in the \tarsier{} DSL.  The
+\texttt{resilience} clause and \texttt{adversary} block define the
+fault model; \texttt{phase} blocks define the process template;
+threshold guards use symbolic expressions over parameters.}
+\label{fig:rb-spec}
+\end{figure}
+
+\subsection{Adversary Model Configuration}
+
+The \texttt{adversary} block provides fine-grained control over the
+threat model:
+
+\begin{itemize}
+  \item \textbf{Fault model:} \texttt{byzantine}, \texttt{crash}, or
+    \texttt{omission}---determines which behaviors the adversary can
+    exhibit.
+  \item \textbf{Bound:} a parameter expression bounding the number of
+    faulty processes (e.g.\ $f \leq t$).
+  \item \textbf{Timing:} \texttt{async} or
+    \texttt{partial\_synchrony}---the latter introduces a Global
+    Stabilization Time (GST) parameter after which all messages are
+    delivered.
+  \item \textbf{Authentication:} \texttt{signed} or \texttt{none}---when
+    signed, sender identities are cryptographically bound to messages.
+  \item \textbf{Network mode:} one of the four modes described in
+    Sect.~\ref{sec:semantics}.
+  \item \textbf{Equivocation:} \texttt{full} (adversary may send
+    conflicting messages to different recipients) or \texttt{none}
+    (each sender commits to a single payload per round).
+\end{itemize}
+
+\subsection{Cryptographic Objects}\label{sec:crypto}
+
+Modern BFT protocols (HotStuff~\cite{YinMGRGA2019},
+Tendermint~\cite{BuchmanKM2018}) rely heavily on \emph{quorum certificates}
+(QCs) and \emph{threshold signatures}.  \tarsier{} treats these as
+first-class language constructs:
+
+\begin{lstlisting}
+certificate QuorumCert
+  from Prepare threshold 2*t+1
+  [signer Replica]
+  [conflicts exclusive];
+
+threshold_signature TSig signer Replica;
+\end{lstlisting}
+
+A \texttt{certificate} declaration specifies:
+\begin{enumerate}
+  \item the \emph{source message} whose accumulation triggers formation;
+  \item the \emph{threshold} (a linear expression over parameters) of
+    \emph{distinct signers} required;
+  \item an optional \texttt{conflicts exclusive} clause enforcing that
+    conflicting certificate variants (e.g., for different values) cannot
+    coexist in an honest execution.
+\end{enumerate}
+
+The lowering pass translates these declarations into SMT constraints:
+
+\begin{itemize}
+  \item \textbf{Non-forgeability:}
+    $\adv[k, \gamma_{\mathit{crypto}}] = 0$
+    for every crypto-object counter~$\gamma_{\mathit{crypto}}$.
+    The adversary cannot inject forged certificates.
+  \item \textbf{Signer-set threshold:}
+    Formation requires contributions from $\geq\!\tau$ \emph{distinct}
+    sender identities, not merely $\tau$ message copies.
+    In identity-selective mode, this is encoded as
+    $\sum_s \mathit{ite}(\gamma_s > 0, 1, 0) \geq \tau$.
+  \item \textbf{Conflict admissibility:}
+    \texttt{conflicts exclusive} generates mutual-exclusion constraints
+    between variants in the same round, closing equivocation-based attacks.
+\end{itemize}
+
+\subsection{Lowering to Threshold Automata}\label{sec:lowering}
+
+The lowering pass transforms a DSL program into a threshold
+automaton~$\ta$:
+
+\begin{enumerate}
+  \item \textbf{Location expansion:}
+    Each combination of (role, phase, local-variable valuation) becomes a
+    distinct location.  For a role with $p$ phases and local variables with
+    domain sizes $d_1, \ldots, d_k$, this produces
+    $p \cdot \prod_i d_i$ locations.
+  \item \textbf{Rule generation:}
+    Each guarded transition (\texttt{when received $\geq$ expr
+    $\Rightarrow$ \ldots}) becomes one or more rules with threshold guards
+    derived from the expression and the current network mode.
+  \item \textbf{Shared variable allocation:}
+    Each (message family, recipient role, field valuation) tuple produces a
+    shared variable tracking the corresponding counter.  Network modes
+    refine this scoping (see Sect.~\ref{sec:semantics}).
+  \item \textbf{Property extraction:}
+    Agreement properties are lowered to \emph{conflicting pairs}: pairs of
+    decided locations in different decision phases that must not be
+    simultaneously occupied.
+\end{enumerate}
+
+The lowering is deterministic and produces a well-formed threshold automaton
+amenable to the verification strategies of Sect.~\ref{sec:verification}.

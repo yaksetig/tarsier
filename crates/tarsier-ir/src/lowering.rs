@@ -1,3 +1,5 @@
+#![allow(unused_assignments)]
+
 use indexmap::{IndexMap, IndexSet};
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use std::collections::HashSet;
@@ -47,11 +49,14 @@ pub enum LoweringError {
     InvalidRange(String, i64, i64),
     #[error("Unsupported: {0}")]
     Unsupported(String),
+    #[error("Validation error: {0}")]
+    Validation(String),
 }
 
 /// A lowering error enriched with source span information for pretty-printed diagnostics.
 #[derive(Debug, Error, Diagnostic)]
 #[error("{inner}")]
+#[allow(unused_assignments)]
 pub struct SpannedLoweringError {
     #[source_code]
     pub src: NamedSource<String>,
@@ -65,7 +70,7 @@ impl SpannedLoweringError {
         Self {
             src: NamedSource::new(filename, source),
             inner: err,
-            span: span.map(|s| SourceSpan::new(s.start.into(), (s.end - s.start).into())),
+            span: span.map(|s| SourceSpan::new(s.start.into(), s.end - s.start)),
         }
     }
 }
@@ -73,6 +78,7 @@ impl SpannedLoweringError {
 /// Lower an AST Program into a ThresholdAutomaton, with rich source-span diagnostics.
 ///
 /// This wraps `lower()` and attaches source spans for pretty error reporting via miette.
+#[allow(clippy::result_large_err)]
 pub fn lower_with_source(
     program: &ast::Program,
     source: &str,
@@ -148,10 +154,28 @@ fn find_span_for_error(err: &LoweringError, program: &ast::Program) -> Option<as
             }
             None
         }
-        LoweringError::UnknownEnum(enum_name) | LoweringError::MissingEnumInit(enum_name) => {
+        LoweringError::UnknownEnum(enum_name) => {
+            // Search enum declarations for the unknown type name.
+            for e in &proto.enums {
+                if e.name == *enum_name {
+                    return Some(e.span);
+                }
+            }
+            // Fall back to searching variables whose type matches.
             for role in &proto.roles {
                 for v in &role.node.vars {
-                    if v.name == *enum_name {
+                    if v.ty == ast::VarType::Enum(enum_name.clone()) {
+                        return Some(v.span);
+                    }
+                }
+            }
+            None
+        }
+        LoweringError::MissingEnumInit(var_name) => {
+            // MissingEnumInit carries the variable name.
+            for role in &proto.roles {
+                for v in &role.node.vars {
+                    if v.name == *var_name {
                         return Some(v.span);
                     }
                 }
@@ -159,16 +183,23 @@ fn find_span_for_error(err: &LoweringError, program: &ast::Program) -> Option<as
             None
         }
         LoweringError::UnknownEnumVariant(_, enum_name) => {
+            // Search enum declarations first.
+            for e in &proto.enums {
+                if e.name == *enum_name {
+                    return Some(e.span);
+                }
+            }
+            // Fall back to variables of this enum type.
             for role in &proto.roles {
                 for v in &role.node.vars {
-                    if v.name == *enum_name {
+                    if v.ty == ast::VarType::Enum(enum_name.clone()) {
                         return Some(v.span);
                     }
                 }
             }
             None
         }
-        LoweringError::Unsupported(_) => Some(program.protocol.span),
+        LoweringError::Unsupported(_) | LoweringError::Validation(_) => Some(program.protocol.span),
     }
 }
 
@@ -318,6 +349,17 @@ fn parse_fault_budget_scope(raw: &str) -> Result<FaultBudgetScope, LoweringError
         "global" => Ok(FaultBudgetScope::Global),
         other => Err(LoweringError::Unsupported(format!(
             "Unsupported fault scope '{other}'; expected 'legacy_counter', 'per_recipient', or 'global'"
+        ))),
+    }
+}
+
+fn parse_por_mode(raw: &str) -> Result<PorMode, LoweringError> {
+    match raw {
+        "full" => Ok(PorMode::Full),
+        "static" | "static_only" => Ok(PorMode::Static),
+        "off" | "none" | "disabled" => Ok(PorMode::Off),
+        other => Err(LoweringError::Unsupported(format!(
+            "Unsupported POR mode '{other}'; expected 'full', 'static', or 'off'"
         ))),
     }
 }
@@ -670,6 +712,25 @@ fn build_message_policy_overrides(
     Ok(policies)
 }
 
+/// Convert an AST [`InterfaceAssumption`](ast::InterfaceAssumption) into an
+/// IR [`Assumption::ParameterConstraint`](crate::composition::Assumption::ParameterConstraint)
+/// using the parameter names from a lowered [`ThresholdAutomaton`].
+pub fn lower_interface_assumption(
+    assumption: &ast::InterfaceAssumption,
+    ta: &ThresholdAutomaton,
+) -> Result<crate::composition::Assumption, LoweringError> {
+    let param_map: IndexMap<String, ParamId> = ta
+        .parameters
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.name.clone(), i))
+        .collect();
+    let lhs = lower_linear_expr_to_lc(&assumption.lhs, &param_map)?;
+    let rhs = lower_linear_expr_to_lc(&assumption.rhs, &param_map)?;
+    let op = lower_cmp_op(assumption.op);
+    Ok(crate::composition::Assumption::ParameterConstraint { lhs, op, rhs })
+}
+
 /// Lower an AST Program into a ThresholdAutomaton.
 pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError> {
     let proto = &program.protocol.node;
@@ -748,6 +809,9 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             }
             "faults" | "fault_scope" | "fault_budget" => {
                 ta.fault_budget_scope = parse_fault_budget_scope(&item.value)?;
+            }
+            "por" | "por_mode" => {
+                ta.por_mode = parse_por_mode(&item.value)?;
             }
             "compromise" | "compromised" | "compromised_key" | "compromised_keys" => {
                 compromised_keys_from_adversary.insert(item.value.clone());
@@ -1520,18 +1584,18 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
 
                         // Build guard (only threshold guards survive; local
                         // bool/comparison guards are enforced by location filtering).
-                        let mut guard = lower_guard(
-                            guard_clause,
-                            &msg_var_ids,
-                            &message_infos,
-                            &param_ids,
-                            &from_loc.local_vars,
-                            &local_var_types,
-                            &enum_defs,
-                            &role_channels,
-                            current_recipient_channel.as_str(),
-                            &role_decl.name,
-                        )?;
+                        let guard_ctx = GuardLoweringContext {
+                            msg_vars: &msg_var_ids,
+                            message_infos: &message_infos,
+                            params: &param_ids,
+                            locals: &from_loc.local_vars,
+                            local_var_types: &local_var_types,
+                            enum_defs: &enum_defs,
+                            role_channels: &role_channels,
+                            recipient_channel: current_recipient_channel.as_str(),
+                            role_name: &role_decl.name,
+                        };
+                        let mut guard = lower_guard(guard_clause, &guard_ctx)?;
 
                         // Build updates (message sends), resolved for this location.
                         let mut updates = Vec::new();
@@ -1923,7 +1987,9 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         //   dead location in the same phase
         // - each crash increments `__crashed_count`; encoder bounds it by `f`
         if ta.fault_model == FaultModel::Crash {
-            let crash_counter_var = crash_counter_var.expect("crash counter should exist");
+            let crash_counter_var = crash_counter_var.ok_or_else(|| {
+                LoweringError::Unsupported("crash model requires internal crash counter".into())
+            })?;
             for phase in &role_decl.phases {
                 let phase_locs = location_map
                     .get(&phase.node.name)
@@ -1987,38 +2053,44 @@ fn collect_params_from_linear_expr(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Context for lowering guards, grouping the many parameters needed during
+/// guard translation into a single struct for readability.
+struct GuardLoweringContext<'a> {
+    msg_vars: &'a IndexMap<String, SharedVarId>,
+    message_infos: &'a IndexMap<String, MessageInfo>,
+    params: &'a IndexMap<String, ParamId>,
+    locals: &'a IndexMap<String, LocalValue>,
+    local_var_types: &'a IndexMap<String, LocalVarType>,
+    enum_defs: &'a IndexMap<String, Vec<String>>,
+    role_channels: &'a IndexMap<String, Vec<String>>,
+    recipient_channel: &'a str,
+    role_name: &'a str,
+}
+
 fn lower_guard(
     guard: &ast::GuardExpr,
-    msg_vars: &IndexMap<String, SharedVarId>,
-    message_infos: &IndexMap<String, MessageInfo>,
-    params: &IndexMap<String, ParamId>,
-    locals: &IndexMap<String, LocalValue>,
-    local_var_types: &IndexMap<String, LocalVarType>,
-    enum_defs: &IndexMap<String, Vec<String>>,
-    role_channels: &IndexMap<String, Vec<String>>,
-    recipient_channel: &str,
-    role_name: &str,
+    ctx: &GuardLoweringContext<'_>,
 ) -> Result<Guard, LoweringError> {
     match guard {
         ast::GuardExpr::Threshold(tg) => {
             let sender_role = if tg.distinct {
-                Some(tg.distinct_role.as_deref().unwrap_or(role_name))
+                Some(tg.distinct_role.as_deref().unwrap_or(ctx.role_name))
             } else {
                 None
             };
             let var_ids = resolve_message_counter_from_guard(
                 &tg.message_type,
-                recipient_channel,
+                ctx.recipient_channel,
                 &tg.message_args,
                 sender_role,
-                role_channels,
-                message_infos,
-                msg_vars,
-                locals,
-                local_var_types,
-                enum_defs,
+                ctx.role_channels,
+                ctx.message_infos,
+                ctx.msg_vars,
+                ctx.locals,
+                ctx.local_var_types,
+                ctx.enum_defs,
             )?;
-            let bound = lower_linear_expr_to_lc(&tg.threshold, params)?;
+            let bound = lower_linear_expr_to_lc(&tg.threshold, ctx.params)?;
             let op = lower_cmp_op(tg.op);
             Ok(Guard::single(GuardAtom::Threshold {
                 vars: var_ids,
@@ -2033,15 +2105,15 @@ fn lower_guard(
         } => {
             let var_ids = resolve_message_counter_from_guard(
                 object_name,
-                recipient_channel,
+                ctx.recipient_channel,
                 object_args,
                 None,
-                role_channels,
-                message_infos,
-                msg_vars,
-                locals,
-                local_var_types,
-                enum_defs,
+                ctx.role_channels,
+                ctx.message_infos,
+                ctx.msg_vars,
+                ctx.locals,
+                ctx.local_var_types,
+                ctx.enum_defs,
             )?;
             Ok(Guard::single(GuardAtom::Threshold {
                 vars: var_ids,
@@ -2051,30 +2123,8 @@ fn lower_guard(
             }))
         }
         ast::GuardExpr::And(lhs, rhs) => {
-            let mut lg = lower_guard(
-                lhs,
-                msg_vars,
-                message_infos,
-                params,
-                locals,
-                local_var_types,
-                enum_defs,
-                role_channels,
-                recipient_channel,
-                role_name,
-            )?;
-            let rg = lower_guard(
-                rhs,
-                msg_vars,
-                message_infos,
-                params,
-                locals,
-                local_var_types,
-                enum_defs,
-                role_channels,
-                recipient_channel,
-                role_name,
-            )?;
+            let mut lg = lower_guard(lhs, ctx)?;
+            let rg = lower_guard(rhs, ctx)?;
             lg.atoms.extend(rg.atoms);
             Ok(lg)
         }
@@ -4413,6 +4463,7 @@ protocol UnknownBoundParam {
 
     #[test]
     fn lower_rejects_unknown_adversary_key() {
+        // Unknown adversary keys are now caught at parse time, not lowering.
         let src = r#"
 protocol UnknownAdversaryKey {
     params n, t, f;
@@ -4424,10 +4475,13 @@ protocol UnknownAdversaryKey {
     }
 }
 "#;
-        let prog = parse(src, "unknown_adversary_key.trs").unwrap();
-        let err = lower(&prog).expect_err("lowering should reject unknown adversary keys");
+        let err = parse(src, "unknown_adversary_key.trs")
+            .expect_err("parse should reject unknown adversary key");
         let msg = format!("{err}");
-        assert!(msg.contains("Unknown adversary key 'foo'"));
+        assert!(
+            msg.contains("foo"),
+            "error should mention the unknown key, got: {msg}"
+        );
     }
 
     #[test]
@@ -4543,5 +4597,1059 @@ protocol IdentityImmutable {
         let msg = err.to_string();
         assert!(msg.contains("identity variable"));
         assert!(msg.contains("immutable"));
+    }
+
+    #[test]
+    fn lower_has_guard_with_field_args_resolves_correct_variant() {
+        let src = r#"
+protocol CryptoHasGuard {
+    params n, t, f;
+    resilience: n > 3*t;
+    message Vote(value: bool);
+    certificate QC from Vote threshold 1;
+    role Replica {
+        init s;
+        phase s {
+            when has QC(value=true) => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "crypto_has_guard.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        let qc_true = ta
+            .find_shared_var_by_name("cnt_QC@Replica[value=true]")
+            .expect("QC true variant counter should exist");
+        let qc_false = ta
+            .find_shared_var_by_name("cnt_QC@Replica[value=false]")
+            .expect("QC false variant counter should exist");
+        // Find the rule that transitions from phase s to done
+        let has_rule = ta
+            .rules
+            .iter()
+            .find(|rule| {
+                rule.guard.atoms.iter().any(|atom| {
+                    matches!(
+                        atom,
+                        GuardAtom::Threshold {
+                            vars,
+                            op: CmpOp::Ge,
+                            distinct: false,
+                            ..
+                        } if vars.contains(&qc_true)
+                    )
+                })
+            })
+            .expect("has QC(value=true) guard rule should exist");
+        // The guard should reference QC[value=true] but NOT QC[value=false]
+        let guard_vars: Vec<SharedVarId> = has_rule
+            .guard
+            .atoms
+            .iter()
+            .flat_map(|atom| {
+                let GuardAtom::Threshold { vars, .. } = atom;
+                vars.clone()
+            })
+            .collect();
+        assert!(
+            guard_vars.contains(&qc_true),
+            "has QC(value=true) guard should include QC[value=true] counter"
+        );
+        assert!(
+            !guard_vars.contains(&qc_false),
+            "has QC(value=true) guard should NOT include QC[value=false] counter"
+        );
+    }
+
+    #[test]
+    fn lower_justify_sets_justify_flag_not_lock_flag() {
+        let src = r#"
+protocol CryptoJustifyOnly {
+    params n, t, f;
+    resilience: n > 3*t;
+    message Vote(value: bool);
+    certificate QC from Vote threshold 1;
+    role Replica {
+        init s;
+        phase s {
+            when received >= 0 Vote(value=true) => {
+                justify QC(value=true);
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "crypto_justify_only.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        // Find the "done" phase locations
+        let done_locs: Vec<_> = ta
+            .locations
+            .iter()
+            .enumerate()
+            .filter(|(_, loc)| loc.name.contains("done"))
+            .collect();
+        assert!(!done_locs.is_empty(), "should have 'done' phase locations");
+        // In the done locations reached by the justify action,
+        // __justify_qc should be true, __lock_qc should be false
+        let has_justify_true_done = done_locs.iter().any(|(_, loc)| {
+            loc.local_vars.get("__justify_qc") == Some(&LocalValue::Bool(true))
+                && loc.local_vars.get("__lock_qc") == Some(&LocalValue::Bool(false))
+        });
+        assert!(
+            has_justify_true_done,
+            "at least one 'done' location should have __justify_qc=true, __lock_qc=false: {:?}",
+            done_locs
+                .iter()
+                .map(|(_, loc)| (&loc.name, &loc.local_vars))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn lower_lock_adds_implicit_has_threshold_guard() {
+        let src = r#"
+protocol CryptoLockImplicit {
+    params n, t, f;
+    resilience: n > 3*t;
+    message Vote(value: bool);
+    certificate QC from Vote threshold 1;
+    role Replica {
+        init s;
+        phase s {
+            when received >= 0 Vote(value=true) => {
+                lock QC(value=true);
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "crypto_lock_implicit.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        let qc_true = ta
+            .find_shared_var_by_name("cnt_QC@Replica[value=true]")
+            .expect("QC true counter should exist");
+        // Find the rule that sets __lock_qc=true
+        let lock_rule = ta
+            .rules
+            .iter()
+            .find(|rule| {
+                let target_loc = &ta.locations[rule.to];
+                target_loc.local_vars.get("__lock_qc") == Some(&LocalValue::Bool(true))
+                    && ta.locations[rule.from].local_vars.get("__lock_qc")
+                        == Some(&LocalValue::Bool(false))
+            })
+            .expect("lock transition rule should exist");
+        // The lock rule should have an implicit threshold guard over QC counter (has check)
+        let has_qc_guard = lock_rule.guard.atoms.iter().any(|atom| {
+            matches!(
+                atom,
+                GuardAtom::Threshold {
+                    vars,
+                    bound,
+                    op: CmpOp::Ge,
+                    distinct: false,
+                } if vars.contains(&qc_true) && bound.constant == 1
+            )
+        });
+        assert!(
+            has_qc_guard,
+            "lock action should inject implicit has-threshold guard (>= 1) over QC counter"
+        );
+    }
+
+    fn make_por_mode_protocol(por_value: &str) -> String {
+        format!(
+            r#"
+protocol PorTest {{
+    parameters {{ n: nat; t: nat; }}
+    resilience {{ n > 3*t; }}
+    adversary {{
+        bound: t;
+        model: byzantine;
+        por: {por_value};
+    }}
+    message Echo;
+    role Process {{
+        init waiting;
+        phase waiting {{
+            when received >= 2*t+1 Echo => {{
+                send Echo;
+                goto phase done;
+            }}
+        }}
+        phase done {{}}
+    }}
+}}
+"#
+        )
+    }
+
+    #[test]
+    fn lower_por_mode_full() {
+        let src = make_por_mode_protocol("full");
+        let prog = parse(&src, "por_full.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(ta.por_mode, PorMode::Full);
+    }
+
+    #[test]
+    fn lower_por_mode_static() {
+        let src = make_por_mode_protocol("static");
+        let prog = parse(&src, "por_static.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(ta.por_mode, PorMode::Static);
+    }
+
+    #[test]
+    fn lower_por_mode_off() {
+        let src = make_por_mode_protocol("off");
+        let prog = parse(&src, "por_off.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(ta.por_mode, PorMode::Off);
+    }
+
+    #[test]
+    fn lower_por_mode_none_alias() {
+        let src = make_por_mode_protocol("none");
+        let prog = parse(&src, "por_none.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(ta.por_mode, PorMode::Off);
+    }
+
+    #[test]
+    fn lower_por_mode_invalid() {
+        let src = make_por_mode_protocol("bogus");
+        let prog = parse(&src, "por_bogus.trs").unwrap();
+        let result = lower(&prog);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn lower_interface_assumption_converts_parameter_constraint() {
+        use tarsier_dsl::ast;
+
+        // Build a minimal TA with parameters n, t, f
+        let mut ta = ThresholdAutomaton::new();
+        ta.parameters.push(Parameter { name: "n".into() });
+        ta.parameters.push(Parameter { name: "t".into() });
+        ta.parameters.push(Parameter { name: "f".into() });
+
+        // AST assumption: n > 3*t
+        let assumption = ast::InterfaceAssumption {
+            lhs: ast::LinearExpr::Var("n".into()),
+            op: ast::CmpOp::Gt,
+            rhs: ast::LinearExpr::Mul(3, Box::new(ast::LinearExpr::Var("t".into()))),
+            span: ast::Span::new(0, 0),
+        };
+
+        let result = lower_interface_assumption(&assumption, &ta).unwrap();
+        match result {
+            crate::composition::Assumption::ParameterConstraint { lhs, op, rhs } => {
+                // lhs should reference param 0 (n); terms are (coefficient, param_id)
+                assert_eq!(lhs.terms.len(), 1);
+                assert_eq!(lhs.terms[0].0, 1); // coefficient 1
+                assert_eq!(lhs.terms[0].1, 0); // param_id 0 (n)
+                assert_eq!(op, CmpOp::Gt);
+                // rhs should reference param 1 (t) with coefficient 3
+                assert_eq!(rhs.terms.len(), 1);
+                assert_eq!(rhs.terms[0].0, 3); // coefficient 3
+                assert_eq!(rhs.terms[0].1, 1); // param_id 1 (t)
+            }
+            _ => panic!("expected ParameterConstraint"),
+        }
+    }
+
+    #[test]
+    fn lower_interface_assumption_rejects_unknown_param() {
+        use tarsier_dsl::ast;
+
+        let ta = ThresholdAutomaton::new(); // no parameters
+
+        let assumption = ast::InterfaceAssumption {
+            lhs: ast::LinearExpr::Var("x".into()),
+            op: ast::CmpOp::Ge,
+            rhs: ast::LinearExpr::Const(0),
+            span: ast::Span::new(0, 0),
+        };
+
+        let result = lower_interface_assumption(&assumption, &ta);
+        assert!(result.is_err());
+    }
+
+    // ---------------------------------------------------------------
+    // Additional coverage tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn lower_rejects_missing_init_phase() {
+        let src = r#"
+protocol MissingInit {
+    params n, t;
+    resilience: n > 3*t;
+    message Echo;
+    role Process {
+        phase waiting {
+            when received >= 1 Echo => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "missing_init.trs").unwrap();
+        let err = lower(&prog).expect_err("missing init phase should be rejected");
+        assert!(
+            matches!(err, LoweringError::NoInitPhase(ref name) if name == "Process"),
+            "expected NoInitPhase(Process), got: {err}"
+        );
+    }
+
+    #[test]
+    fn lower_rejects_unknown_phase_in_goto() {
+        let src = r#"
+protocol UnknownGoto {
+    params n, t;
+    resilience: n > 3*t;
+    message Echo;
+    role Process {
+        init waiting;
+        phase waiting {
+            when received >= 1 Echo => {
+                goto phase nonexistent;
+            }
+        }
+    }
+}
+"#;
+        let prog = parse(src, "unknown_goto.trs").unwrap();
+        let err = lower(&prog).expect_err("goto unknown phase should be rejected");
+        assert!(
+            matches!(err, LoweringError::UnknownPhase(ref name) if name == "nonexistent"),
+            "expected UnknownPhase(nonexistent), got: {err}"
+        );
+    }
+
+    #[test]
+    fn lower_parameters_extracted_in_order() {
+        let src = r#"
+protocol ParamOrder {
+    parameters { n: nat; t: nat; f: nat; }
+    resilience { n > 3*t; }
+    adversary { model: byzantine; bound: f; }
+    message M;
+    role R {
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "param_order.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(ta.parameters.len(), 3);
+        assert_eq!(ta.parameters[0].name, "n");
+        assert_eq!(ta.parameters[1].name, "t");
+        assert_eq!(ta.parameters[2].name, "f");
+        assert_eq!(ta.find_param_by_name("n"), Some(0));
+        assert_eq!(ta.find_param_by_name("t"), Some(1));
+        assert_eq!(ta.find_param_by_name("f"), Some(2));
+    }
+
+    #[test]
+    fn lower_implicit_parameters_from_resilience_expression() {
+        // Parameters referenced in resilience but not in explicit params list
+        // should be auto-discovered.
+        let src = r#"
+protocol ImplicitParams {
+    resilience { n > 3*t + f; }
+    message M;
+    role R {
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "implicit_params.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        // n, t, f should all be discovered from the resilience expression
+        assert!(ta.find_param_by_name("n").is_some());
+        assert!(ta.find_param_by_name("t").is_some());
+        assert!(ta.find_param_by_name("f").is_some());
+    }
+
+    #[test]
+    fn lower_locations_from_phases_and_bool_vars() {
+        let src = r#"
+protocol LocationCheck {
+    params n, t;
+    resilience: n > 3*t;
+    message M;
+    role R {
+        var flag: bool = false;
+        init phase_a;
+        phase phase_a {
+            when received >= 1 M => {
+                flag = true;
+                goto phase phase_b;
+            }
+        }
+        phase phase_b {}
+    }
+}
+"#;
+        let prog = parse(src, "location_check.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        // 2 phases x 2 bool values = 4 locations
+        assert_eq!(ta.locations.len(), 4);
+        // All locations should be in role "R"
+        assert!(ta.locations.iter().all(|loc| loc.role == "R"));
+        // Check phase names
+        let phase_names: std::collections::HashSet<String> =
+            ta.locations.iter().map(|loc| loc.phase.clone()).collect();
+        assert!(phase_names.contains("phase_a"));
+        assert!(phase_names.contains("phase_b"));
+        // Initial location should be phase_a with flag=false
+        assert_eq!(ta.initial_locations.len(), 1);
+        let init_loc = &ta.locations[ta.initial_locations[0]];
+        assert_eq!(init_loc.phase, "phase_a");
+        assert_eq!(
+            init_loc.local_vars.get("flag"),
+            Some(&LocalValue::Bool(false))
+        );
+    }
+
+    #[test]
+    fn lower_message_types_create_shared_counter_variables() {
+        let src = r#"
+protocol MsgCounters {
+    params n, t;
+    resilience: n > 3*t;
+    message Echo;
+    message Ready;
+    role Sender {
+        init s;
+        phase s {}
+    }
+    role Receiver {
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "msg_counters.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        // Classic network: 2 message types x 2 roles = 4 counters
+        assert_eq!(ta.shared_vars.len(), 4);
+        assert!(ta.find_shared_var_by_name("cnt_Echo@Sender").is_some());
+        assert!(ta.find_shared_var_by_name("cnt_Echo@Receiver").is_some());
+        assert!(ta.find_shared_var_by_name("cnt_Ready@Sender").is_some());
+        assert!(ta.find_shared_var_by_name("cnt_Ready@Receiver").is_some());
+        // All should be MessageCounter kind
+        assert!(ta
+            .shared_vars
+            .iter()
+            .all(|v| v.kind == SharedVarKind::MessageCounter));
+    }
+
+    #[test]
+    fn lower_committee_declaration_with_concrete_values() {
+        let src = r#"
+protocol CommitteeTest {
+    params n, t, f, b;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    committee validators {
+        population: 1000;
+        byzantine: 333;
+        size: 100;
+        epsilon: 1.0e-9;
+        bound_param: b;
+    }
+    message M;
+    role R {
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "committee_test.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(ta.committees.len(), 1);
+        let c = &ta.committees[0];
+        assert_eq!(c.name, "validators");
+        assert!(matches!(c.population, ParamOrConst::Const(1000)));
+        assert!(matches!(c.byzantine, ParamOrConst::Const(333)));
+        assert!(matches!(c.committee_size, ParamOrConst::Const(100)));
+        assert_eq!(c.epsilon, Some(1.0e-9));
+        let bound_pid = c.bound_param.expect("bound_param should be set");
+        assert_eq!(ta.parameters[bound_pid].name, "b");
+    }
+
+    #[test]
+    fn lower_committee_declaration_with_param_references() {
+        let src = r#"
+protocol CommitteeParamRef {
+    params N, K, S, b;
+    resilience: N > 3*K;
+    committee sample {
+        population: N;
+        byzantine: K;
+        size: S;
+        bound_param: b;
+    }
+    message M;
+    role R {
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "committee_param_ref.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(ta.committees.len(), 1);
+        let c = &ta.committees[0];
+        assert!(matches!(c.population, ParamOrConst::Param(pid) if ta.parameters[pid].name == "N"));
+        assert!(matches!(c.byzantine, ParamOrConst::Param(pid) if ta.parameters[pid].name == "K"));
+        assert!(
+            matches!(c.committee_size, ParamOrConst::Param(pid) if ta.parameters[pid].name == "S")
+        );
+        assert!(c.epsilon.is_none());
+    }
+
+    #[test]
+    fn lower_byzantine_adversary_model() {
+        let src = r#"
+protocol ByzantineCfg {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    message M;
+    role R {
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "byzantine_cfg.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert_eq!(ta.fault_model, FaultModel::Byzantine);
+        let bound = ta
+            .adversary_bound_param
+            .expect("adversary bound should be set");
+        assert_eq!(ta.parameters[bound].name, "f");
+        // No crash counter in Byzantine mode
+        assert!(ta.find_shared_var_by_name(INTERNAL_CRASH_COUNTER).is_none());
+        // No alive flag in Byzantine mode
+        assert!(ta
+            .locations
+            .iter()
+            .all(|loc| !loc.local_vars.contains_key(INTERNAL_ALIVE_VAR)));
+    }
+
+    #[test]
+    fn lower_resilience_condition_structure() {
+        let src = r#"
+protocol ResilienceCheck {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t + 1; }
+    message M;
+    role R {
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "resilience_check.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        let rc = ta
+            .resilience_condition
+            .as_ref()
+            .expect("resilience condition should be present");
+        // lhs should be n (param 0)
+        assert_eq!(rc.lhs.terms.len(), 1);
+        assert_eq!(rc.lhs.terms[0].1, 0); // param_id for n
+        assert_eq!(rc.lhs.terms[0].0, 1); // coefficient 1
+        assert_eq!(rc.op, CmpOp::Gt);
+        // rhs should be 3*t + 1
+        assert_eq!(rc.rhs.constant, 1);
+        assert_eq!(rc.rhs.terms.len(), 1);
+        assert_eq!(rc.rhs.terms[0].1, 1); // param_id for t
+        assert_eq!(rc.rhs.terms[0].0, 3); // coefficient 3
+    }
+
+    #[test]
+    fn lower_enum_variable_creates_variant_locations() {
+        let src = r#"
+protocol EnumLower {
+    params n, t;
+    resilience: n > 3*t;
+    enum Status { idle, active, done };
+    role Worker {
+        var status: Status = idle;
+        init s;
+        phase s {
+            when status == idle => {
+                status = active;
+                goto phase s;
+            }
+        }
+    }
+}
+"#;
+        let prog = parse(src, "enum_lower.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        // 3 enum variants x 1 phase = 3 locations
+        assert_eq!(ta.locations.len(), 3);
+        // Initial location should have status=idle
+        assert_eq!(ta.initial_locations.len(), 1);
+        let init = &ta.locations[ta.initial_locations[0]];
+        assert_eq!(
+            init.local_vars.get("status"),
+            Some(&LocalValue::Enum("idle".into()))
+        );
+        // Only the idle->active transition should pass the guard
+        assert_eq!(ta.rules.len(), 1);
+        let rule = &ta.rules[0];
+        assert_eq!(
+            ta.locations[rule.from].local_vars.get("status"),
+            Some(&LocalValue::Enum("idle".into()))
+        );
+        assert_eq!(
+            ta.locations[rule.to].local_vars.get("status"),
+            Some(&LocalValue::Enum("active".into()))
+        );
+    }
+
+    #[test]
+    fn lower_rejects_enum_variable_without_init() {
+        let src = r#"
+protocol EnumNoInit {
+    params n, t;
+    resilience: n > 3*t;
+    enum Status { idle, active };
+    role Worker {
+        var status: Status;
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "enum_no_init.trs").unwrap();
+        let err = lower(&prog).expect_err("enum without init should be rejected");
+        assert!(
+            matches!(err, LoweringError::MissingEnumInit(ref name) if name == "status"),
+            "expected MissingEnumInit(status), got: {err}"
+        );
+    }
+
+    #[test]
+    fn lower_rejects_unknown_enum_type() {
+        let src = r#"
+protocol UnknownEnum {
+    params n, t;
+    resilience: n > 3*t;
+    role Worker {
+        var status: Bogus = idle;
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "unknown_enum.trs").unwrap();
+        let err = lower(&prog).expect_err("unknown enum type should be rejected");
+        assert!(
+            matches!(err, LoweringError::UnknownEnum(ref name) if name == "Bogus"),
+            "expected UnknownEnum(Bogus), got: {err}"
+        );
+    }
+
+    #[test]
+    fn lower_ranged_int_variable_out_of_range_init() {
+        let src = r#"
+protocol OutOfRange {
+    params n, t;
+    resilience: n > 3*t;
+    role Worker {
+        var x: int in 0..3 = 5;
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "out_of_range.trs").unwrap();
+        let err = lower(&prog).expect_err("out-of-range init should be rejected");
+        assert!(
+            matches!(err, LoweringError::OutOfRange { ref var, value: 5, min: 0, max: 3 } if var == "x"),
+            "expected OutOfRange for x with value 5, got: {err}"
+        );
+    }
+
+    #[test]
+    fn lower_ranged_int_variable_invalid_range() {
+        let src = r#"
+protocol InvalidRange {
+    params n, t;
+    resilience: n > 3*t;
+    role Worker {
+        var x: int in 5..2;
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "invalid_range.trs").unwrap();
+        let err = lower(&prog).expect_err("inverted range should be rejected");
+        assert!(
+            matches!(err, LoweringError::InvalidRange(ref var, 5, 2) if var == "x"),
+            "expected InvalidRange(x, 5, 2), got: {err}"
+        );
+    }
+
+    #[test]
+    fn lower_with_source_returns_spanned_error() {
+        let src = r#"
+protocol SpannedErr {
+    params n, t;
+    resilience: n > 3*t;
+    message Echo;
+    role Process {
+        init waiting;
+        phase waiting {
+            when received >= 1 Echo => {
+                goto phase nonexistent;
+            }
+        }
+    }
+}
+"#;
+        let prog = parse(src, "spanned.trs").unwrap();
+        let err =
+            lower_with_source(&prog, src, "spanned.trs").expect_err("should produce spanned error");
+        assert!(matches!(err.inner, LoweringError::UnknownPhase(ref name) if name == "nonexistent"));
+        assert_eq!(
+            err.src.name(),
+            "spanned.trs",
+            "source name should be preserved"
+        );
+    }
+
+    #[test]
+    fn lower_safety_property_extraction_via_agreement() {
+        // Integration test: lower a protocol and check that the agreement
+        // property extractor works over the lowered TA.
+        let src = r#"
+protocol AgreementProp {
+    params n, t;
+    resilience: n > 3*t;
+    enum Decision { val_a, val_b };
+    message Vote;
+    role Voter {
+        var decided: bool = false;
+        var decision: Decision = val_a;
+        init waiting;
+        phase waiting {
+            when received >= 2*t+1 Vote => {
+                decided = true;
+                decision = val_a;
+                goto phase done_a;
+            }
+            when received >= 1 Vote => {
+                decided = true;
+                decision = val_b;
+                goto phase done_b;
+            }
+        }
+        phase done_a {}
+        phase done_b {}
+    }
+}
+"#;
+        let prog = parse(src, "agreement_prop.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        let prop = crate::properties::extract_agreement_property(&ta);
+        match prop {
+            crate::properties::SafetyProperty::Agreement { conflicting_pairs } => {
+                // decided=true locations in done_a vs done_b are conflicting
+                assert!(
+                    !conflicting_pairs.is_empty(),
+                    "agreement property should find cross-phase conflicting pairs"
+                );
+                for (l, r) in &conflicting_pairs {
+                    let lp = &ta.locations[*l].phase;
+                    let rp = &ta.locations[*r].phase;
+                    assert_ne!(
+                        lp, rp,
+                        "conflicting pairs must be in different phases"
+                    );
+                }
+            }
+            other => panic!("expected Agreement property, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lower_termination_property_extraction() {
+        // Integration test: lower a protocol and construct a Termination property.
+        let src = r#"
+protocol TerminationProp {
+    params n, t;
+    resilience: n > 3*t;
+    message Echo;
+    role Process {
+        var decided: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= 2*t+1 Echo => {
+                decided = true;
+                send Echo;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "termination_prop.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        // Identify "done" locations as liveness goals
+        let goal_locs: Vec<LocationId> = ta
+            .locations
+            .iter()
+            .enumerate()
+            .filter(|(_, loc)| loc.phase == "done")
+            .map(|(id, _)| id)
+            .collect();
+        assert!(
+            !goal_locs.is_empty(),
+            "should have goal locations in done phase"
+        );
+        let prop = crate::properties::SafetyProperty::Termination {
+            goal_locs: goal_locs.clone(),
+        };
+        match prop {
+            crate::properties::SafetyProperty::Termination {
+                goal_locs: extracted,
+            } => {
+                assert_eq!(extracted, goal_locs);
+            }
+            other => panic!("expected Termination property, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lower_crypto_object_appears_in_ta_crypto_objects() {
+        let src = r#"
+protocol CryptoObjIR {
+    params n, t;
+    resilience: n > 3*t;
+    message Vote(view: nat in 0..1);
+    certificate QC from Vote threshold 2*t+1 signer Replica;
+    role Replica {
+        var view: nat in 0..1 = 0;
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "crypto_obj_ir.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert!(ta.crypto_objects.contains_key("QC"));
+        let qc = &ta.crypto_objects["QC"];
+        assert_eq!(qc.source_message, "Vote");
+        assert_eq!(qc.signer_role.as_deref(), Some("Replica"));
+        assert!(matches!(qc.kind, IrCryptoObjectKind::QuorumCertificate));
+        assert_eq!(qc.conflict_policy, CryptoConflictPolicy::Allow);
+    }
+
+    #[test]
+    fn lower_multiple_roles_create_distinct_locations() {
+        let src = r#"
+protocol MultiRole {
+    params n, t;
+    resilience: n > 3*t;
+    message M;
+    role Leader {
+        init start;
+        phase start {}
+    }
+    role Replica {
+        init waiting;
+        phase waiting {}
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "multi_role.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        // Leader has 1 phase, Replica has 2 => 3 total
+        assert_eq!(ta.locations.len(), 3);
+        let leader_locs: Vec<_> = ta.role_locations("Leader");
+        let replica_locs: Vec<_> = ta.role_locations("Replica");
+        assert_eq!(leader_locs.len(), 1);
+        assert_eq!(replica_locs.len(), 2);
+        // Initial locations: one from Leader, one from Replica
+        assert_eq!(ta.initial_locations.len(), 2);
+    }
+
+    #[test]
+    fn lower_ranged_int_assignment_creates_transitions() {
+        let src = r#"
+protocol IntAssign {
+    params n, t;
+    resilience: n > 3*t;
+    message M;
+    role R {
+        var counter: int in 0..2 = 0;
+        init s;
+        phase s {
+            when received >= 1 M => {
+                counter = counter + 1;
+                goto phase s;
+            }
+        }
+    }
+}
+"#;
+        let prog = parse(src, "int_assign.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        // counter in 0..2 => 3 locations
+        assert_eq!(ta.locations.len(), 3);
+        // counter=0 -> counter=1 and counter=1 -> counter=2 should exist
+        // counter=2 -> counter=3 is out of range, so no rule from counter=2
+        assert_eq!(ta.rules.len(), 2);
+        for rule in &ta.rules {
+            let from_val = match ta.locations[rule.from].local_vars.get("counter") {
+                Some(LocalValue::Int(v)) => *v,
+                _ => panic!("expected int counter"),
+            };
+            let to_val = match ta.locations[rule.to].local_vars.get("counter") {
+                Some(LocalValue::Int(v)) => *v,
+                _ => panic!("expected int counter"),
+            };
+            assert_eq!(to_val, from_val + 1, "transition should increment counter");
+        }
+    }
+
+    #[test]
+    fn lower_ta_validation_succeeds() {
+        // Ensure the lowered TA passes its own internal validation
+        let src = r#"
+protocol ValidationTest {
+    parameters { n: nat; t: nat; f: nat; }
+    resilience { n > 3*t; }
+    adversary { model: byzantine; bound: f; }
+    message Echo;
+    role Process {
+        var decided: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= 2*t+1 Echo => {
+                decided = true;
+                send Echo;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "validation_test.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        ta.validate()
+            .expect("lowered TA should pass internal validation");
+    }
+
+    #[test]
+    fn lower_guard_threshold_bound_references_correct_params() {
+        let src = r#"
+protocol GuardParamRef {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    message Echo;
+    role Process {
+        init waiting;
+        phase waiting {
+            when received >= 2*t+1 Echo => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+}
+"#;
+        let prog = parse(src, "guard_param_ref.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        let rule = &ta.rules[0];
+        let atom = &rule.guard.atoms[0];
+        match atom {
+            GuardAtom::Threshold {
+                vars,
+                op,
+                bound,
+                distinct,
+            } => {
+                assert_eq!(vars.len(), 1, "should reference one counter variable");
+                assert_eq!(*op, CmpOp::Ge);
+                assert!(!distinct);
+                // bound should be 2*t + 1
+                let t_id = ta.find_param_by_name("t").unwrap();
+                assert_eq!(bound.constant, 1, "bound constant should be 1");
+                assert_eq!(bound.terms.len(), 1, "bound should have one param term");
+                assert_eq!(bound.terms[0].0, 2, "coefficient of t should be 2");
+                assert_eq!(bound.terms[0].1, t_id, "should reference param t");
+            }
+        }
+    }
+
+    #[test]
+    fn lower_rejects_reserved_variable_prefix() {
+        let src = r#"
+protocol ReservedVar {
+    params n, t;
+    resilience: n > 3*t;
+    role R {
+        var __internal: bool = false;
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "reserved_var.trs").unwrap();
+        let err = lower(&prog).expect_err("__ prefix variable should be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("reserved") && msg.contains("__internal"),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[test]
+    fn lower_no_adversary_bound_param_by_default() {
+        let src = r#"
+protocol NoAdvBound {
+    params n, t;
+    resilience: n > 3*t;
+    message M;
+    role R {
+        init s;
+        phase s {}
+    }
+}
+"#;
+        let prog = parse(src, "no_adv_bound.trs").unwrap();
+        let ta = lower(&prog).unwrap();
+        assert!(
+            ta.adversary_bound_param.is_none(),
+            "adversary bound param should be None when not declared"
+        );
+        assert_eq!(ta.fault_model, FaultModel::Byzantine); // default
+        assert_eq!(ta.timing_model, TimingModel::Asynchronous); // default
     }
 }

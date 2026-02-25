@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/cross-tool-benchmark-report-v1.json",
+  "title": "Cross-Tool Benchmark Report",
+  "description": "Machine-readable report produced by `benchmarks/cross_tool_runner.py`. Normalizes assumptions and metrics for apples-to-apples comparison across verification tools.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "report_type",
+    "started_at_utc",
+    "finished_at_utc",
+    "elapsed_ms",
+    "environment",
+    "tools",
+    "summary",
+    "scenarios"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "report_type": {
+      "type": "string",
+      "const": "cross_tool_benchmark"
+    },
+    "started_at_utc": {
+      "type": "string"
+    },
+    "finished_at_utc": {
+      "type": "string"
+    },
+    "elapsed_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "environment": {
+      "type": "object",
+      "required": ["platform", "python_version"],
+      "properties": {
+        "platform": { "type": "string" },
+        "python_version": { "type": "string" }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "required": ["requested", "available"],
+      "properties": {
+        "requested": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2
+        },
+        "available": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_scenarios", "tools_agree", "tools_disagree", "not_comparable"],
+      "properties": {
+        "total_scenarios": { "type": "integer", "minimum": 0 },
+        "tools_agree": { "type": "integer", "minimum": 0 },
+        "tools_disagree": { "type": "integer", "minimum": 0 },
+        "not_comparable": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/scenario_comparison" }
+    }
+  },
+  "$defs": {
+    "scenario_comparison": {
+      "type": "object",
+      "required": [
+        "scenario_id",
+        "scenario_name",
+        "protocol_family",
+        "normalized_assumptions",
+        "expected_verdict",
+        "tool_results",
+        "tools_agree"
+      ],
+      "properties": {
+        "scenario_id": { "type": "string" },
+        "scenario_name": { "type": "string" },
+        "protocol_family": { "type": "string" },
+        "normalized_assumptions": { "$ref": "#/$defs/normalized_assumptions" },
+        "expected_verdict": {
+          "type": "string",
+          "enum": ["safe", "unsafe", "unknown"]
+        },
+        "tool_results": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/tool_result" }
+        },
+        "tools_agree": {
+          "type": ["boolean", "null"],
+          "description": "true if all tools with ok status produced the same verdict, null if fewer than 2 tools produced verdicts"
+        }
+      }
+    },
+    "normalized_assumptions": {
+      "type": "object",
+      "required": [
+        "fault_model",
+        "fault_bound",
+        "network_model",
+        "message_loss",
+        "property",
+        "expected_verdict"
+      ],
+      "properties": {
+        "fault_model": {
+          "type": "string",
+          "enum": ["byzantine", "crash", "unknown"],
+          "description": "Fault model assumed by all tools."
+        },
+        "fault_bound": {
+          "type": "string",
+          "description": "Resilience condition (e.g., 'n >= 3f+1')."
+        },
+        "network_model": {
+          "type": "string",
+          "enum": ["synchronous", "partially_synchronous", "asynchronous", "unknown"]
+        },
+        "message_loss": {
+          "type": "boolean"
+        },
+        "property": {
+          "type": "string",
+          "description": "Property being checked (e.g., 'agreement', 'validity')."
+        },
+        "property_description": {
+          "type": "string"
+        },
+        "expected_verdict": {
+          "type": "string"
+        }
+      }
+    },
+    "tool_result": {
+      "type": "object",
+      "required": ["status", "normalized_verdict", "elapsed_ms"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ok", "skip", "timeout", "error", "unavailable"]
+        },
+        "normalized_verdict": {
+          "type": "string",
+          "enum": ["safe", "unsafe", "timeout", "unknown", "error", "skip", "unavailable"],
+          "description": "Verdict normalized to a common vocabulary across all tools."
+        },
+        "elapsed_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "matches_expected": {
+          "type": ["boolean", "null"],
+          "description": "Whether the normalized verdict matches the expected verdict."
+        },
+        "raw_verdict": {
+          "type": "string",
+          "description": "Tool-native verdict string before normalization."
+        },
+        "reason": {
+          "type": "string"
+        },
+        "details": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

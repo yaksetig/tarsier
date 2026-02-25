@@ -2,14 +2,27 @@
 name = "tarsier-engine"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Verification engine with BMC, k-induction, PDR, and CEGAR"
 
 [dependencies]
-tarsier-dsl = { path = "../tarsier-dsl" }
-tarsier-ir = { path = "../tarsier-ir" }
-tarsier-smt = { path = "../tarsier-smt" }
-tarsier-prob = { path = "../tarsier-prob" }
+tarsier-dsl = { path = "../tarsier-dsl", version = "0.1.0" }
+tarsier-ir = { path = "../tarsier-ir", version = "0.1.0" }
+tarsier-smt = { path = "../tarsier-smt", version = "0.1.0" }
+tarsier-prob = { path = "../tarsier-prob", version = "0.1.0" }
 thiserror.workspace = true
 miette.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.10"
+
+[dev-dependencies]
+proptest = "1"
+criterion.workspace = true
+
+[[bench]]
+name = "engine_bench"
+harness = false

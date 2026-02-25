@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "protocol_name": "SimpleVote",
+  "params": [["n", 4], ["t", 1]],
+  "processes": [
+    {
+      "process_id": 0,
+      "role": "Process",
+      "events": [
+        {
+          "sequence": 0,
+          "kind": { "type": "Init", "location": "Process_waiting[decided=false,decision=false]" }
+        },
+        {
+          "sequence": 1,
+          "kind": { "type": "Receive", "message_type": "cnt_Vote@Process", "from_process": 1, "fields": [] }
+        },
+        {
+          "sequence": 2,
+          "kind": { "type": "Receive", "message_type": "cnt_Vote@Process", "from_process": 2, "fields": [] }
+        },
+        {
+          "sequence": 3,
+          "kind": {
+            "type": "Transition",
+            "from_location": "Process_waiting[decided=false,decision=false]",
+            "to_location": "Process_done[decided=true,decision=true]",
+            "rule_id": null
+          }
+        },
+        {
+          "sequence": 4,
+          "kind": { "type": "Decide", "value": "true" }
+        }
+      ]
+    },
+    {
+      "process_id": 1,
+      "role": "Process",
+      "events": [
+        {
+          "sequence": 0,
+          "kind": { "type": "Init", "location": "Process_waiting[decided=false,decision=false]" }
+        },
+        {
+          "sequence": 1,
+          "kind": { "type": "Receive", "message_type": "cnt_Vote@Process", "from_process": 0, "fields": [] }
+        },
+        {
+          "sequence": 2,
+          "kind": { "type": "Receive", "message_type": "cnt_Vote@Process", "from_process": 2, "fields": [] }
+        },
+        {
+          "sequence": 3,
+          "kind": {
+            "type": "Transition",
+            "from_location": "Process_waiting[decided=false,decision=false]",
+            "to_location": "Process_done[decided=true,decision=true]",
+            "rule_id": null
+          }
+        },
+        {
+          "sequence": 4,
+          "kind": { "type": "Decide", "value": "true" }
+        }
+      ]
+    },
+    {
+      "process_id": 2,
+      "role": "Process",
+      "events": [
+        {
+          "sequence": 0,
+          "kind": { "type": "Init", "location": "Process_waiting[decided=false,decision=false]" }
+        },
+        {
+          "sequence": 1,
+          "kind": {
+            "type": "Transition",
+            "from_location": "Process_waiting[decided=false,decision=false]",
+            "to_location": "Process_aborted[decided=false,decision=false]",
+            "rule_id": null
+          }
+        }
+      ]
+    }
+  ]
+}

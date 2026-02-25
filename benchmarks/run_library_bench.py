@@ -8,6 +8,7 @@ import datetime as dt
 import hashlib
 import json
 import math
+import platform
 import random
 import subprocess
 import sys
@@ -86,6 +87,12 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Number of timing samples per protocol (median is reported).",
     )
+    parser.add_argument(
+        "--max-protocols",
+        type=int,
+        default=0,
+        help="Optional cap on number of protocols (deterministic prefix order). 0 means all.",
+    )
     return parser.parse_args()
 
 
@@ -163,6 +170,85 @@ def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def command_version(cwd: Path, cmd: list[str]) -> str | None:
+    try:
+        proc = run(cmd, cwd)
+    except (OSError, ValueError):
+        return None
+    if proc.returncode != 0:
+        return None
+    output = proc.stdout.strip() or proc.stderr.strip()
+    if not output:
+        return None
+    return output.splitlines()[0].strip()
+
+
+def collect_environment_metadata(repo_root: Path) -> dict[str, Any]:
+    return {
+        "python_version": sys.version.splitlines()[0].strip(),
+        "platform": platform.platform(),
+        "rustc_version": command_version(repo_root, ["rustc", "--version"]),
+        "z3_version": command_version(repo_root, ["z3", "-version"]),
+        "cvc5_version": command_version(repo_root, ["cvc5", "--version"]),
+    }
+
+
+def compute_replay_plan_sha256(config: dict[str, Any], runs: list[dict[str, Any]]) -> str:
+    payload = {
+        "mode": config.get("mode"),
+        "solver": config.get("solver"),
+        "depth": config.get("depth"),
+        "k": config.get("k"),
+        "timeout_secs": config.get("timeout_secs"),
+        "samples": config.get("samples"),
+        "soundness": config.get("soundness"),
+        "fairness": config.get("fairness"),
+        "require_pass": config.get("require_pass"),
+        "require_expectations": config.get("require_expectations"),
+        "protocols": [
+            {
+                "protocol": run.get("protocol"),
+                "protocol_sha256": run.get("protocol_sha256"),
+                "manifest_file": run.get("manifest_file"),
+            }
+            for run in runs
+        ],
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def extract_run_replay_projection(run_entry: dict[str, Any]) -> dict[str, Any]:
+    report_obj = run_entry.get("report") if isinstance(run_entry, dict) else None
+    layers = extract_layer_results(report_obj if isinstance(report_obj, dict) else None)
+    return {
+        "protocol": run_entry.get("protocol"),
+        "manifest_file": run_entry.get("manifest_file"),
+        "protocol_sha256": run_entry.get("protocol_sha256"),
+        "overall": run_entry.get("overall"),
+        "ok": bool(run_entry.get("ok")),
+        "run_is_valid": bool(run_entry.get("run_is_valid")),
+        "effective_network": run_entry.get("effective_network"),
+        "expectations": run_entry.get("expectations", {}),
+        "json_parse_error": run_entry.get("json_parse_error"),
+        "layer_results": layers,
+    }
+
+
+def compute_replay_result_sha256(runs: list[dict[str, Any]]) -> str:
+    payload = [extract_run_replay_projection(run) for run in runs]
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def as_float_list(raw: Any) -> list[float]:
     if not isinstance(raw, list):
         return []
@@ -225,6 +311,41 @@ def bootstrap_median_delta_ci(
     alpha = 1.0 - conf
     low = quantile(deltas, alpha / 2.0)
     high = quantile(deltas, 1.0 - (alpha / 2.0))
+    return (low, high)
+
+
+def bootstrap_total_delta_ci(
+    protocol_sample_pairs: list[tuple[list[float], list[float]]],
+    confidence: float,
+    bootstrap_samples: int,
+    seed: int,
+) -> tuple[float, float]:
+    """Bootstrap CI for the total (sum-of-medians) delta across all protocols.
+
+    Each entry in *protocol_sample_pairs* is (current_samples, baseline_samples)
+    for one protocol.  On each bootstrap iteration we resample every protocol
+    independently, compute per-protocol median deltas, and sum them to get the
+    total delta.  The returned (low, high) is the CI on that total.
+    """
+    if not protocol_sample_pairs:
+        return (0.0, 0.0)
+    bootstrap_n = max(200, bootstrap_samples)
+    conf = min(max(confidence, 0.50), 0.999)
+    rng = random.Random(seed)
+    totals: list[float] = []
+    for _ in range(bootstrap_n):
+        total = 0.0
+        for current_samples, baseline_samples in protocol_sample_pairs:
+            c_len = len(current_samples)
+            b_len = len(baseline_samples)
+            c_draw = [current_samples[rng.randrange(c_len)] for _ in range(c_len)]
+            b_draw = [baseline_samples[rng.randrange(b_len)] for _ in range(b_len)]
+            total += median(c_draw) - median(b_draw)
+        totals.append(total)
+    totals.sort()
+    alpha = 1.0 - conf
+    low = quantile(totals, alpha / 2.0)
+    high = quantile(totals, 1.0 - (alpha / 2.0))
     return (low, high)
 
 
@@ -372,6 +493,7 @@ def evaluate_perf_budget(
     regressed_protocols: list[dict[str, Any]] = []
     stats_checked = 0
     stats_significant = 0
+    total_sample_pairs: list[tuple[list[float], list[float]]] = []
     for run in runs:
         protocol = str(run.get("protocol", ""))
         if not protocol or (
@@ -385,6 +507,9 @@ def evaluate_perf_budget(
         baseline_samples = as_float_list(baseline_protocol_samples.get(protocol))
         if not baseline_samples and protocol in baseline_protocol:
             baseline_samples = [float(baseline_protocol.get(protocol, 0.0) or 0.0)]
+
+        if current_samples and baseline_samples:
+            total_sample_pairs.append((current_samples, baseline_samples))
 
         current_ms = median(current_samples)
         baseline_ms = median(baseline_samples)
@@ -441,9 +566,38 @@ def evaluate_perf_budget(
     significant_protocol_regression = len(regressed_protocols) >= min_regressed_protocols
     total_delta_ms = current_total - baseline_total
     total_delta_pct = 0.0 if baseline_total <= 0.0 else (total_delta_ms / baseline_total) * 100.0
+
+    # Apply bootstrap CI to total regression when statistics are enabled and
+    # enough per-protocol sample pairs are available.
+    total_statistics_entry: dict[str, Any] = {"used": False, "significant": False}
     significant_total_regression = (
         total_delta_ms >= total_abs_ms and total_delta_pct >= total_pct
     )
+    total_eligible = all(
+        len(c) >= statistics_min_samples and len(b) >= statistics_min_samples
+        for c, b in total_sample_pairs
+    )
+    if statistics_enabled and total_sample_pairs and total_eligible:
+        total_ci_low, total_ci_high = bootstrap_total_delta_ci(
+            protocol_sample_pairs=total_sample_pairs,
+            confidence=statistics_confidence,
+            bootstrap_samples=statistics_bootstrap_samples,
+            seed=statistics_seed,
+        )
+        total_ci_low_pct = (
+            0.0 if baseline_total <= 0.0 else (total_ci_low / baseline_total) * 100.0
+        )
+        significant_total_regression = (
+            total_ci_low >= total_abs_ms and total_ci_low_pct >= total_pct
+        )
+        total_statistics_entry = {
+            "used": True,
+            "confidence": statistics_confidence,
+            "bootstrap_samples": statistics_bootstrap_samples,
+            "delta_ci_ms": [total_ci_low, total_ci_high],
+            "delta_ci_low_pct": total_ci_low_pct,
+            "significant": significant_total_regression,
+        }
 
     max_protocol_elapsed_ms = hard_limits.get("max_protocol_elapsed_ms")
     max_total_elapsed_ms = hard_limits.get("max_total_elapsed_ms")
@@ -517,8 +671,66 @@ def evaluate_perf_budget(
             "delta_ms": total_delta_ms,
             "delta_pct": total_delta_pct,
             "significant": significant_total_regression,
+            "statistics": total_statistics_entry,
         },
         "hard_limit_offenders": offenders,
+    }
+
+
+def evaluate_scale_bands(
+    runs: list[dict[str, Any]], perf_budget: dict[str, Any]
+) -> dict[str, Any]:
+    """Evaluate whether each protocol's observed timing falls within its expected scale band.
+
+    Returns a summary with pass/fail and per-protocol band checks.
+    """
+    scale_bands_cfg = perf_budget.get("scale_bands")
+    if not isinstance(scale_bands_cfg, dict):
+        return {"enabled": False}
+
+    bands = scale_bands_cfg.get("bands", {})
+    protocol_bands = scale_bands_cfg.get("protocol_bands", {})
+    if not isinstance(bands, dict) or not isinstance(protocol_bands, dict):
+        return {"enabled": False}
+
+    checks: list[dict[str, Any]] = []
+    violations = 0
+    for run_entry in runs:
+        protocol = str(run_entry.get("protocol", ""))
+        if protocol not in protocol_bands:
+            continue
+        band_name = protocol_bands[protocol]
+        band_def = bands.get(band_name)
+        if not isinstance(band_def, dict):
+            continue
+
+        current_samples = as_float_list(run_entry.get("samples_ms"))
+        if not current_samples:
+            current_samples = [float(run_entry.get("elapsed_ms", 0.0) or 0.0)]
+        observed_ms = median(current_samples)
+
+        band_min = float(band_def.get("min_ms", 0.0))
+        band_max = float(band_def.get("max_ms", float("inf")))
+        in_band = band_min <= observed_ms <= band_max
+
+        entry = {
+            "protocol": protocol,
+            "band": band_name,
+            "band_min_ms": band_min,
+            "band_max_ms": band_max,
+            "observed_ms": observed_ms,
+            "in_band": in_band,
+        }
+        if not in_band:
+            violations += 1
+        checks.append(entry)
+
+    return {
+        "enabled": True,
+        "passed": violations == 0,
+        "total_checked": len(checks),
+        "violations": violations,
+        "checks": checks,
     }
 
 
@@ -539,6 +751,11 @@ def main() -> int:
         manifest_file = (repo_root / args.manifest).resolve()
         protocol_entries = load_protocol_entries_from_manifest(repo_root, manifest_file)
         source_label = str(Path(args.manifest))
+
+    if args.max_protocols and args.max_protocols > 0:
+        protocol_entries = protocol_entries[: int(args.max_protocols)]
+    if not protocol_entries:
+        raise ValueError("No protocol entries selected for benchmark run.")
 
     if not args.skip_build:
         build = run(["cargo", "build", "-q", "-p", "tarsier-cli"], repo_root)
@@ -567,6 +784,7 @@ def main() -> int:
     for entry in protocol_entries:
         protocol = Path(entry["path"])
         rel_protocol = protocol.relative_to(repo_root).as_posix()
+        protocol_sha256 = sha256_file(protocol)
         sample_count = max(1, int(args.samples))
         sample_elapsed_ms: list[float] = []
         sample_exit_codes: list[int] = []
@@ -581,6 +799,7 @@ def main() -> int:
                 str(binary),
                 "analyze",
                 rel_protocol,
+                "--advanced",
                 "--mode",
                 args.mode,
                 "--solver",
@@ -662,14 +881,26 @@ def main() -> int:
         if sample_stderr:
             stderr_summary = "\n---\n".join(sample_stderr)
 
+        # Extract effective network mode from report abstractions
+        effective_network: str | None = None
+        try:
+            if report_obj and "abstractions" in report_obj:
+                lowerings = report_obj["abstractions"].get("lowerings", [])
+                if lowerings:
+                    effective_network = lowerings[0].get("effective_network")
+        except (KeyError, IndexError, TypeError):
+            pass
+
         runs.append(
             {
                 "protocol": rel_protocol,
                 "manifest_file": entry.get("file"),
+                "protocol_sha256": protocol_sha256,
                 "family": entry.get("family"),
                 "class": entry.get("class"),
                 "checks": entry.get("checks", []),
                 "mode": args.mode,
+                "effective_network": effective_network,
                 "exit_code": sample_exit_codes[0] if sample_exit_codes else 1,
                 "sample_exit_codes": sample_exit_codes,
                 "sample_overalls": sample_overalls,
@@ -710,27 +941,34 @@ def main() -> int:
 
     finished_utc = dt.datetime.now(dt.timezone.utc)
     perf_gate: dict[str, Any] = {"enabled": False, "passed": True, "reasons": []}
+    scale_band_gate: dict[str, Any] = {"enabled": False}
     if args.perf_budget:
         perf_budget_file = (repo_root / args.perf_budget).resolve()
         perf_budget = json.loads(perf_budget_file.read_text(encoding="utf-8"))
         perf_gate = evaluate_perf_budget(runs, perf_budget)
+        scale_band_gate = evaluate_scale_bands(runs, perf_budget)
 
+    config_obj: dict[str, Any] = {
+        "mode": args.mode,
+        "solver": args.solver,
+        "depth": args.depth,
+        "k": args.k,
+        "timeout_secs": args.timeout,
+        "samples": max(1, int(args.samples)),
+        "soundness": args.soundness,
+        "fairness": args.fairness,
+        "protocol_source": source_label,
+        "manifest_mode": not bool(args.protocols),
+        "require_pass": args.require_pass,
+        "require_expectations": args.require_expectations,
+        "max_protocols": int(args.max_protocols) if args.max_protocols else 0,
+    }
     report: dict[str, Any] = {
         "schema_version": 1,
         "started_at_utc": started_utc.isoformat(),
         "finished_at_utc": finished_utc.isoformat(),
-        "config": {
-            "mode": args.mode,
-            "solver": args.solver,
-            "depth": args.depth,
-            "k": args.k,
-            "timeout_secs": args.timeout,
-            "samples": max(1, int(args.samples)),
-            "soundness": args.soundness,
-            "fairness": args.fairness,
-            "protocol_source": source_label,
-            "manifest_mode": not bool(args.protocols),
-        },
+        "config": config_obj,
+        "environment": collect_environment_metadata(repo_root),
         "summary": {
             "total": len(runs),
             "ok": ok_count,
@@ -743,6 +981,39 @@ def main() -> int:
             "by_class": class_summary,
         },
         "performance_gate": perf_gate,
+        "scale_band_gate": scale_band_gate,
+        "replay": {
+            "harness": "benchmarks/replay_library_bench.py",
+            "plan_sha256": compute_replay_plan_sha256(config_obj, runs),
+            "result_sha256": compute_replay_result_sha256(runs),
+            "deterministic_fields": [
+                "config.mode",
+                "config.solver",
+                "config.depth",
+                "config.k",
+                "config.timeout_secs",
+                "config.samples",
+                "config.soundness",
+                "config.fairness",
+                "config.require_pass",
+                "config.require_expectations",
+                "runs[].protocol",
+                "runs[].protocol_sha256",
+                "runs[].overall",
+                "runs[].ok",
+                "runs[].run_is_valid",
+                "runs[].effective_network",
+                "runs[].expectations",
+                "runs[].report.layers[].details.result",
+            ],
+            "nondeterministic_fields": [
+                "started_at_utc",
+                "finished_at_utc",
+                "runs[].elapsed_ms",
+                "runs[].samples_ms",
+                "runs[].stderr",
+            ],
+        },
         "runs": runs,
     }
 
@@ -762,7 +1033,23 @@ def main() -> int:
         )
         for reason in perf_gate.get("reasons", []):
             print(f"  - {reason}")
-    all_passed = ok_count == len(runs) and bool(perf_gate.get("passed", True))
+    if scale_band_gate.get("enabled"):
+        print(
+            f"Scale band gate: {'PASS' if scale_band_gate.get('passed') else 'FAIL'} "
+            f"({scale_band_gate.get('total_checked', 0)} checked, "
+            f"{scale_band_gate.get('violations', 0)} violations)"
+        )
+        for check in scale_band_gate.get("checks", []):
+            if not check.get("in_band"):
+                print(
+                    f"  - {check['protocol']}: observed {check['observed_ms']:.1f} ms "
+                    f"outside band '{check['band']}' [{check['band_min_ms']}-{check['band_max_ms']} ms]"
+                )
+    all_passed = (
+        ok_count == len(runs)
+        and bool(perf_gate.get("passed", True))
+        and bool(scale_band_gate.get("passed", True))
+    )
     return 0 if all_passed else 2
 
 

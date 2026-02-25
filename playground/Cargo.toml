@@ -3,18 +3,24 @@ name = "tarsier-playground"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Web-based playground for interactive protocol verification"
+publish = false
 
 [dependencies]
 axum = { version = "0.7", features = ["json"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "sync", "process", "io-util"] }
+tower-http = { version = "0.6", features = ["cors", "limit", "trace"] }
+tower = { version = "0.5", features = ["util"] }
+subtle = "2"
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-tarsier-engine = { path = "../crates/tarsier-engine" }
-tarsier-dsl = { path = "../crates/tarsier-dsl" }
-tarsier-ir = { path = "../crates/tarsier-ir" }
+tarsier-engine = { path = "../crates/tarsier-engine", version = "0.1.0" }
+tarsier-dsl = { path = "../crates/tarsier-dsl", version = "0.1.0", features = ["serialize"] }
+tarsier-ir = { path = "../crates/tarsier-ir", version = "0.1.0" }
 
 [dev-dependencies]
-tower = { version = "0.4", features = ["util"] }
 http-body-util = "0.1"

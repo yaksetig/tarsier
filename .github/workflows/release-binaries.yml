@@ -1,0 +1,332 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+            cross: false
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-13
+            cross: false
+          - target: aarch64-apple-darwin
+            os: macos-14
+            cross: false
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (aarch64 Linux)
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Build release binaries
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.cross && 'aarch64-linux-gnu-gcc' || '' }}
+          CC_aarch64_unknown_linux_gnu: ${{ matrix.cross && 'aarch64-linux-gnu-gcc' || '' }}
+          CXX_aarch64_unknown_linux_gnu: ${{ matrix.cross && 'aarch64-linux-gnu-g++' || '' }}
+        run: |
+          cargo build --release --target ${{ matrix.target }} -p tarsier-cli -p tarsier-certcheck
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          TARGET=${{ matrix.target }}
+          STAGING="tarsier-${TARGET}"
+          mkdir -p "${STAGING}"
+          cp "target/${TARGET}/release/tarsier" "${STAGING}/" 2>/dev/null || true
+          cp "target/${TARGET}/release/tarsier-certcheck" "${STAGING}/" 2>/dev/null || true
+          # Windows would have .exe suffix
+          cp "target/${TARGET}/release/tarsier.exe" "${STAGING}/" 2>/dev/null || true
+          cp "target/${TARGET}/release/tarsier-certcheck.exe" "${STAGING}/" 2>/dev/null || true
+          tar czf "tarsier-${TARGET}.tar.gz" "${STAGING}"
+          shasum -a 256 "tarsier-${TARGET}.tar.gz" > "tarsier-${TARGET}.tar.gz.sha256"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign artifact with Cosign (keyless)
+        run: |
+          cosign sign-blob \
+            --yes \
+            --output-signature "tarsier-${{ matrix.target }}.tar.gz.sig" \
+            --output-certificate "tarsier-${{ matrix.target }}.tar.gz.pem" \
+            "tarsier-${{ matrix.target }}.tar.gz"
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          artifact-name: "tarsier-${{ matrix.target }}.sbom.spdx.json"
+          output-file: "tarsier-${{ matrix.target }}.sbom.spdx.json"
+          format: spdx-json
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "tarsier-${{ matrix.target }}.tar.gz"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarsier-${{ matrix.target }}
+          path: |
+            tarsier-${{ matrix.target }}.tar.gz
+            tarsier-${{ matrix.target }}.tar.gz.sha256
+            tarsier-${{ matrix.target }}.tar.gz.sig
+            tarsier-${{ matrix.target }}.tar.gz.pem
+            tarsier-${{ matrix.target }}.sbom.spdx.json
+
+  verify:
+    needs: [build, certification]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify all signatures
+        run: |
+          set -euo pipefail
+          failed=0
+          for tarball in artifacts/*.tar.gz; do
+            base="$(basename "${tarball}")"
+            sig="artifacts/${base}.sig"
+            cert="artifacts/${base}.pem"
+            if [ ! -f "${sig}" ] || [ ! -f "${cert}" ]; then
+              echo "ERROR: missing signature or certificate for ${base}"
+              failed=1
+              continue
+            fi
+            echo "Verifying signature for ${base}..."
+            if ! cosign verify-blob \
+              --signature "${sig}" \
+              --certificate "${cert}" \
+              --certificate-identity-regexp "github\\.com" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${tarball}"; then
+              echo "ERROR: signature verification failed for ${base}"
+              failed=1
+            else
+              echo "OK: ${base} signature verified"
+            fi
+          done
+          if [ "${failed}" -ne 0 ]; then
+            echo "ERROR: one or more signature verifications failed"
+            exit 1
+          fi
+          echo "All artifact signatures verified successfully"
+
+      - name: Verify trust report signature
+        run: |
+          set -euo pipefail
+          tr="artifacts/trust-report.json"
+          sig="artifacts/trust-report.json.sig"
+          cert="artifacts/trust-report.json.pem"
+          if [ ! -f "${tr}" ]; then
+            echo "ERROR: trust-report.json not found in artifacts"
+            exit 1
+          fi
+          if [ ! -f "${sig}" ] || [ ! -f "${cert}" ]; then
+            echo "ERROR: missing signature or certificate for trust-report.json"
+            exit 1
+          fi
+          echo "Verifying trust-report.json signature..."
+          cosign verify-blob \
+            --signature "${sig}" \
+            --certificate "${cert}" \
+            --certificate-identity-regexp "github\\.com" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${tr}"
+          echo "OK: trust-report.json signature verified"
+
+      - name: Verify all checksums
+        run: |
+          set -euo pipefail
+          cd artifacts
+          failed=0
+          for sha_file in *.sha256; do
+            echo "Verifying checksum: ${sha_file}..."
+            if ! shasum -a 256 -c "${sha_file}"; then
+              echo "ERROR: checksum verification failed for ${sha_file}"
+              failed=1
+            fi
+          done
+          if [ "${failed}" -ne 0 ]; then
+            echo "ERROR: one or more checksum verifications failed"
+            exit 1
+          fi
+          echo "All checksums verified"
+
+      - name: Verify SBOMs present
+        run: |
+          set -euo pipefail
+          for tarball in artifacts/*.tar.gz; do
+            base="$(basename "${tarball}" .tar.gz)"
+            sbom="artifacts/${base}.sbom.spdx.json"
+            if [ ! -f "${sbom}" ]; then
+              echo "ERROR: missing SBOM for ${base}"
+              exit 1
+            fi
+            # Basic structural validation
+            if ! python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert 'spdxVersion' in d, 'not a valid SPDX document'" "${sbom}"; then
+              echo "ERROR: SBOM for ${base} is not a valid SPDX document"
+              exit 1
+            fi
+            echo "OK: SBOM present and valid for ${base}"
+          done
+
+      - name: Verify attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          failed=0
+          for tarball in artifacts/*.tar.gz; do
+            base="$(basename "${tarball}")"
+            echo "Verifying attestation for ${base}..."
+            if ! gh attestation verify "${tarball}" \
+              --repo "${{ github.repository }}"; then
+              echo "ERROR: attestation verification failed for ${base}"
+              failed=1
+            else
+              echo "OK: ${base} attestation verified"
+            fi
+          done
+          if [ "${failed}" -ne 0 ]; then
+            echo "ERROR: one or more attestation verifications failed"
+            exit 1
+          fi
+          echo "All attestations verified successfully"
+
+  certification:
+    uses: ./.github/workflows/release-certification.yml
+    permissions:
+      contents: read
+      id-token: write
+
+  release:
+    needs: [build, verify, certification]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.sha256
+            artifacts/*.sig
+            artifacts/*.pem
+            artifacts/*.sbom.spdx.json
+            artifacts/trust-report.json
+          generate_release_notes: true
+
+  update-formula:
+    needs: [release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Update Homebrew formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          sha_aarch64_darwin=$(awk '{print $1}' artifacts/tarsier-aarch64-apple-darwin.tar.gz.sha256)
+          sha_x86_64_darwin=$(awk '{print $1}' artifacts/tarsier-x86_64-apple-darwin.tar.gz.sha256)
+          sha_aarch64_linux=$(awk '{print $1}' artifacts/tarsier-aarch64-unknown-linux-gnu.tar.gz.sha256)
+          sha_x86_64_linux=$(awk '{print $1}' artifacts/tarsier-x86_64-unknown-linux-gnu.tar.gz.sha256)
+
+          python3 .github/scripts/update_formula.py \
+            "${VERSION}" \
+            "${sha_aarch64_darwin}" \
+            "${sha_x86_64_darwin}" \
+            "${sha_aarch64_linux}" \
+            "${sha_x86_64_linux}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/tarsier.rb
+          git diff --cached --quiet || git commit -m "chore: update Homebrew formula for v${VERSION}"
+          git push
+
+  docker:
+    needs: [release]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}:latest

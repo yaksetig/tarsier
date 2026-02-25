@@ -9,7 +9,9 @@ protocol_decl = {
 }
 
 protocol_item = _{
-    enum_decl
+    import_decl
+    | module_decl
+    | enum_decl
     | parameters_decl
     | resilience_decl
     | pacemaker_decl
@@ -22,6 +24,40 @@ protocol_item = _{
     | crypto_object_decl
     | role_decl
     | property_decl
+}
+
+// --- Import declarations ---
+import_decl = {
+    "import" ~ ident ~ "from" ~ string_literal ~ ";"
+}
+
+string_literal = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+// --- Module declarations ---
+module_decl = {
+    "module" ~ ident ~ "{" ~
+        module_interface? ~
+        protocol_item* ~
+    "}"
+}
+
+module_interface = {
+    "interface" ~ "{" ~
+        interface_item* ~
+    "}"
+}
+
+interface_item = _{
+    assumes_clause
+    | guarantees_clause
+}
+
+assumes_clause = {
+    "assumes" ~ ":" ~ linear_expr ~ cmp_op ~ linear_expr ~ ";"
+}
+
+guarantees_clause = {
+    "guarantees" ~ ":" ~ property_kind ~ ident ~ ";"
 }
 
 // --- Enums ---

@@ -35,11 +35,16 @@ const tabs = Array.from(document.querySelectorAll(".tab"));
 const panes = Array.from(document.querySelectorAll(".pane"));
 const advancedControls = Array.from(document.querySelectorAll(".advanced-control"));
 
+const modeTextBtn = document.getElementById("mode-text-btn");
+const modeVisualBtn = document.getElementById("mode-visual-btn");
+const visualEditorContainer = document.getElementById("visual-editor-container");
+
 let latestRunPayload = null;
 let latestRunRequest = null;
 let latestLintIssues = [];
 
 let examples = [];
+let isVisualMode = false;
 
 init().catch((error) => {
   console.error(error);
@@ -57,6 +62,9 @@ async function init() {
 }
 
 function wireEvents() {
+  modeTextBtn.addEventListener("click", () => switchToTextMode());
+  modeVisualBtn.addEventListener("click", () => switchToVisualMode());
+
   checkSelect.addEventListener("change", updateControlVisibility);
   workflowSelect.addEventListener("change", () => {
     applyWorkflowPreset(workflowSelect.value || "standard", true);
@@ -243,6 +251,11 @@ async function loadExamples() {
 }
 
 async function runLint() {
+  // Sync visual model to text before linting
+  if (isVisualMode && currentModel) {
+    editor.value = generateTRS(currentModel);
+  }
+
   const source = editor.value;
   if (!source.trim()) {
     setSummary("Protocol source is empty.", "fail");
@@ -294,6 +307,11 @@ async function runLint() {
 }
 
 async function runAnalysis() {
+  // Sync visual model to text before running
+  if (isVisualMode && currentModel) {
+    editor.value = generateTRS(currentModel);
+  }
+
   const source = editor.value;
   if (!source.trim()) {
     setSummary("Protocol source is empty.", "fail");
@@ -313,14 +331,21 @@ async function runAnalysis() {
   };
 
   runBtn.disabled = true;
-  runMeta.textContent = "Running...";
+  runMeta.textContent = "Running... 0s";
+  runMeta.style.color = "#4ec5ff";
   clearResult();
   latestRunPayload = null;
   latestRunRequest = null;
   updateExportButtons();
 
+  const startedAt = performance.now();
+  const tickInterval = setInterval(() => {
+    const elapsed = Math.round((performance.now() - startedAt) / 1000);
+    const checkLabel = request.check.replace("-", " ");
+    runMeta.textContent = `Running ${checkLabel}... ${elapsed}s`;
+  }, 500);
+
   try {
-    const startedAt = performance.now();
     const response = await fetch("/api/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -329,12 +354,15 @@ async function runAnalysis() {
     const payload = await response.json();
     const elapsedMs = Math.round(performance.now() - startedAt);
 
-    if (!response.ok || payload.ok === false) {
+    clearInterval(tickInterval);
+
+    if (!response.ok || (payload.ok === false && payload.error)) {
       const message = payload.error || "analysis failed";
       throw new Error(message);
     }
 
-    runMeta.textContent = `${payload.result} in ${elapsedMs}ms`;
+    const elapsedLabel = elapsedMs < 1000 ? `${elapsedMs}ms` : `${(elapsedMs / 1000).toFixed(1)}s`;
+    runMeta.textContent = `${payload.result} in ${elapsedLabel}`;
     runMeta.style.color = payload.ok ? "#3ad29f" : "#f0b565";
     setSummary(payload.summary, classifyResult(payload.result));
     latestRunPayload = payload;
@@ -346,6 +374,7 @@ async function runAnalysis() {
     renderCti(payload.cti);
     updateExportButtons();
   } catch (error) {
+    clearInterval(tickInterval);
     runMeta.textContent = "Error";
     runMeta.style.color = "#ff7b78";
     setSummary(error.message || "analysis failed", "fail");
@@ -446,6 +475,110 @@ function renderTrace(trace, mermaidSrc, timelineSrc) {
   params.textContent = paramLines ? `Parameters:\n${paramLines}` : "Parameters: (none)";
   wrapper.appendChild(params);
 
+  function payloadFieldPairs(payload) {
+    if (!payload || payload.fields == null) {
+      return [];
+    }
+    const fields = payload.fields;
+    if (Array.isArray(fields)) {
+      return fields
+        .filter((entry) => Array.isArray(entry) && entry.length >= 2)
+        .map((entry) => [String(entry[0]), String(entry[1])]);
+    }
+    if (typeof fields === "object") {
+      return Object.entries(fields).map(([k, v]) => [String(k), String(v)]);
+    }
+    return [];
+  }
+
+  function authFilterTokens(auth) {
+    const out = [];
+    if (!auth || typeof auth !== "object") {
+      return out;
+    }
+    out.push(auth.authenticated_channel ? "authenticated" : "unauthenticated");
+    out.push(auth.key_compromised ? "compromised" : "uncompromised");
+    if (auth.provenance && auth.provenance !== "None") {
+      out.push(`provenance:${auth.provenance}`);
+    }
+    return out;
+  }
+
+  // Collect unique filter values from all deliveries
+  const allDeliveries = (trace.steps || []).flatMap((s) => s.deliveries || []);
+  const senderRoles = [...new Set(allDeliveries.map((d) => d.sender.role).filter(Boolean))].sort();
+  const recipientRoles = [...new Set(allDeliveries.map((d) => d.recipient.role).filter(Boolean))].sort();
+  const messageFamilies = [...new Set(allDeliveries.map((d) => d.payload.family).filter(Boolean))].sort();
+  const deliveryKinds = [...new Set(allDeliveries.map((d) => d.kind).filter(Boolean))].sort();
+  const payloadVariants = [
+    ...new Set(allDeliveries.map((d) => d.payload?.variant).filter((v) => typeof v === "string" && v.length > 0)),
+  ].sort();
+  const payloadFields = [
+    ...new Set(
+      allDeliveries.flatMap((d) =>
+        payloadFieldPairs(d.payload).map(([k, v]) => `${k}=${v}`)
+      )
+    ),
+  ].sort();
+  const authFilters = [...new Set(allDeliveries.flatMap((d) => authFilterTokens(d.auth)))].sort();
+
+  // Build filter bar
+  const filterBar = document.createElement("div");
+  filterBar.className = "trace-filter-bar";
+  filterBar.style.display = "flex";
+  filterBar.style.gap = "8px";
+  filterBar.style.flexWrap = "wrap";
+  filterBar.style.marginBottom = "8px";
+  filterBar.style.alignItems = "center";
+
+  function makeFilterSelect(label, options) {
+    const wrap = document.createElement("label");
+    wrap.style.color = "#9cb9cb";
+    wrap.style.fontSize = "11px";
+    wrap.style.display = "flex";
+    wrap.style.alignItems = "center";
+    wrap.style.gap = "4px";
+    wrap.textContent = label;
+    const sel = document.createElement("select");
+    sel.style.fontSize = "11px";
+    sel.style.background = "#1e2b33";
+    sel.style.color = "#c8d8e0";
+    sel.style.border = "1px solid #3a4a52";
+    sel.style.borderRadius = "3px";
+    sel.style.padding = "2px 4px";
+    const allOpt = document.createElement("option");
+    allOpt.value = "";
+    allOpt.textContent = "All";
+    sel.appendChild(allOpt);
+    for (const opt of options) {
+      const o = document.createElement("option");
+      o.value = opt;
+      o.textContent = opt;
+      sel.appendChild(o);
+    }
+    wrap.appendChild(sel);
+    return { wrap, sel };
+  }
+
+  const senderFilter = makeFilterSelect("Sender:", senderRoles);
+  const recipientFilter = makeFilterSelect("Recipient:", recipientRoles);
+  const messageFilter = makeFilterSelect("Message:", messageFamilies);
+  const kindFilter = makeFilterSelect("Kind:", deliveryKinds);
+  const variantFilter = makeFilterSelect("Variant:", payloadVariants);
+  const fieldFilter = makeFilterSelect("Field:", payloadFields);
+  const authFilter = makeFilterSelect("Auth:", authFilters);
+
+  if (allDeliveries.length > 0) {
+    filterBar.appendChild(senderFilter.wrap);
+    filterBar.appendChild(recipientFilter.wrap);
+    filterBar.appendChild(messageFilter.wrap);
+    filterBar.appendChild(kindFilter.wrap);
+    filterBar.appendChild(variantFilter.wrap);
+    filterBar.appendChild(fieldFilter.wrap);
+    filterBar.appendChild(authFilter.wrap);
+  }
+  wrapper.appendChild(filterBar);
+
   const replay = document.createElement("div");
   replay.className = "trace-replay";
   const slider = document.createElement("input");
@@ -498,6 +631,50 @@ function renderTrace(trace, mermaidSrc, timelineSrc) {
   wrapper.appendChild(table);
   traceView.appendChild(wrapper);
 
+  function matchesFilters(delivery) {
+    const sf = senderFilter.sel.value;
+    const rf = recipientFilter.sel.value;
+    const mf = messageFilter.sel.value;
+    const kf = kindFilter.sel.value;
+    const vf = variantFilter.sel.value;
+    const ff = fieldFilter.sel.value;
+    const af = authFilter.sel.value;
+    if (sf && delivery.sender.role !== sf) return false;
+    if (rf && delivery.recipient.role !== rf) return false;
+    if (mf && delivery.payload.family !== mf) return false;
+    if (kf && delivery.kind !== kf) return false;
+    if (vf && delivery.payload?.variant !== vf) return false;
+    if (ff) {
+      const hasField = payloadFieldPairs(delivery.payload).some(([k, v]) => `${k}=${v}` === ff);
+      if (!hasField) return false;
+    }
+    if (af) {
+      const tokens = authFilterTokens(delivery.auth);
+      if (!tokens.includes(af)) return false;
+    }
+    return true;
+  }
+
+  function formatDeliveryLines(deliveries) {
+    if (!deliveries || deliveries.length === 0) return [];
+    const filtered = deliveries.filter(matchesFilters);
+    const hidden = deliveries.length - filtered.length;
+    const lines = [];
+    for (const d of filtered) {
+      lines.push(`  ${d.kind}: ${d.sender.role} -> ${d.recipient.role} [${d.payload.family}] x${d.count}`);
+      const fieldPairs = payloadFieldPairs(d.payload);
+      if (fieldPairs.length > 0) {
+        lines.push(`    fields: ${fieldPairs.map(([k, v]) => `${k}=${v}`).join(", ")}`);
+      }
+      if (d.payload.variant) lines.push(`    variant: ${d.payload.variant}`);
+      if (d.auth && d.auth.provenance && d.auth.provenance !== "None") {
+        lines.push(`    auth: ${d.auth.provenance}${d.auth.key_compromised ? " (COMPROMISED)" : ""}`);
+      }
+    }
+    if (hidden > 0) lines.push(`  (${hidden} delivery(s) hidden by filters)`);
+    return lines;
+  }
+
   function updateReplay() {
     const stepIndex = Number(slider.value);
     const stepCount = (trace.steps || []).length;
@@ -524,14 +701,23 @@ function renderTrace(trace, mermaidSrc, timelineSrc) {
       return;
     }
     label.textContent = `State at step ${stepIndex} (after r${step.rule_id}, delta=${step.delta})`;
+    const deliveryLines = formatDeliveryLines(step.deliveries);
     stateCard.textContent = [
       `After rule r${step.rule_id}, delta=${step.delta}`,
       `kappa = ${formatArray(step.kappa || [])}`,
       `gamma = ${formatArray(step.gamma || [])}`,
+      ...(deliveryLines.length > 0 ? ["Deliveries:", ...deliveryLines] : []),
     ].join("\n");
   }
 
   slider.addEventListener("input", updateReplay);
+  senderFilter.sel.addEventListener("change", updateReplay);
+  recipientFilter.sel.addEventListener("change", updateReplay);
+  messageFilter.sel.addEventListener("change", updateReplay);
+  kindFilter.sel.addEventListener("change", updateReplay);
+  variantFilter.sel.addEventListener("change", updateReplay);
+  fieldFilter.sel.addEventListener("change", updateReplay);
+  authFilter.sel.addEventListener("change", updateReplay);
   updateReplay();
 
   // Render mermaid diagrams after DOM insert
@@ -717,6 +903,18 @@ function renderLint(issues) {
     if (issue.suggestion) {
       lines.push(`    suggestion: ${issue.suggestion}`);
     }
+    if (issue.soundness_impact) {
+      lines.push(`    soundness impact: ${issue.soundness_impact}`);
+    }
+    if (issue.fix) {
+      const fix = issue.fix;
+      lines.push(
+        `    fix (${fix.label || "snippet"}): ${(fix.snippet || "").replace(/\n/g, "\n      ")}`
+      );
+      if (typeof fix.insert_offset === "number") {
+        lines.push(`      insert_offset: ${fix.insert_offset}`);
+      }
+    }
   }
   return lines.join("\n");
 }
@@ -750,4 +948,74 @@ function normalizeEditor(source) {
     .map((line) => line.replace(/\s+$/g, ""))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n");
+}
+
+// --- Mode switching ---
+
+async function switchToVisualMode() {
+  if (isVisualMode) return;
+
+  const source = editor.value.trim();
+  if (!source) {
+    setSummary("Protocol source is empty.", "fail");
+    return;
+  }
+
+  modeVisualBtn.disabled = true;
+  runMeta.textContent = "Parsing...";
+  runMeta.style.color = "#4ec5ff";
+
+  try {
+    const response = await fetch("/api/parse", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source, filename: `${exampleSelect.value || "playground"}.trs` }),
+    });
+    const payload = await response.json();
+
+    if (!response.ok || payload.ok === false) {
+      throw new Error(payload.error || "parse failed");
+    }
+
+    const model = VisualProtocolModel.fromAST(payload.ast);
+
+    isVisualMode = true;
+    editor.style.display = "none";
+    visualEditorContainer.classList.add("active");
+    modeTextBtn.classList.remove("active");
+    modeVisualBtn.classList.add("active");
+
+    // Initialize visual editor if needed
+    if (!cy) initVisualEditor();
+    loadModelIntoVisualEditor(model);
+
+    runMeta.textContent = "Visual mode";
+    runMeta.style.color = "#3ad29f";
+    setSummary("Switched to visual mode.", "ok");
+  } catch (error) {
+    runMeta.textContent = "Parse error";
+    runMeta.style.color = "#ff7b78";
+    setSummary("Parse error: " + (error.message || "failed to parse"), "fail");
+  } finally {
+    modeVisualBtn.disabled = false;
+  }
+}
+
+function switchToTextMode() {
+  if (!isVisualMode) return;
+
+  // Sync visual model back to text
+  if (currentModel) {
+    editor.value = generateTRS(currentModel);
+  }
+
+  isVisualMode = false;
+  editor.style.display = "";
+  visualEditorContainer.classList.remove("active");
+  modeTextBtn.classList.add("active");
+  modeVisualBtn.classList.remove("active");
+
+  runMeta.textContent = "Text mode";
+  runMeta.style.color = "#3ad29f";
+  setSummary("Switched to text mode.", "ok");
 }

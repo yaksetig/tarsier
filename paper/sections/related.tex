@@ -1,0 +1,104 @@
+\section{Related Work}\label{sec:related}
+
+\paragraph{Threshold automata and counter abstraction.}
+Threshold automata were introduced by Konnov, Veith, and
+Widder~\cite{KonnovVW2015} as a framework for parameterized verification of
+fault-tolerant distributed algorithms.  The short counterexample
+property~\cite{KonnovLVW2017} established that safety violations in threshold
+automata can always be witnessed within a bounded number of steps, enabling
+BMC-based verification.  The ByMC tool~\cite{ByMC2017, KonnovWidder2018}
+implemented this approach with path reduction and acceleration, demonstrating
+practical verification of simplified BFT protocols.  Bertrand
+et~al.~\cite{BertrandKLW2021} extended the approach with decomposition
+techniques for compositional verification.
+
+\tarsier{} builds on this foundation but addresses three limitations of prior
+threshold-automata tools.  First, classical counter abstraction merges all
+processes in the same location, losing per-process delivery semantics;
+\tarsier{}'s network mode hierarchy (Sect.~\ref{sec:semantics}) provides
+progressively faithful abstractions with formally characterized soundness
+transfer.  Second, ByMC provides no first-class support for quorum
+certificates or threshold signatures; \tarsier{}'s cryptographic object
+declarations (Sect.~\ref{sec:crypto}) encode non-forgeability and signer-set
+constraints directly in SMT.  Third, ByMC requires trusting the entire
+toolchain; \tarsier{}'s proof certificates (Sect.~\ref{sec:certificates}) and
+minimal proof kernel reduce the trusted computing base to four library
+dependencies.
+
+\paragraph{Explicit-state model checking.}
+SPIN~\cite{Holzmann2003} verifies Promela models via explicit-state
+enumeration with partial-order reduction.  TLC, the model checker for
+TLA+~\cite{LamportTLA2002}, explores finite instantiations of temporal-logic
+specifications.  Both tools require fixing the number of processes $n$ before
+verification, yielding results that are inherently bounded: verifying for
+$n{=}4$ says nothing about $n{=}100$.  \tarsier{} keeps $n$, $t$, and $f$
+symbolic throughout, producing proofs that hold for all instantiations
+satisfying the resilience condition.  On the other hand, SPIN and TLA+ can
+model richer state spaces (arbitrary data types, unbounded message buffers)
+that fall outside the threshold-automata fragment.
+
+\paragraph{Interactive and semi-automatic verification.}
+Ivy~\cite{PadonMPSS2016} combines first-order logic with interactive
+generalization to verify safety properties of distributed protocols.
+I4~\cite{MaGJKKS2019} automates invariant inference via incremental
+learning from counterexamples.  Both tools handle general-purpose distributed
+protocols but require significant user guidance to discover inductive
+invariants.  In contrast, \tarsier{} targets the restricted class of
+threshold-guarded protocols, where the short counterexample property enables
+fully automatic BMC and $k$-induction without user-supplied invariants.
+This restriction is a deliberate trade-off: the class is expressive enough
+to capture the core safety arguments of PBFT, HotStuff, Tendermint, Paxos,
+and Algorand, while remaining decidable for automated solvers.
+
+\paragraph{SMT-based model checking.}
+Bounded model checking (BMC) via SAT was introduced by Biere
+et~al.~\cite{BiereCCSZ1999}; the extension to SMT theories enables
+reasoning about integers, arrays, and uninterpreted functions.
+$k$-Induction~\cite{SheehySSS2000} extends BMC to unbounded proofs by
+combining a base case with an inductive step.
+Property-directed reachability (PDR/IC3)~\cite{Bradley2011} discovers
+inductive invariants incrementally by generalizing from counterexamples to
+induction.  \tarsier{} implements all three strategies (BMC,
+$k$-induction, PDR) together with CEGAR~\cite{ClarkeGJLV2000} and
+portfolio solving across Z3~\cite{DeMoura2008} and
+cvc5~\cite{BarbosaBBKLMMMN2022}.
+
+\paragraph{Partial-order and symmetry reduction.}
+Static partial-order reduction (POR)~\cite{Peled1993, Godefroid1996} prunes
+interleavings of independent transitions.  \tarsier{} adapts POR to the
+counter-abstraction setting, where independence is determined by disjoint
+source/target locations and absence of shared-variable conflicts.  Symmetry
+reduction exploits parameter permutations in PDR cubes to prune redundant
+candidates.
+
+\paragraph{Proof-carrying verification.}
+The proof-carrying code paradigm~\cite{Necula1997} separates proof
+\emph{generation} from proof \emph{validation}, enabling a small, trusted
+checker to verify proofs produced by a complex, untrusted compiler.
+\tarsier{} applies this paradigm to model checking: the verification engine
+generates proof certificates containing SMT obligations, which are
+independently validated by a minimal proof kernel and optionally replayed
+against multiple solvers.  The Carcara proof checker~\cite{Carcara2023}
+validates solver proof objects in the Alethe format, providing an additional
+layer of assurance.
+
+\paragraph{Protocol-specific verification.}
+Several works verify specific BFT protocols rather than providing a
+general-purpose framework.  Notable examples include
+Bracha's reliable broadcast~\cite{Bracha1987}, which we use as a running
+example, and verification efforts targeting
+PBFT~\cite{CastroLiskov1999}, HotStuff~\cite{YinMGRGA2019}, and
+Tendermint~\cite{BuchmanKM2018}.  \tarsier{}'s DSL captures the common
+structure of these protocols---roles, phases, threshold guards, and
+adversary models---in a single framework amenable to automated analysis.
+
+\paragraph{Probabilistic committee analysis.}
+Algorand~\cite{GiladHMVZ2017, Micali2017} uses cryptographic sortition
+to select random committees, where safety depends on the probability that a
+committee contains too many Byzantine members.  \tarsier{} computes this
+probability exactly using hypergeometric distributions with
+arbitrary-precision rational arithmetic, determining the maximum adversary
+bound $b_{\max}$ such that the corruption probability remains below a target
+$\varepsilon$.  This bound is then injected into the SMT encoding, yielding
+a \emph{probabilistically safe} verdict with a quantified failure
+probability.

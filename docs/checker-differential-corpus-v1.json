@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "description": "Differential checker corpus comparing tarsier-cli check-certificate (legacy path) vs tarsier-certcheck (tiny checker).",
+  "cases": [
+    {
+      "id": "safety_valid_kinduction",
+      "fixture": "valid_kinduction",
+      "options": []
+    },
+    {
+      "id": "safety_tampered_obligation_hash",
+      "fixture": "tampered_kinduction_obligation",
+      "options": []
+    },
+    {
+      "id": "fair_liveness_valid_pdr",
+      "fixture": "valid_fair_liveness",
+      "options": []
+    },
+    {
+      "id": "fair_liveness_missing_required_obligation",
+      "fixture": "invalid_fair_missing_obligation",
+      "options": []
+    }
+  ]
+}

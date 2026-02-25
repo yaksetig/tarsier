@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/analysis-report-v1.json",
+  "title": "Tarsier Analysis Report",
+  "description": "Schema for the JSON output of `tarsier analyze`. schema_version was previously integer 1, now string 'v1'.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "mode",
+    "file",
+    "config",
+    "network_faithfulness",
+    "layers",
+    "overall",
+    "overall_verdict"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "v1",
+      "description": "Report schema version. Was previously integer 1, now string 'v1'."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["quick", "standard", "proof", "audit"],
+      "description": "Analysis mode used."
+    },
+    "file": {
+      "type": "string",
+      "description": "Path to the analyzed protocol file."
+    },
+    "config": {
+      "type": "object",
+      "description": "Analysis configuration parameters.",
+      "required": ["solver", "depth", "k", "timeout_secs", "soundness", "fairness", "portfolio"],
+      "properties": {
+        "solver": { "type": "string" },
+        "depth": { "type": "integer", "minimum": 0 },
+        "k": { "type": "integer", "minimum": 0 },
+        "timeout_secs": { "type": "integer", "minimum": 0 },
+        "soundness": { "type": "string", "enum": ["strict", "permissive"] },
+        "fairness": { "type": "string" },
+        "portfolio": { "type": "boolean" }
+      }
+    },
+    "network_faithfulness": {
+      "type": "object",
+      "description": "Network faithfulness assessment."
+    },
+    "liveness_governance": {
+      "type": "object",
+      "description": "Governance-focused liveness assumptions and proof-obligation accounting (present for proof/audit runs).",
+      "properties": {
+        "fairness_model": {
+          "type": "object",
+          "description": "Formal fairness semantics used for liveness proofs."
+        },
+        "gst_assumptions": {
+          "type": "object",
+          "description": "Model timing/GST assumptions enforced by lowering."
+        },
+        "obligations_checked": {
+          "type": "object",
+          "description": "Independent replay obligations checked via fair-liveness certification layers."
+        }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "description": "Ordered list of analysis layers executed.",
+      "items": {
+        "type": "object",
+        "required": ["layer", "status", "verdict", "summary", "details", "output"],
+        "properties": {
+          "layer": {
+            "type": "string",
+            "description": "Layer identifier (e.g., 'parse+lower', 'verify[quick]', 'prove[pdr]')."
+          },
+          "status": {
+            "type": "string",
+            "description": "Layer execution status ('pass', 'fail', 'error', 'timeout')."
+          },
+          "verdict": {
+            "type": "string",
+            "enum": ["SAFE", "UNSAFE", "LIVE_PROVED", "LIVE_CEX", "INCONCLUSIVE", "UNKNOWN", "ok", "INFO"],
+            "description": "Canonical verdict for this layer."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Human-readable summary of the layer result."
+          },
+          "details": {
+            "description": "Layer-specific structured details."
+          },
+          "output": {
+            "type": "string",
+            "description": "Raw layer output text."
+          }
+        }
+      }
+    },
+    "overall": {
+      "type": "string",
+      "description": "Overall pass/fail status."
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": ["SAFE", "UNSAFE", "LIVE_PROVED", "LIVE_CEX", "INCONCLUSIVE", "UNKNOWN"],
+      "description": "Canonical overall verdict."
+    },
+    "claim": {
+      "type": "object",
+      "description": "What was proven, assumptions made, and what was not covered.",
+      "properties": {
+        "proven": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of proven properties."
+        },
+        "assumptions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Assumptions under which results hold."
+        },
+        "not_covered": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Properties or aspects not covered by this analysis."
+        }
+      },
+      "required": ["proven", "assumptions", "not_covered"]
+    },
+    "next_action": {
+      "type": "object",
+      "description": "Recommended next command to run.",
+      "properties": {
+        "command": { "type": "string" },
+        "reason": { "type": "string" }
+      },
+      "required": ["command", "reason"]
+    },
+    "confidence_tier": {
+      "type": "string",
+      "enum": ["quick", "bounded", "proof", "certified"],
+      "description": "Confidence tier based on analysis mode and results. 'quick' for quick mode, 'bounded' for standard without proof, 'proof' for passing unbounded proofs, 'certified' for audit with passing cert checks."
+    },
+    "preflight_warnings": {
+      "type": "array",
+      "description": "Model completeness warnings from preflight analysis.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "hint": { "type": "string" }
+        },
+        "required": ["code", "message", "hint"]
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "protocol_name": "ReliableBroadcastSafe",
+  "params": [["n", 4], ["t", 1], ["f", 0]],
+  "processes": [
+    {
+      "process_id": 0,
+      "role": "Process",
+      "events": [
+        {
+          "sequence": 0,
+          "kind": { "type": "Init", "location": "Process_waiting[accepted=false,decided=false,decision=false]" }
+        },
+        {
+          "sequence": 1,
+          "kind": {
+            "type": "Transition",
+            "from_location": "Process_waiting[accepted=false,decided=false,decision=false]",
+            "to_location": "Process_done[accepted=true,decided=true,decision=true]",
+            "rule_id": null
+          }
+        },
+        {
+          "sequence": 2,
+          "kind": { "type": "Decide", "value": "true" }
+        }
+      ]
+    }
+  ]
+}

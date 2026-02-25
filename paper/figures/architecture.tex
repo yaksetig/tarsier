@@ -1,0 +1,71 @@
+% Tarsier Architecture Diagram
+\begin{center}
+\begin{tikzpicture}[
+    every node/.style={rectangle, rounded corners, draw=black, very thick,
+        text centered, font=\small},
+    crate/.style={minimum width=2.8cm, minimum height=1.8em,
+        fill=blue!8},
+    artifact/.style={minimum width=2.2cm, minimum height=1.8em,
+        fill=gray!15, draw=black!60, dashed},
+    extool/.style={minimum width=2.2cm, minimum height=1.8em,
+        fill=orange!12, draw=black!60, dotted},
+    arr/.style={-{Stealth[length=2.5mm]}, thick},
+    darr/.style={-{Stealth[length=2.5mm]}, thick, dashed},
+]
+
+% Row 1: Input
+\node[artifact] (src) at (0, 4.5) {\texttt{.trs} file};
+
+% Row 2: Frontend
+\node[crate] (dsl)  at (0, 3.2) {tarsier-dsl};
+\node[crate] (ir)   at (0, 1.9) {tarsier-ir};
+
+% Row 3: Verification
+\node[crate] (smt)    at (-2.5, 0.6) {tarsier-smt};
+\node[crate] (engine) at ( 0,   0.6) {tarsier-engine};
+\node[crate] (prob)   at ( 2.5, 0.6) {tarsier-prob};
+
+% Row 4: Solvers
+\node[extool] (z3)   at (-3.2, -0.7) {Z3};
+\node[extool] (cvc5) at (-1.2, -0.7) {cvc5};
+
+% Row 4: Outputs
+\node[artifact] (cert)   at ( 1.0, -0.7) {Certificate};
+\node[artifact] (ta)     at ( 3.2, -0.7) {\texttt{.ta} export};
+
+% Row 5: Proof infrastructure
+\node[crate] (kernel)    at (-0.5, -2.0) {tarsier-proof-kernel};
+\node[crate] (certcheck) at ( 2.8, -2.0) {tarsier-certcheck};
+
+% Row 1 side: CLI
+\node[crate] (cli)   at ( 4.5, 3.2) {tarsier-cli};
+
+% Arrows: data flow
+\draw[arr] (src)    -- (dsl);
+\draw[arr] (dsl)    -- node[right, draw=none, fill=none, font=\scriptsize] {AST} (ir);
+\draw[arr] (ir.south) -- ++(0,-0.35) -| (engine.north);
+\draw[arr] (ir.south) -- ++(0,-0.35) -| (smt.north);
+\draw[arr] (ir.south) -- ++(0,-0.35) -| (prob.north);
+\draw[arr] (engine) -- (smt);
+\draw[arr] (prob)   -- (engine);
+
+% Solver connections
+\draw[arr] (smt.south) -- ++(0,-0.25) -| (z3.north);
+\draw[arr] (smt.south) -- ++(0,-0.25) -| (cvc5.north);
+
+% Certificate flow
+\draw[darr] (engine.south) -- ++(0, -0.25) -| (cert.north);
+\draw[darr] (engine.south) -- ++(0, -0.25) -| (ta.north);
+\draw[arr]  (cert.south) -- ++(0, -0.25) -| (kernel.north);
+\draw[arr]  (cert.south) -- ++(0, -0.25) -| (certcheck.north);
+
+% CLI
+\draw[arr] (cli) -- (dsl);
+\draw[darr] (cli.south) -- ++(0, -0.9) -| (engine.north east);
+
+% Label for TA
+\node[draw=none, fill=none, font=\scriptsize\itshape, text=black!60]
+    at (4.5, 1.9) {user interface};
+
+\end{tikzpicture}
+\end{center}

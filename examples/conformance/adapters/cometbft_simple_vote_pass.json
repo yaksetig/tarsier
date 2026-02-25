@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "protocol_name": "SimpleVote",
+  "params": [["n", 4], ["t", 1], ["f", 1]],
+  "nodes": [
+    {
+      "node_id": 0,
+      "role": "Process",
+      "events": [
+        {
+          "kind": "init",
+          "seq": 0,
+          "location": "Process_waiting[decided=false,decision=false]"
+        },
+        {
+          "kind": "recv",
+          "seq": 1,
+          "msg": "Vote",
+          "from": 1
+        },
+        {
+          "kind": "recv",
+          "seq": 2,
+          "msg": "Vote",
+          "from": 2
+        },
+        {
+          "kind": "transition",
+          "seq": 3,
+          "from": "Process_waiting[decided=false,decision=false]",
+          "to": "Process_done[decided=true,decision=true]"
+        },
+        {
+          "kind": "decide",
+          "seq": 4,
+          "value": "true"
+        }
+      ]
+    }
+  ]
+}

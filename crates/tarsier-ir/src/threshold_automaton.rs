@@ -1,5 +1,6 @@
 use indexmap::{IndexMap, IndexSet};
 use std::fmt;
+use thiserror::Error;
 
 /// A unique identifier for a location in the threshold automaton.
 pub type LocationId = usize;
@@ -110,6 +111,19 @@ pub enum FaultBudgetScope {
     PerRecipient,
     /// Single aggregate budget for all recipients.
     Global,
+}
+
+/// Partial-Order Reduction mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PorMode {
+    /// All static and dynamic POR optimizations enabled (default).
+    #[default]
+    Full,
+    /// Static pruning only (stutter, commutative duplicate, guard domination).
+    /// Dynamic ample-set optimization is disabled.
+    Static,
+    /// All POR optimizations disabled. Full state space explored.
+    Off,
 }
 
 /// Identity scope for a role.
@@ -265,6 +279,8 @@ pub struct ThresholdAutomaton {
     pub crypto_objects: IndexMap<String, IrCryptoObjectSpec>,
     /// Committee selection specifications.
     pub committees: Vec<IrCommitteeSpec>,
+    /// Partial-order reduction mode.
+    pub por_mode: PorMode,
 }
 
 /// A value that is either a reference to a protocol parameter or a concrete constant.
@@ -316,6 +332,7 @@ impl ThresholdAutomaton {
             message_policies: IndexMap::new(),
             crypto_objects: IndexMap::new(),
             committees: Vec::new(),
+            por_mode: PorMode::Full,
         }
     }
 
@@ -397,6 +414,196 @@ impl ThresholdAutomaton {
     pub fn key_is_compromised(&self, key: &str) -> bool {
         self.compromised_keys.contains(key)
     }
+
+    /// Validate internal consistency of the threshold automaton.
+    ///
+    /// Checks that all location, shared-variable, and parameter references
+    /// are within bounds. Should be called immediately after lowering.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        let num_locs = self.locations.len();
+        let num_vars = self.shared_vars.len();
+        let num_params = self.parameters.len();
+
+        // Check initial locations
+        for &loc_id in &self.initial_locations {
+            if loc_id >= num_locs {
+                return Err(ValidationError::InvalidInitialLocation {
+                    location_id: loc_id,
+                    max: num_locs.saturating_sub(1),
+                });
+            }
+        }
+
+        // Check rules
+        for (rule_id, rule) in self.rules.iter().enumerate() {
+            if rule.from >= num_locs {
+                return Err(ValidationError::InvalidRuleSource {
+                    rule_id,
+                    location_id: rule.from,
+                    max: num_locs.saturating_sub(1),
+                });
+            }
+            if rule.to >= num_locs {
+                return Err(ValidationError::InvalidRuleTarget {
+                    rule_id,
+                    location_id: rule.to,
+                    max: num_locs.saturating_sub(1),
+                });
+            }
+
+            // Check guard atoms
+            for atom in &rule.guard.atoms {
+                match atom {
+                    GuardAtom::Threshold { vars, bound, .. } => {
+                        for &var_id in vars {
+                            if var_id >= num_vars {
+                                return Err(ValidationError::InvalidGuardVar {
+                                    rule_id,
+                                    var_id,
+                                    max: num_vars.saturating_sub(1),
+                                });
+                            }
+                        }
+                        for &(_, param_id) in &bound.terms {
+                            if param_id >= num_params {
+                                return Err(ValidationError::InvalidGuardParam {
+                                    rule_id,
+                                    param_id,
+                                    max: num_params.saturating_sub(1),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check updates
+            for upd in &rule.updates {
+                if upd.var >= num_vars {
+                    return Err(ValidationError::InvalidUpdateVar {
+                        rule_id,
+                        var_id: upd.var,
+                        max: num_vars.saturating_sub(1),
+                    });
+                }
+                if let UpdateKind::Set(ref lc) = upd.kind {
+                    for &(_, param_id) in &lc.terms {
+                        if param_id >= num_params {
+                            return Err(ValidationError::InvalidGuardParam {
+                                rule_id,
+                                param_id,
+                                max: num_params.saturating_sub(1),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check adversary bound param
+        if let Some(param_id) = self.adversary_bound_param {
+            if param_id >= num_params {
+                return Err(ValidationError::InvalidAdversaryParam {
+                    param_id,
+                    max: num_params.saturating_sub(1),
+                });
+            }
+        }
+
+        // Check GST param
+        if let Some(param_id) = self.gst_param {
+            if param_id >= num_params {
+                return Err(ValidationError::InvalidGstParam {
+                    param_id,
+                    max: num_params.saturating_sub(1),
+                });
+            }
+        }
+
+        // Check committee bound params
+        for committee in &self.committees {
+            if let Some(param_id) = committee.bound_param {
+                if param_id >= num_params {
+                    return Err(ValidationError::InvalidCommitteeBoundParam {
+                        name: committee.name.clone(),
+                        param_id,
+                        max: num_params.saturating_sub(1),
+                    });
+                }
+            }
+        }
+
+        // Check resilience condition param IDs
+        if let Some(ref rc) = self.resilience_condition {
+            for &(_, param_id) in &rc.lhs.terms {
+                if param_id >= num_params {
+                    return Err(ValidationError::InvalidResilienceParam {
+                        param_id,
+                        max: num_params.saturating_sub(1),
+                    });
+                }
+            }
+            for &(_, param_id) in &rc.rhs.terms {
+                if param_id >= num_params {
+                    return Err(ValidationError::InvalidResilienceParam {
+                        param_id,
+                        max: num_params.saturating_sub(1),
+                    });
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Errors from validating a `ThresholdAutomaton`'s internal consistency.
+#[derive(Debug, Error)]
+pub enum ValidationError {
+    #[error("Rule {rule_id} references invalid source location {location_id} (max: {max})")]
+    InvalidRuleSource {
+        rule_id: usize,
+        location_id: usize,
+        max: usize,
+    },
+    #[error("Rule {rule_id} references invalid target location {location_id} (max: {max})")]
+    InvalidRuleTarget {
+        rule_id: usize,
+        location_id: usize,
+        max: usize,
+    },
+    #[error("Rule {rule_id} guard references invalid shared var {var_id} (max: {max})")]
+    InvalidGuardVar {
+        rule_id: usize,
+        var_id: usize,
+        max: usize,
+    },
+    #[error("Rule {rule_id} guard references invalid parameter {param_id} (max: {max})")]
+    InvalidGuardParam {
+        rule_id: usize,
+        param_id: usize,
+        max: usize,
+    },
+    #[error("Rule {rule_id} update references invalid shared var {var_id} (max: {max})")]
+    InvalidUpdateVar {
+        rule_id: usize,
+        var_id: usize,
+        max: usize,
+    },
+    #[error("Initial location {location_id} is out of bounds (max: {max})")]
+    InvalidInitialLocation { location_id: usize, max: usize },
+    #[error("Adversary bound param {param_id} is out of bounds (max: {max})")]
+    InvalidAdversaryParam { param_id: usize, max: usize },
+    #[error("GST param {param_id} is out of bounds (max: {max})")]
+    InvalidGstParam { param_id: usize, max: usize },
+    #[error("Committee '{name}' bound param {param_id} is out of bounds (max: {max})")]
+    InvalidCommitteeBoundParam {
+        name: String,
+        param_id: usize,
+        max: usize,
+    },
+    #[error("Resilience condition references invalid parameter {param_id} (max: {max})")]
+    InvalidResilienceParam { param_id: usize, max: usize },
 }
 
 impl Default for ThresholdAutomaton {
@@ -883,5 +1090,243 @@ pub struct LinearConstraint {
 impl fmt::Display for LinearConstraint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.lhs, self.op, self.rhs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn por_mode_default_is_full() {
+        assert_eq!(PorMode::default(), PorMode::Full);
+    }
+
+    #[test]
+    fn threshold_automaton_new_has_full_por_mode() {
+        let ta = ThresholdAutomaton::new();
+        assert_eq!(ta.por_mode, PorMode::Full);
+    }
+
+    /// Helper to build a minimal valid TA for validation tests.
+    fn minimal_ta() -> ThresholdAutomaton {
+        let mut ta = ThresholdAutomaton::new();
+        ta.add_parameter(Parameter { name: "n".into() });
+        ta.add_parameter(Parameter { name: "t".into() });
+        ta.add_parameter(Parameter { name: "f".into() });
+        let loc0 = ta.add_location(Location {
+            name: "Init".into(),
+            role: "R".into(),
+            phase: "init".into(),
+            local_vars: IndexMap::new(),
+        });
+        let loc1 = ta.add_location(Location {
+            name: "Done".into(),
+            role: "R".into(),
+            phase: "done".into(),
+            local_vars: IndexMap::new(),
+        });
+        ta.initial_locations.push(loc0);
+        ta.add_shared_var(SharedVar {
+            name: "msg_count".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        ta.add_rule(Rule {
+            from: loc0,
+            to: loc1,
+            guard: Guard::single(GuardAtom::Threshold {
+                vars: vec![0],
+                op: CmpOp::Ge,
+                bound: LinearCombination::param(0),
+                distinct: false,
+            }),
+            updates: vec![Update {
+                var: 0,
+                kind: UpdateKind::Increment,
+            }],
+        });
+        ta.adversary_bound_param = Some(2); // f
+        ta.resilience_condition = Some(LinearConstraint {
+            lhs: LinearCombination::param(1), // t
+            op: CmpOp::Lt,
+            rhs: LinearCombination::param(0), // n
+        });
+        ta
+    }
+
+    #[test]
+    fn validate_minimal_ta_ok() {
+        let ta = minimal_ta();
+        assert!(ta.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_invalid_initial_location() {
+        let mut ta = minimal_ta();
+        ta.initial_locations.push(999);
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidInitialLocation {
+                location_id: 999,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_rule_source() {
+        let mut ta = minimal_ta();
+        ta.rules.push(Rule {
+            from: 999,
+            to: 0,
+            guard: Guard::trivial(),
+            updates: vec![],
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidRuleSource {
+                location_id: 999,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_rule_target() {
+        let mut ta = minimal_ta();
+        ta.rules.push(Rule {
+            from: 0,
+            to: 999,
+            guard: Guard::trivial(),
+            updates: vec![],
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidRuleTarget {
+                location_id: 999,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_guard_var() {
+        let mut ta = minimal_ta();
+        ta.rules.push(Rule {
+            from: 0,
+            to: 1,
+            guard: Guard::single(GuardAtom::Threshold {
+                vars: vec![999],
+                op: CmpOp::Ge,
+                bound: LinearCombination::constant(1),
+                distinct: false,
+            }),
+            updates: vec![],
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidGuardVar { var_id: 999, .. }
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_guard_param() {
+        let mut ta = minimal_ta();
+        ta.rules.push(Rule {
+            from: 0,
+            to: 1,
+            guard: Guard::single(GuardAtom::Threshold {
+                vars: vec![0],
+                op: CmpOp::Ge,
+                bound: LinearCombination::param(999),
+                distinct: false,
+            }),
+            updates: vec![],
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidGuardParam { param_id: 999, .. }
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_update_var() {
+        let mut ta = minimal_ta();
+        ta.rules.push(Rule {
+            from: 0,
+            to: 1,
+            guard: Guard::trivial(),
+            updates: vec![Update {
+                var: 999,
+                kind: UpdateKind::Increment,
+            }],
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidUpdateVar { var_id: 999, .. }
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_adversary_param() {
+        let mut ta = minimal_ta();
+        ta.adversary_bound_param = Some(999);
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidAdversaryParam { param_id: 999, .. }
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_gst_param() {
+        let mut ta = minimal_ta();
+        ta.gst_param = Some(999);
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidGstParam { param_id: 999, .. }
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_committee_bound_param() {
+        let mut ta = minimal_ta();
+        ta.committees.push(IrCommitteeSpec {
+            name: "test_committee".into(),
+            population: ParamOrConst::Const(100),
+            byzantine: ParamOrConst::Const(33),
+            committee_size: ParamOrConst::Const(10),
+            epsilon: Some(1e-9),
+            bound_param: Some(999),
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidCommitteeBoundParam { param_id: 999, .. }
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_resilience_param() {
+        let mut ta = minimal_ta();
+        ta.resilience_condition = Some(LinearConstraint {
+            lhs: LinearCombination::param(999),
+            op: CmpOp::Lt,
+            rhs: LinearCombination::param(0),
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidResilienceParam { param_id: 999, .. }
+        ));
     }
 }

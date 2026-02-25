@@ -1,0 +1,29 @@
+/* Paxos Basic — Agreement property.
+ *
+ * Threshold automaton for a simplified Paxos consensus protocol.
+ * Matches Tarsier model: examples/library/paxos_basic.trs
+ *
+ * Locations:
+ *   loc0 = pre       (initial — waiting for Learn messages)
+ *   loc1 = decided   (received 2t+1 Learn, decided true)
+ *
+ * Shared counters:
+ *   nsnt_learn — number of Learn messages sent
+ *
+ * Safety: agreement — all replicas that decide reach the same value.
+ *   (trivially satisfied since there is only one decision value)
+ */
+skel Replica {
+  local pc;
+  shared nsnt_learn;
+  parameters N, T, F;
+  assumptions (1) { N > 2*T; }
+  locations (2) { loc0: [0]; loc1: [1]; }
+  inits (3) { loc0 == N; loc1 == 0; nsnt_learn == 0; }
+  rules (1) {
+    0: loc0 -> loc1 when (nsnt_learn >= 1 + 2*T) do { nsnt_learn' == nsnt_learn; };
+  }
+  specifications (1) {
+    agreement: [](loc1 > 0 -> [](loc1 >= 0));
+  }
+}

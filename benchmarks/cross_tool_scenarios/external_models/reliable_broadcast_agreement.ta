@@ -1,0 +1,35 @@
+/* Reliable Broadcast — Agreement property.
+ *
+ * Threshold automaton for the Bracha-style reliable broadcast protocol.
+ * Matches Tarsier model: examples/library/reliable_broadcast_safe.trs
+ *
+ * Locations:
+ *   loc0 = waiting    (initial)
+ *   loc1 = echoed     (received Init, sent Echo)
+ *   loc2 = readied    (received 2t+1 Echo, sent Ready)
+ *   loc3 = done       (received 2t+1 Ready, decided true)
+ *
+ * Shared counters:
+ *   nsnt_init  — number of Init messages sent
+ *   nsnt_echo  — number of Echo messages sent
+ *   nsnt_ready — number of Ready messages sent
+ *
+ * Safety: agreement — all processes that reach done decide the same value.
+ *   (trivially satisfied since there is only one decision value)
+ */
+skel Process {
+  local pc;
+  shared nsnt_init, nsnt_echo, nsnt_ready;
+  parameters N, T, F;
+  assumptions (1) { N > 3*T; }
+  locations (4) { loc0: [0]; loc1: [1]; loc2: [2]; loc3: [3]; }
+  inits (6) { loc0 == N; loc1 == 0; loc2 == 0; loc3 == 0; nsnt_init == 0; nsnt_echo == 0; nsnt_ready == 0; }
+  rules (3) {
+    0: loc0 -> loc1 when (nsnt_init >= 1) do { nsnt_init' == nsnt_init; nsnt_echo' == nsnt_echo + 1; nsnt_ready' == nsnt_ready; };
+    1: loc1 -> loc2 when (nsnt_echo >= 1 + 2*T) do { nsnt_init' == nsnt_init; nsnt_echo' == nsnt_echo; nsnt_ready' == nsnt_ready + 1; };
+    2: loc2 -> loc3 when (nsnt_ready >= 1 + 2*T) do { nsnt_init' == nsnt_init; nsnt_echo' == nsnt_echo; nsnt_ready' == nsnt_ready; };
+  }
+  specifications (1) {
+    agreement: [](loc3 > 0 -> [](loc3 >= 0));
+  }
+}

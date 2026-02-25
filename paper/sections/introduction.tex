@@ -1,0 +1,88 @@
+\section{Introduction}\label{sec:intro}
+
+Byzantine fault-tolerant (BFT) consensus protocols are the backbone of modern
+distributed systems, from replicated state machines~\cite{CastroLiskov1999}
+to blockchain platforms~\cite{GiladHMVZ2017, YinMGRGA2019}.  Establishing
+their correctness is notoriously difficult: bugs in threshold conditions,
+message-handling logic, or view-change sub-protocols have led to real-world
+safety violations and costly exploits.  Formal verification offers a
+principled alternative to testing, yet existing tools face a fundamental
+tension between \emph{expressiveness} and \emph{scalability}.
+
+\emph{Explicit-state model checkers} such as SPIN~\cite{Holzmann2003} and
+TLC (for TLA+~\cite{LamportTLA2002}) enumerate concrete system
+configurations. Their results are inherently bounded: verifying a protocol
+for $n{=}4$ processes says nothing about $n{=}100$.  \emph{Parameterized}
+approaches---in particular threshold automata with counter
+abstraction~\cite{KonnovVW2015, KonnovLVW2017}---overcome this limitation
+by treating the number of processes $n$, the fault tolerance $t$, and the
+actual number of faults $f$ as symbolic parameters.  Safety results then
+hold for \emph{all} instantiations satisfying a resilience condition such as
+$n > 3t$.  The ByMC tool~\cite{KonnovWidder2018} demonstrated the viability
+of this approach on simplified BFT protocols.
+
+However, practical protocol verification surfaces three challenges that
+existing threshold-automata tools leave open:
+
+\begin{enumerate}
+\item \textbf{Abstraction fidelity.}
+  Classical counter abstraction merges all processes in the same protocol
+  location into a single aggregate counter.  This over-approximation is
+  sound for safety (SAFE transfers to the faithful model), but loses
+  per-process delivery semantics: sender identities, distinct-sender
+  thresholds (``$\geq 2t{+}1$ \emph{distinct} Prepare messages''), and
+  equivocation control are invisible.  A SAFE verdict under the classic
+  abstraction may mask real bugs that only manifest under faithful
+  message delivery.
+
+\item \textbf{Cryptographic objects.}
+  Modern BFT protocols rely on quorum certificates, threshold signatures,
+  and signed messages.  Their non-forgeability guarantees are integral to
+  safety arguments, yet no existing threshold-automata tool encodes them
+  as first-class semantic objects in the SMT formula.
+
+\item \textbf{Trust in the verifier.}
+  An SMT-based model checker is a complex software artifact.  A bug in
+  the parser, the lowering pass, or the SMT encoding could produce a
+  spurious SAFE verdict.  Without an independent mechanism to validate
+  the proof, the user must trust the entire toolchain.
+\end{enumerate}
+
+\paragraph{Contributions.}
+We present \tarsier{}, a parameterized model checker for threshold-guarded
+distributed protocols that addresses all three challenges:
+
+\begin{itemize}
+\item A \textbf{hierarchy of four network abstraction modes}
+  (Sect.~\ref{sec:semantics})---classic, identity-selective,
+  cohort-selective, and process-selective---with formally characterized
+  soundness transfer properties.  The process-selective mode achieves
+  \emph{instance-exact} semantics: the set of reachable abstract states
+  coincides with that of the faithful protocol model for bounded process
+  identities.
+
+\item \textbf{First-class cryptographic objects}
+  (Sect.~\ref{sec:language})---certificates, threshold signatures, and
+  signed-message channels---with non-forgeability, signer-set threshold
+  guards, and conflict-admissibility constraints encoded directly as SMT
+  assertions.
+
+\item A \textbf{minimal proof kernel} (Sect.~\ref{sec:verification}) with
+  only four library dependencies that validates proof certificates
+  independently of the verification engine, following the
+  proof-carrying-code paradigm~\cite{Necula1997}.
+
+\item A \textbf{domain-specific language} (Sect.~\ref{sec:language}) for
+  specifying BFT protocols with roles, phases, threshold guards, adversary
+  models, and temporal properties, together with an automated lowering
+  pipeline to threshold automata.
+
+\item An \textbf{evaluation} (Sect.~\ref{sec:evaluation}) on 48~protocol
+  models from five major BFT families (PBFT, HotStuff, Tendermint, Paxos,
+  Algorand), demonstrating that faithful modes close real soundness gaps
+  while remaining tractable.
+\end{itemize}
+
+\tarsier{} is implemented in Rust as a modular workspace of 11~crates,
+using Z3~\cite{DeMoura2008} and cvc5~\cite{BarbosaBBKLMMMN2022} as SMT
+backends.

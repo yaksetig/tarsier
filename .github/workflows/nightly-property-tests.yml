@@ -1,0 +1,41 @@
+name: Nightly Property Tests
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  property-stress:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [1357911, 2468022, 9753186]
+    env:
+      PROPTEST_CASES: "192"
+      PROPTEST_RNG_ALGORITHM: cc
+      PROPTEST_RNG_SEED: ${{ matrix.seed }}
+      TARSIER_PROPTEST_CASES: "192"
+      TARSIER_PROPTEST_SEED: ${{ matrix.seed }}
+      TARSIER_PROPTEST_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/property-test-failures/${{ matrix.seed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Property Stress Seed (${{ matrix.seed }})
+        run: |
+          mkdir -p "${TARSIER_PROPTEST_ARTIFACT_DIR}"
+          cargo test -p tarsier-engine --test property_pipeline_proptest -- --nocapture
+          cargo test -p tarsier-engine unit_metamorphic_alpha_rename_and_compilation_are_deterministic -- --nocapture
+          cargo test -p tarsier-engine unit_negative_buggy_mutants_are_unsafety_reachable -- --nocapture
+
+      - name: Upload Property-Test Failure Artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-property-failures-${{ matrix.seed }}
+          path: artifacts/property-test-failures/${{ matrix.seed }}/**

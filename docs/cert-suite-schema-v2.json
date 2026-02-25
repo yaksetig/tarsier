@@ -14,6 +14,36 @@
       "type": "boolean",
       "default": false
     },
+    "enforce_corpus_breadth": {
+      "type": "boolean",
+      "default": false
+    },
+    "enforce_model_hash_consistency": {
+      "type": "boolean",
+      "default": false
+    },
+    "enforce_known_bug_sentinels": {
+      "type": "boolean",
+      "default": false
+    },
+    "required_known_bug_families": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "required_variant_groups": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "default": []
+    },
     "library_dir": {
       "type": "string",
       "minLength": 1

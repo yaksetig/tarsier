@@ -1,0 +1,102 @@
+% Tarsier: Parameterized Verification of Threshold-Guarded Distributed Protocols
+% LLNCS format for Springer Computer Science proceedings
+%
+\documentclass[runningheads]{llncs}
+
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\renewcommand\UrlFont{\color{blue}\rmfamily}
+
+% Listings style for DSL
+\lstdefinelanguage{tarsier}{
+  keywords={protocol, params, resilience, adversary, model, bound, timing, values, auth, network, message, role, var, init, phase, when, received, goto, property, agreement, forall, committee, population, byzantine, size, epsilon, bound_param, enum, certificate, threshold_signature, from, threshold, signer, conflicts, exclusive, form, has, lock, justify, equivocation, delivery, faults, compromised_key, gst, send, distinct},
+  keywordstyle=\color{blue}\bfseries,
+  sensitive=true,
+  comment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{red},
+  morestring=[b]",
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=2,
+  frame=single,
+  captionpos=b,
+}
+
+\lstset{language=tarsier}
+
+% Math macros
+\newcommand{\ta}{\mathcal{A}}
+\newcommand{\loc}{\kappa}
+\newcommand{\svar}{\gamma}
+\newcommand{\nproc}{n}
+\newcommand{\ftol}{t}
+\newcommand{\factual}{f}
+\newcommand{\adv}{\mathit{adv}}
+\newcommand{\tarsier}{\textsc{Tarsier}}
+
+\begin{document}
+
+\title{\tarsier{}: Parameterized Verification of\\Threshold-Guarded Distributed Protocols\\with Faithful Network Semantics}
+
+\titlerunning{\tarsier{}: Parameterized Verification of Distributed Protocols}
+
+\author{Anonymous}
+
+\authorrunning{Anonymous}
+
+\institute{Anonymous Institution}
+
+\maketitle
+
+\begin{abstract}
+We present \tarsier{}, a parameterized model checker for threshold-guarded
+distributed protocols.  \tarsier{} verifies safety and liveness properties
+for \emph{all} system sizes satisfying a given resilience condition
+(e.g., $n > 3t$), without requiring explicit instantiation.
+The tool introduces three advances over prior threshold-automata verifiers:
+(i)~a hierarchy of four \emph{network abstraction modes} ranging from
+classic counter abstraction to \emph{process-selective} semantics that are
+instance-exact with respect to a faithful protocol model;
+(ii)~first-class \emph{cryptographic object} declarations (certificates,
+threshold signatures) with non-forgeability and signer-set constraints
+encoded directly in SMT; and
+(iii)~a \emph{minimal proof kernel} with only four dependencies that
+independently validates proof certificates without trusting the
+verification engine.
+We evaluate \tarsier{} on a library of 48~protocol models spanning PBFT,
+HotStuff, Tendermint, Paxos, and Algorand families, demonstrating that
+faithful network modes close soundness gaps present in classical
+abstractions while remaining tractable for SMT solvers.
+
+\keywords{Parameterized verification \and Threshold automata \and
+Byzantine fault tolerance \and SMT-based model checking \and
+Counter abstraction.}
+\end{abstract}
+
+\input{sections/introduction}
+\input{sections/preliminaries}
+\input{sections/language}
+\input{sections/semantics}
+\input{sections/verification}
+\input{sections/implementation}
+\input{sections/evaluation}
+\input{sections/related}
+\input{sections/conclusion}
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}

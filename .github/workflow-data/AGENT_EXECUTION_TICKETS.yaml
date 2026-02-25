@@ -1,0 +1,1155 @@
+schema_version: v1
+updated_at: '2026-02-22'
+description: >
+  Canonical execution ticket inventory for agent-driven closure workflows.
+  Each ticket includes explicit deps, acceptance tests, and blocking conditions.
+tickets:
+  - id: P0-01
+    title: "P0 roadmap ticket P0-01"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-02
+    title: "P0 roadmap ticket P0-02"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-03
+    title: "P0 roadmap ticket P0-03"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-04
+    title: "P0 roadmap ticket P0-04"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-05
+    title: "P0 roadmap ticket P0-05"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-06
+    title: "P0 roadmap ticket P0-06"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-07
+    title: "P0 roadmap ticket P0-07"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-08
+    title: "P0 roadmap ticket P0-08"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-09
+    title: "P0 roadmap ticket P0-09"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-10
+    title: "P0 roadmap ticket P0-10"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-11
+    title: "P0 roadmap ticket P0-11"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-12
+    title: "P0 roadmap ticket P0-12"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-13
+    title: "P0 roadmap ticket P0-13"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-14
+    title: "P0 roadmap ticket P0-14"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P0-15
+    title: "P0 roadmap ticket P0-15"
+    track: P0
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-ir --no-run"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/LANGUAGE_REFERENCE.md"
+  - id: P1-01
+    title: "P1 roadmap ticket P1-01"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-02
+    title: "P1 roadmap ticket P1-02"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-03
+    title: "POR equivalence and soundness regression hardening"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture"
+      - "cargo test -p tarsier-engine --test integration_tests counterexample_trace_annotates_por -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-04
+    title: "Reduction diagnostics and counterexample annotation hardening"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo test -p tarsier-engine --test integration_tests reduction_diagnostics -- --nocapture"
+      - "cargo test -p tarsier-cli reduction_diagnostics_json -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-05
+    title: "Portfolio merge determinism and tie-break stability"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo test -p tarsier-cli portfolio -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-06
+    title: "P1 roadmap ticket P1-06"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-07
+    title: "P1 roadmap ticket P1-07"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-08
+    title: "CTI (counterexample-to-induction) classification/reporting"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-09
+    title: "P1 roadmap ticket P1-09"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-10
+    title: "P1 roadmap ticket P1-10"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-11
+    title: "P1 roadmap ticket P1-11"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-12
+    title: "P1 roadmap ticket P1-12"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-13
+    title: "Statistical performance regression gate"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "python3 benchmarks/test_statistical_regression.py"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-14
+    title: "P1 roadmap ticket P1-14"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-15
+    title: "Completion workflow contract + artifact integrity"
+    track: P1
+    deps:
+      - P1-03
+      - P1-04
+      - P1-05
+    acceptance_tests:
+      - "test -f .github/workflow-data/AGENT_EXECUTION_TICKETS.yaml"
+      - "test -f .github/workflow-data/FINAL_COMPLETION_CHECKLIST.json"
+      - "test -f .github/workflow-data/FINAL_COMPLETION_STATUS.json"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P1-16
+    title: "P1 roadmap ticket P1-16"
+    track: P1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-engine --test integration_tests -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "docs/PERFORMANCE.md"
+      - "docs/SEMANTICS.md"
+  - id: P2-01
+    title: "P2 roadmap ticket P2-01"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-02
+    title: "P2 roadmap ticket P2-02"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-03
+    title: "P2 roadmap ticket P2-03"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-04
+    title: "P2 roadmap ticket P2-04"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-05
+    title: "P2 roadmap ticket P2-05"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-06
+    title: "P2 roadmap ticket P2-06"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-07
+    title: "P2 roadmap ticket P2-07"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-08
+    title: "P2 roadmap ticket P2-08"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-09
+    title: "Governance pipeline report + gate-by-gate contract"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo test -p tarsier-cli --features governance --test governance_pipeline -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-10
+    title: "P2 roadmap ticket P2-10"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-11
+    title: "P2 roadmap ticket P2-11"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-12
+    title: "Cross-tool benchmark runner and parity contracts"
+    track: P2
+    deps: []
+    acceptance_tests:
+      - "python3 -m unittest benchmarks/test_cross_tool_runner.py -v"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: P2-13
+    title: "Codegen semantics-surface expansion governance closure"
+    track: P2
+    deps:
+      - P2-09
+      - P2-12
+      - T6
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+    required_docs:
+      - "README.md"
+      - "docs/RELEASE_PROCESS.md"
+      - "docs/TRUST_BOUNDARY.md"
+  - id: T1
+    title: "Real ByMC comparison (.ta export + verdict mapping)"
+    track: T
+    deps: []
+    acceptance_tests:
+      - "cargo test -p tarsier-engine export_ta -- --nocapture"
+      - "python3 -m unittest benchmarks/test_cross_tool_runner.py -v"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+      - "ci.yml:Cross-Tool Benchmark Runner Tests"
+    required_docs:
+      - "docs/BENCHMARK_FORMAT.md"
+      - "docs/SEMANTICS.md"
+  - id: T2
+    title: "End-to-end conformance adapters and strict mode"
+    track: T
+    deps:
+      - T1
+    acceptance_tests:
+      - "cargo test -p tarsier-conformance --test adapter_replay -- --nocapture"
+      - "cargo test -p tarsier-conformance --test reference_traces -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:build-test"
+      - "ci.yml:Enforce Cross-Tool Benchmark Contract"
+    required_docs:
+      - "docs/CONFORMANCE.md"
+      - "docs/CONFORMANCE_MANIFEST_SCHEMA.md"
+  - id: T3
+    title: "Onboarding path simplification (beginner/pro/governance)"
+    track: T
+    deps: []
+    acceptance_tests:
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "cargo test -p tarsier-cli --test cli_feature_contract_default -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: T4
+    title: "Property-based randomized testing of core pipeline"
+    track: T
+    deps: []
+    acceptance_tests:
+      - "cargo test -p tarsier-engine --test property_pipeline_proptest -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:Property Testing Gate"
+    required_docs:
+      - "docs/TESTING_STRATEGY.md"
+  - id: T5
+    title: "Stable liveness proof target for real protocol"
+    track: T
+    deps:
+      - T4
+    acceptance_tests:
+      - "cargo test -p tarsier-engine --test liveness_integration -- --nocapture"
+      - "cargo test -p tarsier-cli --test liveness_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:Liveness Proof Contract Gate"
+    required_docs:
+      - "docs/SEMANTICS.md"
+      - "docs/TUTORIAL.md"
+  - id: T6
+    title: "Governance bloat strip + feature-gated default build"
+    track: T
+    deps:
+      - T3
+    acceptance_tests:
+      - "cargo test -p tarsier-cli --test cli_feature_contract_default -- --nocapture"
+      - "cargo test -p tarsier-cli --features governance --test cli_feature_contract_governance -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:CLI Feature Contract (Default Build)"
+      - "ci.yml:Governance Pipeline Gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+  - id: V1-01
+    title: "V1 roadmap ticket V1-01"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-02
+    title: "V1 roadmap ticket V1-02"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-03
+    title: "V1 roadmap ticket V1-03"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-04
+    title: "V1 roadmap ticket V1-04"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-05
+    title: "V1 roadmap ticket V1-05"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-06
+    title: "V1 roadmap ticket V1-06"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-07
+    title: "V1 roadmap ticket V1-07"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-08
+    title: "V1 roadmap ticket V1-08"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-09
+    title: "V1 roadmap ticket V1-09"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-10
+    title: "V1 roadmap ticket V1-10"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-11
+    title: "V1 roadmap ticket V1-11"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"
+  - id: V1-12
+    title: "V1 roadmap ticket V1-12"
+    track: V1
+    deps: []
+    acceptance_tests:
+      - "cargo check --workspace"
+      - "cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture"
+      - "python3 scripts/validate_final_completion.py"
+      - "python3 scripts/validate_final_completion.py --strict-evidence"
+    blocking_conditions:
+      - "Any mandatory command listed in acceptance_tests fails."
+      - "Required CI gate cannot be identified/updated for the ticket scope."
+      - "Required docs are missing or stale relative to implemented behavior."
+    required_ci_gates:
+      - "ci.yml:beginner-ux-gate"
+    required_docs:
+      - "README.md"
+      - "docs/GETTING_STARTED.md"
+      - "docs/TUTORIAL.md"

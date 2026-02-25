@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/obligation-map-v1",
+  "title": "Tarsier Obligation Map Schema v1",
+  "description": "Machine-readable mapping from verified safety properties to runtime monitoring obligations.",
+  "type": "object",
+  "required": ["schema_version", "protocol_name", "obligations"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version (must be 1)."
+    },
+    "protocol_name": {
+      "type": "string",
+      "description": "Protocol name."
+    },
+    "obligations": {
+      "type": "array",
+      "description": "List of runtime obligations derived from verified properties.",
+      "items": { "$ref": "#/$defs/RuntimeObligation" }
+    }
+  },
+  "$defs": {
+    "RuntimeObligation": {
+      "type": "object",
+      "required": ["property_name", "property_kind", "description", "monitor"],
+      "properties": {
+        "property_name": {
+          "type": "string",
+          "description": "Name of the verified property."
+        },
+        "property_kind": {
+          "type": "string",
+          "enum": ["agreement", "invariant", "termination"],
+          "description": "Kind of safety property."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the obligation."
+        },
+        "monitor": { "$ref": "#/$defs/ObligationMonitor" }
+      }
+    },
+    "ObligationMonitor": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        {
+          "properties": {
+            "type": { "const": "AgreementMonitor" },
+            "conflicting_location_pairs": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  { "type": "string" },
+                  { "type": "string" }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "description": "Pairs of location names that must not be simultaneously occupied."
+            }
+          },
+          "required": ["type", "conflicting_location_pairs"]
+        },
+        {
+          "properties": {
+            "type": { "const": "InvariantMonitor" },
+            "bad_location_sets": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "description": "Location sets that must never all be simultaneously occupied."
+            }
+          },
+          "required": ["type", "bad_location_sets"]
+        },
+        {
+          "properties": {
+            "type": { "const": "TerminationMonitor" },
+            "goal_locations": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Locations that all processes must eventually reach."
+            }
+          },
+          "required": ["type", "goal_locations"]
+        }
+      ]
+    }
+  }
+}

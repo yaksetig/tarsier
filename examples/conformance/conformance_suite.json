@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "suite_name": "reference-conformance",
+  "description": "Reference conformance traces for CI gate. Covers positive and negative test cases against the simple_vote protocol.",
+  "entries": [
+    {
+      "name": "valid_vote_trace",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "crates/tarsier-conformance/tests/fixtures/valid_trace.json",
+      "trace_adapter": "runtime",
+      "checker_mode": "permissive",
+      "expected_verdict": "pass",
+      "tags": ["voting", "positive"],
+      "notes": "Single process receives enough votes and transitions to decided state"
+    },
+    {
+      "name": "guard_not_satisfied",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "crates/tarsier-conformance/tests/fixtures/guard_not_satisfied.json",
+      "trace_adapter": "runtime",
+      "checker_mode": "permissive",
+      "expected_verdict": "fail",
+      "tags": ["voting", "negative", "guard"],
+      "notes": "Process transitions to decided with insufficient votes — guard violation expected"
+    },
+    {
+      "name": "no_matching_rule",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "crates/tarsier-conformance/tests/fixtures/no_matching_rule.json",
+      "trace_adapter": "runtime",
+      "checker_mode": "permissive",
+      "expected_verdict": "fail",
+      "tags": ["voting", "negative", "rule"],
+      "notes": "Process attempts impossible reverse transition — no matching rule expected"
+    },
+    {
+      "name": "multi_process_valid",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "crates/tarsier-conformance/tests/fixtures/multi_process_valid.json",
+      "trace_adapter": "runtime",
+      "checker_mode": "permissive",
+      "expected_verdict": "pass",
+      "tags": ["voting", "positive", "multi-process"],
+      "notes": "Three processes: two decide with enough votes, one aborts via trivial rule"
+    },
+    {
+      "name": "rb_safe_all_honest",
+      "protocol_file": "examples/library/reliable_broadcast_safe.trs",
+      "trace_file": "examples/conformance/traces/rb_safe_n4_t1.json",
+      "trace_adapter": "runtime",
+      "checker_mode": "permissive",
+      "expected_verdict": "pass",
+      "tags": ["reliable-broadcast", "positive", "multi-process"],
+      "notes": "Reliable Broadcast with n=4, t=1, all honest — all processes decide"
+    },
+    {
+      "name": "rb_byzantine_still_safe",
+      "protocol_file": "examples/library/reliable_broadcast_safe.trs",
+      "trace_file": "examples/conformance/traces/rb_byzantine_n4_t1.json",
+      "trace_adapter": "runtime",
+      "checker_mode": "permissive",
+      "expected_verdict": "pass",
+      "tags": ["reliable-broadcast", "positive", "byzantine"],
+      "notes": "Reliable Broadcast with n=4, t=1, 1 Byzantine — honest processes still conform"
+    },
+    {
+      "name": "rb_violation_skip_phases",
+      "protocol_file": "examples/library/reliable_broadcast_safe.trs",
+      "trace_file": "examples/conformance/traces/rb_violation_n4_t1.json",
+      "trace_adapter": "runtime",
+      "checker_mode": "permissive",
+      "expected_verdict": "fail",
+      "tags": ["reliable-broadcast", "negative", "rule"],
+      "notes": "Process skips from waiting directly to done — NoMatchingRule violation expected"
+    }
+  ]
+}

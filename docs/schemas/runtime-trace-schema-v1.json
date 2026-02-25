@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/runtime-trace-v1",
+  "title": "Tarsier Runtime Trace Schema v1",
+  "description": "Process-level runtime trace for conformance checking against a verified Tarsier model.",
+  "type": "object",
+  "required": ["schema_version", "protocol_name", "params", "processes"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version (must be 1)."
+    },
+    "protocol_name": {
+      "type": "string",
+      "description": "Protocol name from the .trs model."
+    },
+    "params": {
+      "type": "array",
+      "description": "Concrete parameter bindings as [name, value] pairs.",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "string" },
+          { "type": "integer" }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "processes": {
+      "type": "array",
+      "description": "Per-process event traces.",
+      "items": { "$ref": "#/$defs/ProcessTrace" }
+    }
+  },
+  "$defs": {
+    "ProcessTrace": {
+      "type": "object",
+      "required": ["process_id", "role", "events"],
+      "properties": {
+        "process_id": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unique process identifier."
+        },
+        "role": {
+          "type": "string",
+          "description": "Role this process plays."
+        },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProcessEvent" }
+        }
+      }
+    },
+    "ProcessEvent": {
+      "type": "object",
+      "required": ["sequence", "kind"],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Monotonically increasing sequence number."
+        },
+        "kind": { "$ref": "#/$defs/ProcessEventKind" }
+      }
+    },
+    "ProcessEventKind": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        {
+          "properties": {
+            "type": { "const": "Init" },
+            "location": { "type": "string" }
+          },
+          "required": ["type", "location"]
+        },
+        {
+          "properties": {
+            "type": { "const": "Transition" },
+            "from_location": { "type": "string" },
+            "to_location": { "type": "string" },
+            "rule_id": { "type": ["integer", "null"] }
+          },
+          "required": ["type", "from_location", "to_location"]
+        },
+        {
+          "properties": {
+            "type": { "const": "Send" },
+            "message_type": { "type": "string" },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  { "type": "string" },
+                  { "type": "string" }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          },
+          "required": ["type", "message_type", "fields"]
+        },
+        {
+          "properties": {
+            "type": { "const": "Receive" },
+            "message_type": { "type": "string" },
+            "from_process": { "type": "integer" },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  { "type": "string" },
+                  { "type": "string" }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          },
+          "required": ["type", "message_type", "from_process", "fields"]
+        },
+        {
+          "properties": {
+            "type": { "const": "Decide" },
+            "value": { "type": "string" }
+          },
+          "required": ["type", "value"]
+        },
+        {
+          "properties": {
+            "type": { "const": "VarUpdate" },
+            "var_name": { "type": "string" },
+            "new_value": { "type": "string" }
+          },
+          "required": ["type", "var_name", "new_value"]
+        }
+      ]
+    }
+  }
+}

@@ -156,6 +156,7 @@ fn canonical_term_key(term: &SmtTerm) -> String {
 }
 
 type MessageVariantGroups = (Vec<Vec<usize>>, Vec<String>, HashMap<String, Vec<usize>>);
+type CryptoVariantBuckets = HashMap<(String, String), Vec<(String, Vec<usize>)>>;
 
 /// Variable naming conventions:
 /// - `p_i` — parameter i
@@ -166,19 +167,19 @@ fn param_var(i: usize) -> String {
     format!("p_{i}")
 }
 
-fn kappa_var(step: usize, loc: usize) -> String {
+pub(crate) fn kappa_var(step: usize, loc: usize) -> String {
     format!("kappa_{step}_{loc}")
 }
 
-fn gamma_var(step: usize, var: usize) -> String {
+pub(crate) fn gamma_var(step: usize, var: usize) -> String {
     format!("g_{step}_{var}")
 }
 
-fn time_var(step: usize) -> String {
+pub(crate) fn time_var(step: usize) -> String {
     format!("time_{step}")
 }
 
-fn delta_var(step: usize, rule: usize) -> String {
+pub(crate) fn delta_var(step: usize, rule: usize) -> String {
     format!("delta_{step}_{rule}")
 }
 
@@ -227,6 +228,7 @@ struct PorRulePruning {
     disabled_rules: Vec<bool>,
     stutter_pruned: usize,
     commutative_duplicate_pruned: usize,
+    guard_dominated_pruned: usize,
 }
 
 impl PorRulePruning {
@@ -252,6 +254,97 @@ fn linear_combination_signature(lc: &LinearCombination) -> String {
         out.push_str(&format!("{coeff}*p{pid}"));
     }
     out
+}
+
+fn normalized_vars(vars: &[usize]) -> Vec<usize> {
+    let mut out = vars.to_vec();
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn normalized_lc_terms(lc: &LinearCombination) -> Vec<(i64, usize)> {
+    let mut coeff_by_param: HashMap<usize, i64> = HashMap::new();
+    for (coeff, pid) in &lc.terms {
+        if *coeff == 0 {
+            continue;
+        }
+        *coeff_by_param.entry(*pid).or_insert(0) += *coeff;
+    }
+    let mut terms: Vec<(i64, usize)> = coeff_by_param
+        .into_iter()
+        .filter_map(|(pid, coeff)| (coeff != 0).then_some((coeff, pid)))
+        .collect();
+    terms.sort_by_key(|(_, pid)| *pid);
+    terms
+}
+
+fn comparable_lc_constants(lhs: &LinearCombination, rhs: &LinearCombination) -> Option<(i64, i64)> {
+    let lhs_terms = normalized_lc_terms(lhs);
+    let rhs_terms = normalized_lc_terms(rhs);
+    if lhs_terms == rhs_terms {
+        Some((lhs.constant, rhs.constant))
+    } else {
+        None
+    }
+}
+
+fn threshold_op_entails(lhs_op: CmpOp, lhs_const: i64, rhs_op: CmpOp, rhs_const: i64) -> bool {
+    match (lhs_op, rhs_op) {
+        (CmpOp::Eq, CmpOp::Eq) => lhs_const == rhs_const,
+        (CmpOp::Eq, CmpOp::Ge) => lhs_const >= rhs_const,
+        (CmpOp::Eq, CmpOp::Gt) => lhs_const > rhs_const,
+        (CmpOp::Eq, CmpOp::Le) => lhs_const <= rhs_const,
+        (CmpOp::Eq, CmpOp::Lt) => lhs_const < rhs_const,
+        (CmpOp::Eq, CmpOp::Ne) => lhs_const != rhs_const,
+        (CmpOp::Ge, CmpOp::Ge) => lhs_const >= rhs_const,
+        (CmpOp::Ge, CmpOp::Gt) => lhs_const > rhs_const,
+        (CmpOp::Gt, CmpOp::Gt) => lhs_const >= rhs_const,
+        (CmpOp::Gt, CmpOp::Ge) => lhs_const >= rhs_const,
+        (CmpOp::Le, CmpOp::Le) => lhs_const <= rhs_const,
+        (CmpOp::Le, CmpOp::Lt) => lhs_const < rhs_const,
+        (CmpOp::Lt, CmpOp::Lt) => lhs_const <= rhs_const,
+        (CmpOp::Lt, CmpOp::Le) => lhs_const <= rhs_const,
+        (CmpOp::Ne, CmpOp::Ne) => lhs_const == rhs_const,
+        _ => false,
+    }
+}
+
+fn guard_atom_implies(lhs: &GuardAtom, rhs: &GuardAtom) -> bool {
+    match (lhs, rhs) {
+        (
+            GuardAtom::Threshold {
+                vars: lhs_vars,
+                op: lhs_op,
+                bound: lhs_bound,
+                distinct: lhs_distinct,
+            },
+            GuardAtom::Threshold {
+                vars: rhs_vars,
+                op: rhs_op,
+                bound: rhs_bound,
+                distinct: rhs_distinct,
+            },
+        ) => {
+            if lhs_distinct != rhs_distinct
+                || normalized_vars(lhs_vars) != normalized_vars(rhs_vars)
+            {
+                return false;
+            }
+            let Some((lhs_const, rhs_const)) = comparable_lc_constants(lhs_bound, rhs_bound) else {
+                return false;
+            };
+            threshold_op_entails(*lhs_op, lhs_const, *rhs_op, rhs_const)
+        }
+    }
+}
+
+fn guard_implies(lhs: &Guard, rhs: &Guard) -> bool {
+    rhs.atoms.iter().all(|rhs_atom| {
+        lhs.atoms
+            .iter()
+            .any(|lhs_atom| guard_atom_implies(lhs_atom, rhs_atom))
+    })
 }
 
 fn guard_atom_signature(atom: &GuardAtom) -> String {
@@ -281,6 +374,16 @@ fn guard_atom_signature(atom: &GuardAtom) -> String {
             )
         }
     }
+}
+
+fn rule_effect_signature(rule: &Rule) -> String {
+    let updates = rule
+        .updates
+        .iter()
+        .map(update_signature)
+        .collect::<Vec<_>>()
+        .join(";");
+    format!("from={};to={};updates=[{updates}]", rule.from, rule.to)
 }
 
 fn update_signature(update: &Update) -> String {
@@ -318,9 +421,18 @@ fn is_pure_stutter_rule(rule: &Rule) -> bool {
 }
 
 fn compute_por_rule_pruning(ta: &ThresholdAutomaton) -> PorRulePruning {
+    if ta.por_mode == PorMode::Off {
+        return PorRulePruning {
+            disabled_rules: vec![false; ta.rules.len()],
+            stutter_pruned: 0,
+            commutative_duplicate_pruned: 0,
+            guard_dominated_pruned: 0,
+        };
+    }
     let mut disabled_rules = vec![false; ta.rules.len()];
     let mut stutter_pruned = 0usize;
     let mut commutative_duplicate_pruned = 0usize;
+    let mut guard_dominated_pruned = 0usize;
     let mut canonical_by_signature: HashMap<String, usize> = HashMap::new();
 
     for (rule_id, rule) in ta.rules.iter().enumerate() {
@@ -336,10 +448,37 @@ fn compute_por_rule_pruning(ta: &ThresholdAutomaton) -> PorRulePruning {
         }
     }
 
+    let rule_effects: Vec<String> = ta.rules.iter().map(rule_effect_signature).collect();
+    for rule_id in 0..ta.rules.len() {
+        if disabled_rules[rule_id] {
+            continue;
+        }
+        for other_id in 0..ta.rules.len() {
+            if other_id == rule_id || disabled_rules[other_id] {
+                continue;
+            }
+            if rule_effects[rule_id] != rule_effects[other_id] {
+                continue;
+            }
+            if !guard_implies(&ta.rules[rule_id].guard, &ta.rules[other_id].guard) {
+                continue;
+            }
+            let other_implies = guard_implies(&ta.rules[other_id].guard, &ta.rules[rule_id].guard);
+            // Preserve deterministic tie-breaking for equivalent guards.
+            if other_implies && other_id > rule_id {
+                continue;
+            }
+            disabled_rules[rule_id] = true;
+            guard_dominated_pruned = guard_dominated_pruned.saturating_add(1);
+            break;
+        }
+    }
+
     PorRulePruning {
         disabled_rules,
         stutter_pruned,
         commutative_duplicate_pruned,
+        guard_dominated_pruned,
     }
 }
 
@@ -355,7 +494,7 @@ fn role_process_identity_var<'a>(ta: &'a ThresholdAutomaton, role: &str) -> Opti
                 None
             }
         })
-        .or_else(|| Some(DEFAULT_PROCESS_ID_VAR))
+        .or(Some(DEFAULT_PROCESS_ID_VAR))
 }
 
 fn location_has_valid_process_identity(ta: &ThresholdAutomaton, loc: &Location) -> bool {
@@ -545,7 +684,7 @@ fn collect_exclusive_crypto_variant_groups(
             .push(var_id);
     }
 
-    let mut grouped: HashMap<(String, String), Vec<(String, Vec<usize>)>> = HashMap::new();
+    let mut grouped: CryptoVariantBuckets = HashMap::new();
     for ((family, recipient, variant), vars) in by_variant {
         grouped
             .entry((family, recipient))
@@ -698,7 +837,8 @@ pub fn encode_bmc(cs: &CounterSystem, property: &SafetyProperty, max_depth: usiz
     let por_pruning = compute_por_rule_pruning(ta);
     let _por_pruned_rules_total = por_pruning
         .stutter_pruned
-        .saturating_add(por_pruning.commutative_duplicate_pruned);
+        .saturating_add(por_pruning.commutative_duplicate_pruned)
+        .saturating_add(por_pruning.guard_dominated_pruned);
     let active_rule_ids = por_pruning.active_rule_ids();
     let num_params = cs.num_parameters();
     let distinct_vars: Vec<(usize, Option<String>)> = ta
@@ -1698,7 +1838,8 @@ pub fn encode_k_induction_step(
     let por_pruning = compute_por_rule_pruning(ta);
     let _por_pruned_rules_total = por_pruning
         .stutter_pruned
-        .saturating_add(por_pruning.commutative_duplicate_pruned);
+        .saturating_add(por_pruning.commutative_duplicate_pruned)
+        .saturating_add(por_pruning.guard_dominated_pruned);
     let active_rule_ids = por_pruning.active_rule_ids();
     let num_params = cs.num_parameters();
     let distinct_vars: Vec<(usize, Option<String>)> = ta
@@ -2812,6 +2953,76 @@ mod tests {
         ta
     }
 
+    fn make_signer_set_threshold_ta() -> ThresholdAutomaton {
+        let mut ta = ThresholdAutomaton::new();
+
+        ta.add_parameter(Parameter { name: "n".into() });
+        ta.add_parameter(Parameter { name: "t".into() });
+        ta.add_parameter(Parameter { name: "f".into() });
+        ta.adversary_bound_param = Some(2);
+        ta.fault_model = FaultModel::Byzantine;
+        ta.authentication_mode = AuthenticationMode::Signed;
+        ta.network_semantics = NetworkSemantics::IdentitySelective;
+        ta.role_identities.insert(
+            "P".into(),
+            RoleIdentityConfig {
+                scope: RoleIdentityScope::Process,
+                process_var: Some("pid".into()),
+                key_name: "p_key".into(),
+            },
+        );
+
+        ta.add_location(Location {
+            name: "waiting".into(),
+            role: "P".into(),
+            phase: "waiting".into(),
+            local_vars: IndexMap::new(),
+        });
+        ta.add_location(Location {
+            name: "done".into(),
+            role: "P".into(),
+            phase: "done".into(),
+            local_vars: IndexMap::new(),
+        });
+        ta.initial_locations = vec![0];
+
+        let vote_sender_0 = ta.add_shared_var(SharedVar {
+            name: "cnt_Vote@P#0<-P#0[value=false]".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        let vote_sender_1 = ta.add_shared_var(SharedVar {
+            name: "cnt_Vote@P#0<-P#1[value=false]".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        let sig = ta.add_shared_var(SharedVar {
+            name: "cnt_Sig@P#0<-P#0[value=false]".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+
+        ta.add_rule(Rule {
+            from: 0,
+            to: 1,
+            guard: Guard::single(GuardAtom::Threshold {
+                vars: vec![vote_sender_0, vote_sender_1],
+                op: CmpOp::Ge,
+                bound: LinearCombination::constant(2),
+                distinct: true,
+            }),
+            updates: vec![Update {
+                var: sig,
+                kind: UpdateKind::Increment,
+            }],
+        });
+
+        ta
+    }
+
     fn solve_with_extra_assertions(enc: &BmcEncoding, extra: &[SmtTerm]) -> SatResult {
         let mut solver = Z3Solver::with_default_config();
         for (name, sort) in &enc.declarations {
@@ -2913,6 +3124,53 @@ mod tests {
         let step = encode_k_induction_step(&cs, &property, 1);
         let step_assertions: Vec<String> = step.assertions.iter().map(to_smtlib).collect();
         assert!(step_assertions.iter().any(|a| a == "(= delta_0_1 0)"));
+    }
+
+    #[test]
+    fn por_prunes_guard_dominated_rules_by_forcing_zero_delta() {
+        let mut ta = make_simple_ta();
+        ta.rules.clear();
+        ta.add_rule(Rule {
+            from: 0,
+            to: 1,
+            guard: Guard::single(GuardAtom::Threshold {
+                vars: vec![0],
+                op: CmpOp::Ge,
+                bound: LinearCombination::constant(2),
+                distinct: false,
+            }),
+            updates: vec![Update {
+                var: 0,
+                kind: UpdateKind::Increment,
+            }],
+        });
+        ta.add_rule(Rule {
+            from: 0,
+            to: 1,
+            guard: Guard::single(GuardAtom::Threshold {
+                vars: vec![0],
+                op: CmpOp::Ge,
+                bound: LinearCombination::constant(1),
+                distinct: false,
+            }),
+            updates: vec![Update {
+                var: 0,
+                kind: UpdateKind::Increment,
+            }],
+        });
+
+        let cs = CounterSystem::new(ta);
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
+
+        let bmc = encode_bmc(&cs, &property, 1);
+        let bmc_assertions: Vec<String> = bmc.assertions.iter().map(to_smtlib).collect();
+        assert!(bmc_assertions.iter().any(|a| a == "(= delta_0_0 0)"));
+
+        let step = encode_k_induction_step(&cs, &property, 1);
+        let step_assertions: Vec<String> = step.assertions.iter().map(to_smtlib).collect();
+        assert!(step_assertions.iter().any(|a| a == "(= delta_0_0 0)"));
     }
 
     #[test]
@@ -3647,6 +3905,87 @@ mod tests {
     }
 
     #[test]
+    fn compromised_key_allows_signed_forge_sat() {
+        let mut ta = make_simple_ta();
+        ta.add_parameter(Parameter { name: "f".into() });
+        ta.adversary_bound_param = Some(2);
+        ta.fault_model = FaultModel::Byzantine;
+        ta.authentication_mode = AuthenticationMode::Signed;
+        ta.network_semantics = NetworkSemantics::IdentitySelective;
+        ta.role_identities.insert(
+            "P".into(),
+            RoleIdentityConfig {
+                scope: RoleIdentityScope::Process,
+                process_var: Some("pid".into()),
+                key_name: "p_key".into(),
+            },
+        );
+        ta.compromised_keys.insert("p_key".into());
+        ta.shared_vars[0].name = "cnt_Echo@Replica<-P#0[value=false]".into();
+
+        let cs = CounterSystem::new(ta);
+        let property = SafetyProperty::Termination { goal_locs: vec![] };
+        let enc = encode_bmc(&cs, &property, 1);
+
+        let sat = solve_with_extra_assertions(
+            &enc,
+            &[
+                SmtTerm::var("p_0").eq(SmtTerm::int(4)),
+                SmtTerm::var("p_1").eq(SmtTerm::int(1)),
+                SmtTerm::var("p_2").eq(SmtTerm::int(1)),
+                SmtTerm::var("net_forge_0_0").gt(SmtTerm::int(0)),
+            ],
+        );
+        assert_eq!(sat, SatResult::Sat);
+    }
+
+    #[test]
+    fn signer_set_threshold_requires_distinct_signer_identities_not_counter_magnitude() {
+        let ta = make_signer_set_threshold_ta();
+        let cs = CounterSystem::new(ta);
+        let property = SafetyProperty::Termination { goal_locs: vec![] };
+        let enc = encode_bmc(&cs, &property, 2);
+
+        let repeated_single_signer = solve_with_extra_assertions(
+            &enc,
+            &[
+                SmtTerm::var("p_0").eq(SmtTerm::int(1)),
+                SmtTerm::var("p_1").eq(SmtTerm::int(2)),
+                SmtTerm::var("p_2").eq(SmtTerm::int(2)),
+                SmtTerm::var("delta_0_0").eq(SmtTerm::int(0)),
+                SmtTerm::var("delta_1_0").eq(SmtTerm::int(1)),
+                SmtTerm::var("byzsender_static_0").eq(SmtTerm::int(1)),
+                SmtTerm::var("byzsender_static_1").eq(SmtTerm::int(0)),
+                SmtTerm::var("byzsender_0_0").eq(SmtTerm::int(1)),
+                SmtTerm::var("byzsender_0_1").eq(SmtTerm::int(0)),
+                SmtTerm::var("g_1_0").eq(SmtTerm::int(2)),
+                SmtTerm::var("g_1_1").eq(SmtTerm::int(0)),
+                SmtTerm::var("g_1_2").eq(SmtTerm::int(0)),
+            ],
+        );
+        assert_eq!(repeated_single_signer, SatResult::Unsat);
+
+        let two_distinct_signers = solve_with_extra_assertions(
+            &enc,
+            &[
+                SmtTerm::var("p_0").eq(SmtTerm::int(1)),
+                SmtTerm::var("p_1").eq(SmtTerm::int(2)),
+                SmtTerm::var("p_2").eq(SmtTerm::int(2)),
+                SmtTerm::var("delta_0_0").eq(SmtTerm::int(0)),
+                SmtTerm::var("delta_1_0").eq(SmtTerm::int(1)),
+                SmtTerm::var("byzsender_static_0").eq(SmtTerm::int(1)),
+                SmtTerm::var("byzsender_static_1").eq(SmtTerm::int(1)),
+                SmtTerm::var("byzsender_0_0").eq(SmtTerm::int(1)),
+                SmtTerm::var("byzsender_0_1").eq(SmtTerm::int(1)),
+                SmtTerm::var("g_1_0").eq(SmtTerm::int(1)),
+                SmtTerm::var("g_1_1").eq(SmtTerm::int(1)),
+                SmtTerm::var("g_1_2").eq(SmtTerm::int(0)),
+            ],
+        );
+        assert_eq!(two_distinct_signers, SatResult::Sat);
+    }
+
+    #[test]
     fn forging_signed_message_without_compromise_and_without_byzantine_sender_is_unsat() {
         let mut ta = make_simple_ta();
         ta.add_parameter(Parameter { name: "f".into() });
@@ -4191,5 +4530,913 @@ mod tests {
         assert!(assertions
             .iter()
             .any(|a| a == "(=> (<= p_3 time_0) (= net_drop_0_0 0))"));
+    }
+
+    #[test]
+    fn por_mode_off_disables_all_pruning() {
+        let mut ta = make_simple_ta();
+        // Add a duplicate rule (same signature as rule 0) to test pruning
+        ta.add_rule(Rule {
+            from: 0,
+            to: 1,
+            guard: Guard::single(GuardAtom::Threshold {
+                vars: vec![0],
+                op: CmpOp::Ge,
+                bound: LinearCombination {
+                    constant: 1,
+                    terms: vec![(2, 1)],
+                },
+                distinct: false,
+            }),
+            updates: vec![Update {
+                var: 0,
+                kind: UpdateKind::Increment,
+            }],
+        });
+
+        // With Full POR, duplicate should be pruned
+        ta.por_mode = PorMode::Full;
+        let pruning_full = compute_por_rule_pruning(&ta);
+        let active_full = pruning_full.active_rule_ids().len();
+
+        // With POR Off, no rules should be pruned
+        ta.por_mode = PorMode::Off;
+        let pruning_off = compute_por_rule_pruning(&ta);
+        assert_eq!(pruning_off.stutter_pruned, 0);
+        assert_eq!(pruning_off.commutative_duplicate_pruned, 0);
+        assert_eq!(pruning_off.guard_dominated_pruned, 0);
+        let active_off = pruning_off.active_rule_ids().len();
+        assert_eq!(active_off, ta.rules.len());
+        assert!(active_off > active_full);
+    }
+
+    // ── canonical_term_key tests ─────────────────────────────────────
+
+    #[test]
+    fn canonical_term_key_commutative_add() {
+        let ab = SmtTerm::var("a").add(SmtTerm::var("b"));
+        let ba = SmtTerm::var("b").add(SmtTerm::var("a"));
+        assert_eq!(canonical_term_key(&ab), canonical_term_key(&ba));
+    }
+
+    #[test]
+    fn canonical_term_key_commutative_mul() {
+        let ab = SmtTerm::var("a").mul(SmtTerm::var("b"));
+        let ba = SmtTerm::var("b").mul(SmtTerm::var("a"));
+        assert_eq!(canonical_term_key(&ab), canonical_term_key(&ba));
+    }
+
+    #[test]
+    fn canonical_term_key_commutative_eq() {
+        let ab = SmtTerm::var("a").eq(SmtTerm::var("b"));
+        let ba = SmtTerm::var("b").eq(SmtTerm::var("a"));
+        assert_eq!(canonical_term_key(&ab), canonical_term_key(&ba));
+    }
+
+    #[test]
+    fn canonical_term_key_noncommutative_sub() {
+        let ab = SmtTerm::var("a").sub(SmtTerm::var("b"));
+        let ba = SmtTerm::var("b").sub(SmtTerm::var("a"));
+        assert_ne!(canonical_term_key(&ab), canonical_term_key(&ba));
+    }
+
+    #[test]
+    fn canonical_term_key_noncommutative_lt_le_gt_ge() {
+        let a = SmtTerm::var("a");
+        let b = SmtTerm::var("b");
+        assert_ne!(
+            canonical_term_key(&a.clone().lt(b.clone())),
+            canonical_term_key(&b.clone().lt(a.clone()))
+        );
+        assert_ne!(
+            canonical_term_key(&a.clone().le(b.clone())),
+            canonical_term_key(&b.clone().le(a.clone()))
+        );
+        assert_ne!(
+            canonical_term_key(&a.clone().gt(b.clone())),
+            canonical_term_key(&b.clone().gt(a.clone()))
+        );
+        assert_ne!(
+            canonical_term_key(&a.clone().ge(b.clone())),
+            canonical_term_key(&b.ge(a))
+        );
+    }
+
+    #[test]
+    fn canonical_term_key_and_or_sorts_children() {
+        let xy = SmtTerm::and(vec![SmtTerm::var("x"), SmtTerm::var("y")]);
+        let yx = SmtTerm::and(vec![SmtTerm::var("y"), SmtTerm::var("x")]);
+        assert_eq!(canonical_term_key(&xy), canonical_term_key(&yx));
+
+        let or_xy = SmtTerm::or(vec![SmtTerm::var("x"), SmtTerm::var("y")]);
+        let or_yx = SmtTerm::or(vec![SmtTerm::var("y"), SmtTerm::var("x")]);
+        assert_eq!(canonical_term_key(&or_xy), canonical_term_key(&or_yx));
+    }
+
+    // ── sum_terms_balanced tests ─────────────────────────────────────
+
+    #[test]
+    fn sum_terms_balanced_empty_is_zero() {
+        assert_eq!(sum_terms_balanced(vec![]), SmtTerm::int(0));
+    }
+
+    #[test]
+    fn sum_terms_balanced_single_term() {
+        let t = SmtTerm::var("x");
+        assert_eq!(sum_terms_balanced(vec![t.clone()]), t);
+    }
+
+    #[test]
+    fn sum_terms_balanced_two_terms() {
+        let a = SmtTerm::var("a");
+        let b = SmtTerm::var("b");
+        assert_eq!(
+            sum_terms_balanced(vec![a.clone(), b.clone()]),
+            SmtTerm::Add(Box::new(a), Box::new(b))
+        );
+    }
+
+    // ── encode_lc tests ──────────────────────────────────────────────
+
+    #[test]
+    fn encode_lc_constant_only() {
+        let lc = LinearCombination {
+            constant: 42,
+            terms: vec![],
+        };
+        assert_eq!(encode_lc(&lc), SmtTerm::int(42));
+    }
+
+    #[test]
+    fn encode_lc_zero_constant_with_params() {
+        let lc = LinearCombination {
+            constant: 0,
+            terms: vec![(1, 0)],
+        };
+        // constant=0 is skipped, only p_0
+        assert_eq!(encode_lc(&lc), SmtTerm::var("p_0"));
+    }
+
+    #[test]
+    fn encode_lc_scaled_param() {
+        let lc = LinearCombination {
+            constant: 0,
+            terms: vec![(3, 1)],
+        };
+        assert_eq!(
+            encode_lc(&lc),
+            SmtTerm::Mul(Box::new(SmtTerm::int(3)), Box::new(SmtTerm::var("p_1")))
+        );
+    }
+
+    // ── encode_threshold_guard tests ─────────────────────────────────
+
+    #[test]
+    fn encode_threshold_guard_distinct_uses_ite() {
+        let term = encode_threshold_guard_at_step(
+            0,
+            &[0, 1],
+            CmpOp::Ge,
+            &LinearCombination::constant(2),
+            true,
+        );
+        let s = to_smtlib(&term);
+        assert!(s.contains("ite"), "distinct guard should use ite: {s}");
+    }
+
+    #[test]
+    fn encode_threshold_guard_ne_uses_not_eq() {
+        let term = encode_threshold_guard_at_step(
+            0,
+            &[0],
+            CmpOp::Ne,
+            &LinearCombination::constant(1),
+            false,
+        );
+        let s = to_smtlib(&term);
+        assert!(s.contains("not"), "Ne guard should use Not: {s}");
+        assert!(s.contains("="), "Ne guard should use Eq inside Not: {s}");
+    }
+
+    // ── encode_property_violation tests ──────────────────────────────
+
+    #[test]
+    fn encode_property_violation_empty_pairs_is_false() {
+        let ta = make_simple_ta();
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
+        let term = encode_property_violation(&ta, &property, 2);
+        assert_eq!(term, SmtTerm::bool(false));
+    }
+
+    #[test]
+    fn encode_property_violation_agreement_single_pair() {
+        let ta = make_simple_ta();
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![(0, 1)],
+        };
+        let term = encode_property_violation_at_step(&ta, &property, 0);
+        let s = to_smtlib(&term);
+        assert!(s.contains("kappa_0_0"), "should reference loc 0: {s}");
+        assert!(s.contains("kappa_0_1"), "should reference loc 1: {s}");
+    }
+
+    // ── proptest ─────────────────────────────────────────────────────
+
+    use proptest::prelude::*;
+    use tarsier_ir::proptest_generators::arb_threshold_automaton;
+
+    fn arb_ta_and_property() -> impl Strategy<Value = (CounterSystem, SafetyProperty, usize)> {
+        arb_threshold_automaton()
+            .prop_flat_map(|ta| {
+                let nlocs = ta.locations.len();
+                let cs = CounterSystem::new(ta);
+                // depth 0-3
+                (Just(cs), Just(nlocs), 0..=3usize)
+            })
+            .prop_map(|(cs, nlocs, depth)| {
+                // Generate a trivially-empty agreement property (safe for any TA)
+                let property = if nlocs >= 2 {
+                    SafetyProperty::Agreement {
+                        conflicting_pairs: vec![(0, 1)],
+                    }
+                } else {
+                    SafetyProperty::Agreement {
+                        conflicting_pairs: vec![],
+                    }
+                };
+                (cs, property, depth)
+            })
+    }
+
+    fn smt_proptest_config() -> ProptestConfig {
+        ProptestConfig {
+            cases: 32,
+            source_file: Some(file!()),
+            failure_persistence: Some(Box::new(
+                proptest::test_runner::FileFailurePersistence::WithSource("proptest-regressions"),
+            )),
+            rng_algorithm: proptest::test_runner::RngAlgorithm::ChaCha,
+            ..ProptestConfig::default()
+        }
+    }
+
+    fn collect_all_var_refs(term: &SmtTerm, out: &mut std::collections::HashSet<String>) {
+        match term {
+            SmtTerm::Var(name) => {
+                out.insert(name.clone());
+            }
+            SmtTerm::IntLit(_) | SmtTerm::BoolLit(_) => {}
+            SmtTerm::Add(l, r)
+            | SmtTerm::Sub(l, r)
+            | SmtTerm::Mul(l, r)
+            | SmtTerm::Eq(l, r)
+            | SmtTerm::Lt(l, r)
+            | SmtTerm::Le(l, r)
+            | SmtTerm::Gt(l, r)
+            | SmtTerm::Ge(l, r)
+            | SmtTerm::Implies(l, r) => {
+                collect_all_var_refs(l, out);
+                collect_all_var_refs(r, out);
+            }
+            SmtTerm::And(ts) | SmtTerm::Or(ts) => {
+                for t in ts {
+                    collect_all_var_refs(t, out);
+                }
+            }
+            SmtTerm::Not(inner) => collect_all_var_refs(inner, out),
+            SmtTerm::ForAll(_, body) | SmtTerm::Exists(_, body) => {
+                collect_all_var_refs(body, out);
+            }
+            SmtTerm::Ite(c, t, e) => {
+                collect_all_var_refs(c, out);
+                collect_all_var_refs(t, out);
+                collect_all_var_refs(e, out);
+            }
+        }
+    }
+
+    proptest! {
+        #![proptest_config(smt_proptest_config())]
+
+        #[test]
+        fn encode_bmc_never_panics((cs, property, depth) in arb_ta_and_property()) {
+            let _enc = encode_bmc(&cs, &property, depth);
+        }
+
+        #[test]
+        fn encode_bmc_produces_nonempty_encoding((cs, property, depth) in arb_ta_and_property()) {
+            let enc = encode_bmc(&cs, &property, depth);
+            prop_assert!(!enc.declarations.is_empty(), "declarations must be non-empty");
+            prop_assert!(!enc.assertions.is_empty(), "assertions must be non-empty");
+        }
+
+        #[test]
+        fn encode_bmc_all_declared_vars_appear_in_model_vars((cs, property, depth) in arb_ta_and_property()) {
+            let enc = encode_bmc(&cs, &property, depth);
+            let model_var_names: std::collections::HashSet<_> =
+                enc.model_vars.iter().map(|(n, _)| n.clone()).collect();
+            for (name, _) in &enc.declarations {
+                prop_assert!(
+                    model_var_names.contains(name),
+                    "declared var {} not in model_vars", name
+                );
+            }
+        }
+
+        #[test]
+        fn encode_bmc_assertions_are_structurally_valid((cs, property, depth) in arb_ta_and_property()) {
+            let enc = encode_bmc(&cs, &property, depth);
+            let declared: std::collections::HashSet<_> =
+                enc.declarations.iter().map(|(n, _)| n.clone()).collect();
+            // Collect all var references from assertions
+            let mut referenced = std::collections::HashSet::new();
+            for assertion in &enc.assertions {
+                collect_all_var_refs(assertion, &mut referenced);
+            }
+            // Every referenced variable must be declared
+            for var_name in &referenced {
+                prop_assert!(
+                    declared.contains(var_name),
+                    "undeclared variable {} referenced in assertions", var_name
+                );
+            }
+        }
+    }
+
+    // ── Parse-and-lower integration tests ─────────────────────────────
+
+    fn parse_and_lower(source: &str) -> CounterSystem {
+        let program = tarsier_dsl::parse(source, "test.trs").unwrap();
+        let ta = tarsier_ir::lowering::lower(&program).unwrap();
+        CounterSystem::new(ta)
+    }
+
+    const RELIABLE_BROADCAST_SAFE: &str = r#"
+protocol RB {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message Init;
+    message Echo;
+    message Ready;
+
+    role Process {
+        var accepted: bool = false;
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init waiting;
+
+        phase waiting {
+            when received >= 1 Init => {
+                accepted = true;
+                send Echo;
+                goto phase echoed;
+            }
+        }
+
+        phase echoed {
+            when received >= 2*t+1 Echo => {
+                send Ready;
+                goto phase readied;
+            }
+        }
+
+        phase readied {
+            when received >= 2*t+1 Ready => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
+"#;
+
+    const BUGGY_BROADCAST: &str = r#"
+protocol BuggyBroadcast {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message Vote;
+    message Commit;
+    message Abort;
+
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init propose;
+
+        phase propose {
+            when received >= 1 Vote => {
+                send Vote;
+                goto phase voted;
+            }
+            when received >= 1 Abort => {
+                decision = false;
+                decided = true;
+                goto phase done_no;
+            }
+        }
+
+        phase voted {
+            when received >= t+1 Vote => {
+                send Commit;
+                goto phase ready_yes;
+            }
+        }
+
+        phase ready_yes {
+            when received >= t+1 Commit => {
+                decision = true;
+                decided = true;
+                goto phase done_yes;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
+"#;
+
+    #[test]
+    fn parsed_protocol_encoding_has_expected_param_declarations() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let enc = encode_bmc(&cs, &property, 1);
+        let decl_names: std::collections::HashSet<_> =
+            enc.declarations.iter().map(|(n, _)| n.clone()).collect();
+        // Should have parameter variables for n, t, f
+        assert!(
+            decl_names.contains("p_0"),
+            "missing param p_0 (n)"
+        );
+        assert!(
+            decl_names.contains("p_1"),
+            "missing param p_1 (t)"
+        );
+        assert!(
+            decl_names.contains("p_2"),
+            "missing param p_2 (f)"
+        );
+    }
+
+    #[test]
+    fn parsed_protocol_encoding_has_kappa_gamma_delta_time_vars() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let enc = encode_bmc(&cs, &property, 1);
+        let decl_names: std::collections::HashSet<_> =
+            enc.declarations.iter().map(|(n, _)| n.clone()).collect();
+        let num_locs = cs.num_locations();
+        let num_svars = cs.num_shared_vars();
+        let num_rules = cs.num_rules();
+
+        // Step 0 kappa variables
+        for l in 0..num_locs {
+            assert!(
+                decl_names.contains(&kappa_var(0, l)),
+                "missing kappa_0_{l}"
+            );
+        }
+        // Step 1 kappa variables
+        for l in 0..num_locs {
+            assert!(
+                decl_names.contains(&kappa_var(1, l)),
+                "missing kappa_1_{l}"
+            );
+        }
+        // Gamma variables at step 0 and 1
+        for v in 0..num_svars {
+            assert!(
+                decl_names.contains(&gamma_var(0, v)),
+                "missing g_0_{v}"
+            );
+            assert!(
+                decl_names.contains(&gamma_var(1, v)),
+                "missing g_1_{v}"
+            );
+        }
+        // Delta variables for step 0
+        for r in 0..num_rules {
+            assert!(
+                decl_names.contains(&delta_var(0, r)),
+                "missing delta_0_{r}"
+            );
+        }
+        // Time variables
+        assert!(decl_names.contains(&time_var(0)), "missing time_0");
+        assert!(decl_names.contains(&time_var(1)), "missing time_1");
+    }
+
+    #[test]
+    fn parsed_protocol_initial_state_constraints() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let enc = encode_bmc(&cs, &property, 1);
+        let assertions: Vec<String> = enc.assertions.iter().map(to_smtlib).collect();
+        let ta = &cs.automaton;
+
+        // All shared vars start at 0
+        for v in 0..cs.num_shared_vars() {
+            let expected = format!("(= g_0_{v} 0)");
+            assert!(
+                assertions.iter().any(|a| a == &expected),
+                "missing initial zero constraint for g_0_{v}: {expected}"
+            );
+        }
+
+        // time_0 = 0
+        assert!(
+            assertions.iter().any(|a| a == "(= time_0 0)"),
+            "missing time_0 = 0"
+        );
+
+        // Non-initial locations start empty
+        for l in 0..cs.num_locations() {
+            if !ta.initial_locations.contains(&l) {
+                let expected = format!("(= kappa_0_{l} 0)");
+                assert!(
+                    assertions.iter().any(|a| a == &expected),
+                    "non-initial loc {l} should start at 0: {expected}"
+                );
+            }
+        }
+
+        // Parameters are non-negative
+        for i in 0..cs.num_parameters() {
+            let expected = format!("(>= p_{i} 0)");
+            assert!(
+                assertions.iter().any(|a| a == &expected),
+                "missing non-negative param constraint: {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn parsed_protocol_transition_location_updates() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let enc = encode_bmc(&cs, &property, 1);
+        let assertions: Vec<String> = enc.assertions.iter().map(to_smtlib).collect();
+
+        // For each location, kappa_{k+1}_l depends on kappa_k_l plus incoming minus outgoing.
+        // At minimum, each kappa_1_l should appear in an equality assertion.
+        for l in 0..cs.num_locations() {
+            let kappa_next = format!("kappa_1_{l}");
+            let has_update = assertions.iter().any(|a| {
+                a.starts_with(&format!("(= {kappa_next}"))
+            });
+            assert!(
+                has_update,
+                "missing location counter update for kappa_1_{l}"
+            );
+        }
+
+        // Delta variables are non-negative
+        for r in 0..cs.num_rules() {
+            let expected = format!("(>= delta_0_{r} 0)");
+            assert!(
+                assertions.iter().any(|a| a == &expected),
+                "missing non-negativity for delta_0_{r}"
+            );
+        }
+
+        // kappa_{k+1}_l >= 0
+        for l in 0..cs.num_locations() {
+            let expected = format!("(>= kappa_1_{l} 0)");
+            assert!(
+                assertions.iter().any(|a| a == &expected),
+                "missing non-negativity for kappa_1_{l}"
+            );
+        }
+    }
+
+    #[test]
+    fn parsed_protocol_time_progression() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let enc = encode_bmc(&cs, &property, 2);
+        let assertions: Vec<String> = enc.assertions.iter().map(to_smtlib).collect();
+
+        assert!(
+            assertions.iter().any(|a| a == "(= time_1 (+ time_0 1))"),
+            "missing time_1 = time_0 + 1"
+        );
+        assert!(
+            assertions.iter().any(|a| a == "(= time_2 (+ time_1 1))"),
+            "missing time_2 = time_1 + 1"
+        );
+    }
+
+    #[test]
+    fn encoding_depth_scales_declarations() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+
+        let enc1 = encode_bmc(&cs, &property, 1);
+        let enc2 = encode_bmc(&cs, &property, 2);
+        let enc4 = encode_bmc(&cs, &property, 4);
+
+        // More depth = more declarations and assertions
+        assert!(
+            enc2.declarations.len() > enc1.declarations.len(),
+            "depth 2 should have more declarations than depth 1: {} vs {}",
+            enc2.declarations.len(),
+            enc1.declarations.len()
+        );
+        assert!(
+            enc4.declarations.len() > enc2.declarations.len(),
+            "depth 4 should have more declarations than depth 2: {} vs {}",
+            enc4.declarations.len(),
+            enc2.declarations.len()
+        );
+        assert!(
+            enc2.assertions.len() > enc1.assertions.len(),
+            "depth 2 should have more assertions than depth 1"
+        );
+        assert!(
+            enc4.assertions.len() > enc2.assertions.len(),
+            "depth 4 should have more assertions than depth 2"
+        );
+
+        // Verify depth-specific variables exist
+        let decl4: std::collections::HashSet<_> =
+            enc4.declarations.iter().map(|(n, _)| n.clone()).collect();
+        // Step 4 kappa variables should exist
+        assert!(decl4.contains(&kappa_var(4, 0)));
+        // Step 3 delta variables should exist (transitions 0..3)
+        assert!(decl4.contains(&delta_var(3, 0)));
+        // Time variable at step 4
+        assert!(decl4.contains(&time_var(4)));
+    }
+
+    #[test]
+    fn k_induction_step_parsed_protocol() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+
+        let step = encode_k_induction_step(&cs, &property, 2);
+
+        // k-induction step should have declarations for steps 0..=k
+        let decl_names: std::collections::HashSet<_> =
+            step.declarations.iter().map(|(n, _)| n.clone()).collect();
+        // Should have kappa at all three steps (0, 1, 2)
+        for s in 0..=2 {
+            for l in 0..cs.num_locations() {
+                assert!(
+                    decl_names.contains(&kappa_var(s, l)),
+                    "k-induction step missing kappa_{s}_{l}"
+                );
+            }
+        }
+        // Delta variables for steps 0..k-1 (i.e., step 0 and step 1)
+        for s in 0..2 {
+            for r in 0..cs.num_rules() {
+                assert!(
+                    decl_names.contains(&delta_var(s, r)),
+                    "k-induction step missing delta_{s}_{r}"
+                );
+            }
+        }
+
+        // k-induction does NOT constrain step 0 to be initial
+        // so there should be no "kappa_0_l = 0" for non-initial locations
+        // as there is in BMC. Instead, kappa_0 values are free.
+        let assertions: Vec<String> = step.assertions.iter().map(to_smtlib).collect();
+
+        // But it should still have non-negativity for all kappa
+        for l in 0..cs.num_locations() {
+            let expected = format!("(>= kappa_0_{l} 0)");
+            assert!(
+                assertions.iter().any(|a| a == &expected),
+                "k-induction step missing non-negativity for kappa_0_{l}"
+            );
+        }
+    }
+
+    #[test]
+    fn parsed_protocol_property_violation_agreement() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+
+        // The agreement property should have conflicting pairs
+        // (at least for protocols with multiple decision phases)
+        match &property {
+            SafetyProperty::Agreement { conflicting_pairs } => {
+                // Reliable broadcast has a single decision value, so
+                // conflicting_pairs might be empty (single phase).
+                // Regardless, the encoding should work.
+                let enc = encode_bmc(&cs, &property, 1);
+                if conflicting_pairs.is_empty() {
+                    // Violation should be trivially false => UNSAT
+                    let sat = solve_with_extra_assertions(
+                        &enc,
+                        &[SmtTerm::var("p_0").eq(SmtTerm::int(4)),
+                          SmtTerm::var("p_1").eq(SmtTerm::int(1)),
+                          SmtTerm::var("p_2").eq(SmtTerm::int(1))],
+                    );
+                    assert_eq!(sat, SatResult::Unsat);
+                }
+            }
+            _ => panic!("expected Agreement property"),
+        }
+    }
+
+    #[test]
+    fn parsed_buggy_protocol_violation_is_reachable() {
+        let cs = parse_and_lower(BUGGY_BROADCAST);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+
+        // The buggy protocol should have conflicting pairs (done_yes vs done_no)
+        match &property {
+            SafetyProperty::Agreement { conflicting_pairs } => {
+                assert!(
+                    !conflicting_pairs.is_empty(),
+                    "buggy protocol should have conflicting decision pairs"
+                );
+            }
+            _ => panic!("expected Agreement property"),
+        }
+
+        // At sufficient depth, the violation should be SAT (reachable)
+        let enc = encode_bmc(&cs, &property, 4);
+        let sat = solve_with_extra_assertions(
+            &enc,
+            &[
+                SmtTerm::var("p_0").eq(SmtTerm::int(4)),
+                SmtTerm::var("p_1").eq(SmtTerm::int(1)),
+                SmtTerm::var("p_2").eq(SmtTerm::int(1)),
+            ],
+        );
+        assert_eq!(
+            sat,
+            SatResult::Sat,
+            "buggy protocol agreement violation should be reachable"
+        );
+    }
+
+    #[test]
+    fn parsed_protocol_adversary_injection_bounded() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let enc = encode_bmc(&cs, &property, 1);
+        let assertions: Vec<String> = enc.assertions.iter().map(to_smtlib).collect();
+
+        // The adversary bound parameter (f = p_2) should cap each adv variable
+        for v in 0..cs.num_shared_vars() {
+            let expected = format!("(<= adv_0_{v} p_2)");
+            assert!(
+                assertions.iter().any(|a| a == &expected),
+                "missing adversary bound for adv_0_{v}: {expected}"
+            );
+        }
+
+        // f <= t constraint
+        assert!(
+            assertions.iter().any(|a| a == "(<= p_2 p_1)"),
+            "missing f <= t constraint"
+        );
+    }
+
+    #[test]
+    fn depth_zero_encoding_checks_only_initial_state() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let enc = encode_bmc(&cs, &property, 0);
+        let decl_names: std::collections::HashSet<_> =
+            enc.declarations.iter().map(|(n, _)| n.clone()).collect();
+
+        // At depth 0, there are no transition steps, so no delta variables
+        assert!(
+            !decl_names.iter().any(|n| n.starts_with("delta_")),
+            "depth 0 should have no delta variables"
+        );
+
+        // Should still have step 0 kappa and gamma
+        assert!(decl_names.contains(&kappa_var(0, 0)));
+        assert!(decl_names.contains(&gamma_var(0, 0)));
+        assert!(decl_names.contains(&time_var(0)));
+    }
+
+    #[test]
+    fn property_violation_invariant_encoding() {
+        let ta = make_simple_ta();
+        // Invariant: bad set = both locations occupied
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![0, 1]],
+        };
+        let term = encode_property_violation_at_step(&ta, &property, 0);
+        let s = to_smtlib(&term);
+        assert!(
+            s.contains("kappa_0_0") && s.contains("kappa_0_1"),
+            "invariant violation should reference both locations: {s}"
+        );
+    }
+
+    #[test]
+    fn property_violation_termination_encoding() {
+        let ta = make_simple_ta();
+        // Termination: goal is location 1 (done)
+        let property = SafetyProperty::Termination {
+            goal_locs: vec![1],
+        };
+        let term = encode_property_violation_at_step(&ta, &property, 0);
+        let s = to_smtlib(&term);
+        // Termination violation means some process is NOT in a goal location
+        // So kappa_0_0 > 0 should appear (location 0 is not a goal)
+        assert!(
+            s.contains("kappa_0_0"),
+            "termination violation should reference non-goal location: {s}"
+        );
+    }
+
+    #[test]
+    fn property_violation_empty_invariant_is_false() {
+        let ta = make_simple_ta();
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![],
+        };
+        let term = encode_property_violation(&ta, &property, 2);
+        assert_eq!(term, SmtTerm::bool(false));
+    }
+
+    #[test]
+    fn dedup_stats_are_consistent() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let enc = encode_bmc(&cs, &property, 2);
+
+        assert_eq!(
+            enc.assertion_candidates(),
+            enc.assertion_unique() + enc.assertion_dedup_hits(),
+            "candidates should equal unique + dedup hits"
+        );
+        assert!(
+            enc.assertion_unique() > 0,
+            "should have at least one unique assertion"
+        );
+    }
+
+    #[test]
+    fn resilience_condition_encoded_from_parsed_protocol() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let enc = encode_bmc(&cs, &property, 1);
+        let assertions: Vec<String> = enc.assertions.iter().map(to_smtlib).collect();
+
+        // Resilience condition: n > 3*t should appear as (> p_0 (* 3 p_1))
+        let has_resilience = assertions.iter().any(|a| {
+            a.contains("p_0") && a.contains("p_1") && (a.contains(">") || a.contains("<"))
+        });
+        assert!(
+            has_resilience,
+            "missing resilience condition encoding involving p_0 and p_1"
+        );
+    }
+
+    #[test]
+    fn k_induction_step_has_conservation_strengthening() {
+        let cs = parse_and_lower(RELIABLE_BROADCAST_SAFE);
+        let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+        let step = encode_k_induction_step(&cs, &property, 1);
+        let assertions: Vec<String> = step.assertions.iter().map(to_smtlib).collect();
+
+        // k-induction step should have process conservation: sum of kappa = n
+        // This appears as an equality involving p_0 (the n parameter)
+        let has_conservation = assertions.iter().any(|a| {
+            a.contains("kappa_0_") && a.contains("p_0") && a.contains("=")
+        });
+        assert!(
+            has_conservation,
+            "k-induction step should have process conservation strengthening"
+        );
     }
 }

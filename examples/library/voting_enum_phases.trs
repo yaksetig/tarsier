@@ -1,0 +1,46 @@
+// Example: Voting protocol using enum types for vote values.
+// Demonstrates the enum DSL feature with two distinct vote outcomes.
+protocol VotingEnumPhases {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    enum Vote { yes, no }
+
+    message Proposal;
+    message CastVote;
+
+    role Voter {
+        var decided: bool = false;
+        var decision: Vote = yes;
+
+        init idle;
+
+        phase idle {
+            when received >= 1 Proposal => {
+                send CastVote;
+                goto phase voting;
+            }
+        }
+
+        phase voting {
+            when received >= 2*t+1 CastVote => {
+                decided = true;
+                decision = yes;
+                goto phase done_yes;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Voter. forall q: Voter.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

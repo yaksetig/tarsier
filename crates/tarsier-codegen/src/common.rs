@@ -118,7 +118,7 @@ pub fn render_expr(expr: &Expr, params: &HashSet<String>, target: CodegenTarget)
             let inner = render_expr(e, params, target);
             match target {
                 CodegenTarget::Rust => format!("(-({inner} as i64) as u64)"),
-                CodegenTarget::Go => format!("(-int64({inner})"),
+                CodegenTarget::Go => format!("(-int64({inner}))"),
             }
         }
     }
@@ -174,6 +174,24 @@ pub fn uses_distinct_guards(protocol: &tarsier_dsl::ast::ProtocolDecl) -> bool {
     })
 }
 
+/// Check if any role in the protocol uses filtered threshold guards (message_args non-empty).
+pub fn uses_filtered_guards(protocol: &tarsier_dsl::ast::ProtocolDecl) -> bool {
+    use tarsier_dsl::ast::GuardExpr;
+    fn check(guard: &GuardExpr) -> bool {
+        match guard {
+            GuardExpr::Threshold(tg) => !tg.message_args.is_empty(),
+            GuardExpr::And(a, b) | GuardExpr::Or(a, b) => check(a) || check(b),
+            _ => false,
+        }
+    }
+    protocol.roles.iter().any(|role| {
+        role.node
+            .phases
+            .iter()
+            .any(|phase| phase.node.transitions.iter().any(|t| check(&t.node.guard)))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,6 +210,7 @@ mod tests {
         assert_eq!(to_snake_case("Hello"), "hello");
         assert_eq!(to_snake_case("HelloWorld"), "hello_world");
         assert_eq!(to_snake_case("PrePrepare"), "pre_prepare");
+        assert_eq!(to_snake_case("URLValue"), "u_r_l_value");
         assert_eq!(to_snake_case("abc"), "abc");
     }
 
@@ -234,6 +253,12 @@ mod tests {
             render_expr(&expr, &params, CodegenTarget::Rust),
             "self.decided"
         );
+
+        let expr = Expr::Var("n".into());
+        assert_eq!(render_expr(&expr, &params, CodegenTarget::Go), "config.N");
+
+        let expr = Expr::Var("decided".into());
+        assert_eq!(render_expr(&expr, &params, CodegenTarget::Go), "s.Decided");
     }
 
     #[test]
@@ -241,5 +266,47 @@ mod tests {
         assert_eq!(render_cmp_op(&CmpOp::Ge), ">=");
         assert_eq!(render_cmp_op(&CmpOp::Eq), "==");
         assert_eq!(render_cmp_op(&CmpOp::Ne), "!=");
+    }
+
+    #[test]
+    fn test_render_expr_neg_go_balanced() {
+        let params = HashSet::new();
+        let expr = Expr::Neg(Box::new(Expr::IntLit(5)));
+        let result = render_expr(&expr, &params, CodegenTarget::Go);
+        assert_eq!(result.matches('(').count(), result.matches(')').count());
+        assert!(result.contains("int64"));
+    }
+
+    #[test]
+    fn test_render_expr_neg_rust_has_unsigned_cast_shape() {
+        let params = HashSet::new();
+        let expr = Expr::Neg(Box::new(Expr::IntLit(5)));
+        let result = render_expr(&expr, &params, CodegenTarget::Rust);
+        assert_eq!(result, "(-(5 as i64) as u64)");
+    }
+
+    #[test]
+    fn test_collect_param_names_deduplicates_by_name() {
+        let params = vec![
+            tarsier_dsl::ast::ParamDef {
+                name: "n".to_string(),
+                ty: tarsier_dsl::ast::ParamType::Nat,
+                span: tarsier_dsl::ast::Span::new(0, 0),
+            },
+            tarsier_dsl::ast::ParamDef {
+                name: "n".to_string(),
+                ty: tarsier_dsl::ast::ParamType::Nat,
+                span: tarsier_dsl::ast::Span::new(0, 0),
+            },
+            tarsier_dsl::ast::ParamDef {
+                name: "f".to_string(),
+                ty: tarsier_dsl::ast::ParamType::Nat,
+                span: tarsier_dsl::ast::Span::new(0, 0),
+            },
+        ];
+        let names = collect_param_names(&params);
+        assert_eq!(names.len(), 2);
+        assert!(names.contains("n"));
+        assert!(names.contains("f"));
     }
 }

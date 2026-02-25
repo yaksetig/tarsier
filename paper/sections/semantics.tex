@@ -1,0 +1,127 @@
+\section{Faithful Network Semantics}\label{sec:semantics}
+
+The central technical contribution of \tarsier{} is a hierarchy of four
+\emph{network abstraction modes} that refine the classical counter
+abstraction with increasingly faithful message-delivery semantics.  Each
+mode trades analysis cost for modeling precision, and we provide formal
+soundness transfer guarantees for each.
+
+\subsection{The Faithful Target Model}
+
+We define a \emph{faithful protocol model} as the idealized semantics with:
+\begin{itemize}
+  \item per-process identities ($\mathit{pid} \in [0, n{-}1]$);
+  \item per-recipient message delivery (sender $s$ sends to recipient $r$);
+  \item sender-authenticated channels (\texttt{auth: signed});
+  \item distinct-sender counting for threshold guards.
+\end{itemize}
+All four modes approximate this faithful target from above (more behaviors)
+or match it exactly.
+
+\subsection{Mode Hierarchy}
+
+\paragraph{Mode 1: Classic.}
+The original counter abstraction.  Shared variables are scoped per
+(message~family, recipient~role, field~valuation):
+$\mathit{cnt\_M@Role}[\mathit{fields}]$.
+All senders are aggregated; the adversary injects messages globally.
+
+\paragraph{Mode 2: Identity-selective.}
+Shared variables are refined to per-sender, per-recipient scope:
+$\mathit{cnt\_M@Recipient \leftarrow Sender}[\mathit{fields}]$.
+Each Byzantine sender has a \emph{budget variable}
+$\mathit{byzsender}[s] \in \{0,1\}$ with
+$\sum_s \mathit{byzsender}[s] \leq f$.
+Equivocation control (\texttt{equivocation: none}) constrains each sender
+to a single payload per round.
+
+\paragraph{Mode 3: Cohort-selective.}
+Recipient channels are partitioned into \emph{cohorts}---sub-role groups
+that share delivery constraints:
+$\mathit{cnt\_M@Role\#cohort}[\mathit{fields}]$.
+This provides an intermediate granularity between identity-selective
+(per-sender) and classic (per-role).
+
+\paragraph{Mode 4: Process-selective.}
+Every process has a concrete identity
+$\mathit{pid} \in [0, n{-}1]$, and channels are fully per-process:
+$\mathit{cnt\_M@Role\#pid}[\mathit{fields}]$.
+The adversary activates a \emph{static faulty-sender set}
+$F \subseteq [0, n{-}1]$ with $|F| \leq f$, and only processes in $F$ may
+exhibit Byzantine behavior.
+
+\subsection{Soundness Transfer}\label{sec:transfer}
+
+Let $\mathcal{R}_M(\ta)$ denote the set of reachable configurations of
+automaton $\ta$ under mode $M$, and let $\mathcal{R}_{\mathit{faith}}$
+denote reachability in the faithful target.
+
+\begin{theorem}[Classic soundness]\label{thm:classic}
+If guards are monotone ($\geq$, $>$ only) and equivocation is \texttt{full},
+then
+$\mathcal{R}_{\mathit{faith}} \subseteq \mathcal{R}_{\mathit{classic}}(\ta)$.
+Hence, $\ta$ safe under classic $\Rightarrow$ faithful target safe.
+\end{theorem}
+
+This is a standard over-approximation result: classic admits strictly more
+behaviors.  Crucially, an UNSAFE verdict under classic does \emph{not}
+transfer---the counterexample may be spurious.
+
+\begin{theorem}[Identity-selective soundness]\label{thm:idsel}
+With \texttt{auth: signed} and sender budgets $\geq$ faithful-target budgets,
+$\mathcal{R}_{\mathit{faith}} \subseteq \mathcal{R}_{\mathit{id\text{-}sel}}(\ta)$.
+\end{theorem}
+
+Identity-selective mode is a tighter over-approximation that correctly
+models distinct-sender thresholds and equivocation constraints.
+
+\begin{theorem}[Process-selective exactness]\label{thm:procsel}
+For bounded $\mathit{pid} \in [0, n{-}1]$ with \texttt{auth: signed}:
+$\mathcal{R}_{\mathit{proc\text{-}sel}}(\ta) = \mathcal{R}_{\mathit{faith}}$.
+Both SAFE and UNSAFE verdicts transfer.
+\end{theorem}
+
+Process-selective mode eliminates the abstraction gap entirely for bounded
+process domains.  This enables \emph{precise bug-finding}: an UNSAFE
+verdict under process-selective mode corresponds to a real attack.
+
+\subsection{Adversary Model Encoding}
+
+For each network mode, the adversary's power is encoded in the SMT
+formula via:
+
+\begin{enumerate}
+  \item \textbf{Injection variables:}
+    $\adv[k, \gamma] \geq 0$ at each step $k$ for each shared
+    variable $\gamma$, bounded by
+    $\sum_k \adv[k, \gamma] \leq f$.
+
+  \item \textbf{Non-forgeability:}
+    For cryptographic object counters,
+    $\adv[k, \gamma_{\mathit{crypto}}] = 0$ (no forgery).
+
+  \item \textbf{Sender budgets} (identity-selective and above):
+    $\mathit{byzsender}[s] \in \{0,1\}$,
+    $\sum_s \mathit{byzsender}[s] \leq f$.
+    Only activated senders may inject or equivocate.
+
+  \item \textbf{Static faulty set} (process-selective):
+    $\mathit{faulty}[\mathit{pid}] \in \{0,1\}$,
+    $\sum_{\mathit{pid}} \mathit{faulty}[\mathit{pid}] \leq f$.
+    Honest processes follow the protocol exactly.
+\end{enumerate}
+
+\subsection{Fallback Lattice}
+
+When the SMT encoding for a faithful mode exceeds solver capacity,
+\tarsier{} supports a \emph{fallback lattice}:
+\[
+  \text{process-selective}
+  \rightarrow \text{cohort-selective}
+  \rightarrow \text{identity-selective}
+  \rightarrow \text{classic}
+\]
+Each step widens the abstraction (adding more behaviors) while
+preserving soundness for SAFE verdicts, at the cost of losing UNSAFE
+transfer guarantees.  The tool reports which mode produced the final
+verdict, enabling users to assess the precision of the result.

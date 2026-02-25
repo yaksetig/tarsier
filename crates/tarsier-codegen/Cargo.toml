@@ -2,9 +2,15 @@
 name = "tarsier-codegen"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Code generation from verified protocol specifications"
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
-tarsier-dsl = { path = "../tarsier-dsl" }
+tarsier-dsl = { path = "../tarsier-dsl", version = "0.1.0" }
 thiserror.workspace = true
 
 [dev-dependencies]

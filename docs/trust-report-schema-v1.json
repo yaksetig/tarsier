@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/trust-report-schema-v1.json",
+  "title": "Tarsier Trust Report (v1)",
+  "description": "Machine-readable trust report capturing trust-boundary sections, governance profile, verification scope, and residual assumptions. See docs/TRUST_REPORT_SCHEMA.md for the full specification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "generator",
+    "governance_profile",
+    "trust_boundary",
+    "verification_scope",
+    "residual_assumptions"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO 8601 UTC timestamp of report generation"
+    },
+    "generator": {
+      "type": "string",
+      "description": "Generator tool and version (e.g. tarsier-cli v0.1.0)"
+    },
+    "governance_profile": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "reinforced",
+        "high-assurance"
+      ],
+      "description": "Named governance profile applied"
+    },
+    "trust_boundary": {
+      "$ref": "#/$defs/trust_boundary"
+    },
+    "verification_scope": {
+      "$ref": "#/$defs/verification_scope"
+    },
+    "residual_assumptions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/residual_assumption"
+      },
+      "description": "Assumptions that remain even after successful verification"
+    }
+  },
+  "$defs": {
+    "trust_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_layers",
+        "threat_model"
+      ],
+      "properties": {
+        "claim_layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/claim_layer"
+          }
+        },
+        "threat_model": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/threat_entry"
+          }
+        }
+      }
+    },
+    "claim_layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "what_is_verified",
+        "what_is_trusted",
+        "status"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "what_is_verified": {
+          "type": "string"
+        },
+        "what_is_trusted": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "enforced",
+            "optional",
+            "not_applicable"
+          ]
+        }
+      }
+    },
+    "threat_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "vector",
+        "countermeasure",
+        "status"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vector": {
+          "type": "string"
+        },
+        "countermeasure": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "enforced",
+            "available",
+            "not_applicable"
+          ]
+        }
+      }
+    },
+    "verification_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "solvers",
+        "proof_engine",
+        "soundness",
+        "certificate_schema_version"
+      ],
+      "properties": {
+        "protocol_file": {
+          "type": "string"
+        },
+        "solvers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "proof_engine": {
+          "type": "string",
+          "enum": [
+            "kinduction",
+            "pdr"
+          ]
+        },
+        "soundness": {
+          "type": "string",
+          "enum": [
+            "strict",
+            "permissive"
+          ]
+        },
+        "certificate_schema_version": {
+          "type": "integer"
+        }
+      }
+    },
+    "residual_assumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "mitigation": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

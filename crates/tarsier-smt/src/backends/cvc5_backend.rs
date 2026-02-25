@@ -274,9 +274,7 @@ fn parse_cvc5_unsat_assumptions(response: &str) -> Vec<String> {
             }
             '|' => {
                 in_quoted_symbol = !in_quoted_symbol;
-                if !in_quoted_symbol {
-                    out.push(std::mem::take(&mut buf));
-                } else if !buf.is_empty() {
+                if !buf.is_empty() {
                     out.push(std::mem::take(&mut buf));
                 }
             }

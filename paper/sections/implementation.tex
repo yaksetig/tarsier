@@ -1,0 +1,86 @@
+\section{Implementation}\label{sec:implementation}
+
+\tarsier{} is implemented in Rust as a Cargo workspace of 11 crates.
+Fig.~\ref{fig:arch} shows the architecture and data flow.
+
+\begin{figure}[t]
+\centering
+\input{figures/architecture}
+\caption{Architecture of \tarsier{}.  Arrows denote data flow.  The
+proof kernel and certcheck are independent of the main engine, sharing
+only the certificate schema.}
+\label{fig:arch}
+\end{figure}
+
+\subsection{Crate Organization}
+
+\paragraph{Frontend.}
+The \texttt{tarsier-dsl} crate implements a PEG parser (via the
+\texttt{pest} library) that translates \texttt{.trs} source files into an
+abstract syntax tree (AST).  The \texttt{tarsier-ir} crate lowers the
+AST to threshold automata, performing location expansion,
+shared-variable allocation, rule generation, and property extraction
+(Sect.~\ref{sec:lowering}).
+
+\paragraph{Verification engine.}
+The \texttt{tarsier-smt} crate provides a backend-agnostic SMT interface
+with concrete backends for Z3~\cite{DeMoura2008} (via the \texttt{z3}
+Rust crate v0.19 with static linking) and cvc5~\cite{BarbosaBBKLMMMN2022}
+(via a process-based interface).  The \texttt{tarsier-engine} crate
+implements BMC, $k$-induction, PDR, CEGAR~\cite{ClarkeGJLV2000}, and the
+portfolio solver.  It also provides partial-order reduction, symmetry
+reduction, and counterexample trace extraction.
+
+\paragraph{Probabilistic analysis.}
+The \texttt{tarsier-prob} crate implements exact hypergeometric
+probability computation using arbitrary-precision rational arithmetic
+(\texttt{num} crate with \texttt{BigInt}/\texttt{BigRational}).  For
+committee-based protocols (e.g.\
+Algorand~\cite{GiladHMVZ2017, Micali2017}), it computes the maximum
+adversary bound $b_{\max}$ such that the probability of committee
+corruption remains below a target $\varepsilon$, then injects this
+bound into the SMT encoding.
+
+\paragraph{Proof infrastructure.}
+The \texttt{tarsier-proof-kernel} crate (Sect.~\ref{sec:certificates})
+validates certificate bundles with a minimal dependency footprint.
+The \texttt{tarsier-certcheck} binary replays obligations against
+multiple solvers and optionally invokes proof-object checkers.
+
+\paragraph{Auxiliary crates.}
+\texttt{tarsier-conformance} validates runtime execution traces against
+the protocol specification (without depending on the SMT engine).
+\texttt{tarsier-lsp} provides IDE integration via the Language Server
+Protocol.  \texttt{tarsier-codegen} generates verified protocol
+implementations from certified specifications.
+
+\subsection{Solver Integration}
+
+Z3 is accessed through thread-local contexts (z3 crate v0.19 requires no
+explicit context object).  Arithmetic operations use Rust's operator
+overloading (\texttt{\&l + \&r}, \texttt{\&l * \&r}).  The incremental
+solving interface uses push/pop scopes to extend the formula across
+$k$-induction depths.
+
+For multi-solver portfolio mode, \tarsier{} spawns parallel solver
+instances and takes the first definitive result.  The portfolio strategy is
+particularly effective for proof search, where Z3 and cvc5 have
+complementary strengths.
+
+\subsection{CLI and Workflow}
+
+The \texttt{tarsier-cli} provides commands for the full verification
+workflow:
+
+\begin{itemize}
+  \item \texttt{verify}: BMC safety check up to depth $k$.
+  \item \texttt{prove}: Unbounded safety proof via $k$-induction or PDR.
+  \item \texttt{prove-fair}: Fair-liveness proof with weak/strong fairness.
+  \item \texttt{analyze}: Multi-layer analysis with graduated confidence.
+  \item \texttt{certify-safety}: Generate a proof certificate bundle.
+  \item \texttt{export-ta}: Export the threshold automaton in ByMC
+    \texttt{.ta} format for cross-tool comparison.
+\end{itemize}
+
+Output is available in human-readable and JSON formats, enabling
+integration into CI pipelines and automated regression suites.

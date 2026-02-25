@@ -1,0 +1,191 @@
+{
+  "Protocol Skeleton": {
+    "prefix": "protocol",
+    "body": [
+      "protocol ${1:MyProtocol} {",
+      "    parameters {",
+      "        n: nat;",
+      "        t: nat;",
+      "        f: nat;",
+      "    }",
+      "",
+      "    resilience: n > 3*t;",
+      "",
+      "    adversary {",
+      "        model: byzantine;",
+      "        bound: f;",
+      "    }",
+      "",
+      "    message ${2:Vote}(${3:value: bool});",
+      "",
+      "    role ${4:Replica} {",
+      "        init ${5:idle};",
+      "",
+      "        phase ${5:idle} {",
+      "            $0",
+      "        }",
+      "    }",
+      "",
+      "    property agreement: safety {",
+      "        forall p, q: ${4:Replica}.",
+      "            true",
+      "    }",
+      "}"
+    ],
+    "description": "Create a new protocol skeleton"
+  },
+  "Faithful Protocol Skeleton": {
+    "prefix": "faithful-protocol",
+    "body": [
+      "protocol ${1:MyProtocol} {",
+      "    params n, t, f;",
+      "    resilience: n > 3*t;",
+      "",
+      "    adversary {",
+      "        model: byzantine;",
+      "        bound: f;",
+      "        auth: signed;",
+      "        network: identity_selective;",
+      "        delivery: per_recipient;",
+      "        faults: per_recipient;",
+      "        equivocation: none;",
+      "    }",
+      "",
+      "    identity ${2:Replica}: role key ${3:replica_key};",
+      "",
+      "    message ${4:Prepare};",
+      "    channel ${4:Prepare}: authenticated;",
+      "    equivocation ${4:Prepare}: none;",
+      "",
+      "    role ${2:Replica} {",
+      "        var decided: bool = false;",
+      "        init ${5:start};",
+      "",
+      "        phase ${5:start} {",
+      "            $0",
+      "        }",
+      "    }",
+      "",
+      "    property agreement: agreement {",
+      "        forall p: ${2:Replica}. forall q: ${2:Replica}.",
+      "            (p.decided == true && q.decided == true) ==> true",
+      "    }",
+      "}"
+    ],
+    "description": "Create a protocol with faithful network semantics (identity-selective, per-recipient delivery)"
+  },
+  "Phase": {
+    "prefix": "phase",
+    "body": [
+      "phase ${1:name} {",
+      "    when ${2:guard} => {",
+      "        $0",
+      "    }",
+      "}"
+    ],
+    "description": "Add a new phase"
+  },
+  "Transition Rule": {
+    "prefix": "when",
+    "body": [
+      "when ${1:received >= 2*t+1 ${2:MsgType}} => {",
+      "    ${3:send ${4:MsgType}();}",
+      "    goto phase ${5:next_phase};",
+      "}"
+    ],
+    "description": "Add a transition rule"
+  },
+  "Safety Property": {
+    "prefix": "property-safety",
+    "body": [
+      "property ${1:agreement}: safety {",
+      "    forall p, q: ${2:Replica}.",
+      "        ${3:(p.decided == true && q.decided == true) ==> true}",
+      "}"
+    ],
+    "description": "Add a safety property"
+  },
+  "Liveness Property": {
+    "prefix": "property-liveness",
+    "body": [
+      "property ${1:termination}: liveness {",
+      "    forall p: ${2:Replica}.",
+      "        <> p.${3:decided} == true",
+      "}"
+    ],
+    "description": "Add a liveness property"
+  },
+  "Adversary Block": {
+    "prefix": "adversary",
+    "body": [
+      "adversary {",
+      "    model: ${1|byzantine,crash|};",
+      "    bound: ${2:f};",
+      "    auth: ${3|signed,unsigned|};",
+      "}"
+    ],
+    "description": "Add an adversary block"
+  },
+  "Message Declaration": {
+    "prefix": "message",
+    "body": [
+      "message ${1:MsgName}${2:(${3:value: nat})};"
+    ],
+    "description": "Declare a message type"
+  },
+  "Role": {
+    "prefix": "role",
+    "body": [
+      "role ${1:Replica} {",
+      "    var ${2:decided}: ${3|bool,nat,int|} = ${4:false};",
+      "    init ${5:start};",
+      "",
+      "    phase ${5:start} {",
+      "        $0",
+      "    }",
+      "}"
+    ],
+    "description": "Add a role with variable and initial phase"
+  },
+  "Committee Selection": {
+    "prefix": "committee",
+    "body": [
+      "committee ${1:name} {",
+      "    population: ${2:N};",
+      "    byzantine: ${3:K};",
+      "    size: ${4:S};",
+      "    epsilon: ${5:1.0e-9};",
+      "    bound_param: ${6:b};",
+      "}"
+    ],
+    "description": "Add a committee selection block for probabilistic verification"
+  },
+  "Identity Declaration": {
+    "prefix": "identity",
+    "body": [
+      "identity ${1:Replica}: role key ${2:replica_key};"
+    ],
+    "description": "Declare an identity for authenticated channels"
+  },
+  "Channel Authentication": {
+    "prefix": "channel",
+    "body": [
+      "channel ${1:MsgName}: ${2|authenticated,unauthenticated|};"
+    ],
+    "description": "Declare channel authentication for a message type"
+  },
+  "Variable Declaration": {
+    "prefix": "var",
+    "body": [
+      "var ${1:name}: ${2|bool,nat,int|} = ${3:false};"
+    ],
+    "description": "Declare a role-local variable"
+  },
+  "Resilience Constraint": {
+    "prefix": "resilience",
+    "body": [
+      "resilience: ${1:n > 3*t};"
+    ],
+    "description": "Add a resilience constraint"
+  }
+}

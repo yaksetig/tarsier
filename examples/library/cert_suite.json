@@ -1,6 +1,24 @@
 {
   "schema_version": 2,
   "enforce_library_coverage": true,
+  "enforce_corpus_breadth": true,
+  "enforce_model_hash_consistency": true,
+  "enforce_known_bug_sentinels": true,
+  "required_known_bug_families": [
+    "pbft",
+    "hotstuff",
+    "tendermint",
+    "reliable-broadcast",
+    "viewstamped-replication",
+    "zab"
+  ],
+  "required_variant_groups": [
+    "pbft_simple_safe",
+    "hotstuff_safe_kernel",
+    "reliable_broadcast_safe",
+    "vr_safe",
+    "zab_safe"
+  ],
   "library_dir": ".",
   "entries": [
     {
@@ -180,6 +198,34 @@
       "cegar_iters": 0,
       "notes": "Crypto-object decisive faithful PBFT kernel: PrepareQC formation is signer-scoped and `conflicts exclusive` under no-equivocation assumptions, preventing contradictory certificates and preserving agreement.",
       "model_sha256": "95230dae6b6c272ac269ed6a17d5055f4c511f76c795de847edbd151d7e2bf02"
+    },
+    {
+      "file": "pbft_liveness_buggy_ci.trs",
+      "family": "pbft",
+      "class": "known_bug",
+      "verify": "safe",
+      "liveness": "not_live",
+      "fair_liveness": "fair_cycle_found",
+      "prove_fair": "fair_cycle_found",
+      "fairness": "weak",
+      "k": 8,
+      "cegar_iters": 0,
+      "notes": "PBFT-shaped liveness regression sentinel for unbounded proving: no commit source is modeled, so fair non-terminating cycles remain reachable under weak fairness. This entry anchors expected non-live outcomes for bounded and unbounded liveness checks.",
+      "model_sha256": "6f77a73c46cc25676d75e4fbbb66fb39d17cca4cdd70bb895e46b34811ce89a5"
+    },
+    {
+      "file": "pbft_liveness_safe_ci.trs",
+      "family": "pbft",
+      "class": "expected_safe",
+      "verify": "safe",
+      "liveness": "live",
+      "fair_liveness": "no_fair_cycle_up_to",
+      "prove_fair": "live_proved",
+      "fairness": "weak",
+      "k": 8,
+      "cegar_iters": 0,
+      "notes": "PBFT-shaped nontrivial CI anchor with partial-synchrony/adversary/message structure and a deterministic live target. Used for stable unbounded fair-liveness certificate generation and replay gates.",
+      "model_sha256": "23974d62dbebdb502e1f3f3ef015988c633489ec5a80d8826fc557824f204d05"
     },
     {
       "file": "pbft_simple_safe.trs",
@@ -442,6 +488,60 @@
       "cegar_iters": 0,
       "notes": "Bug seed: Zyzzyva fast-path certificate threshold intentionally set below 3f+1, allowing a Byzantine coalition to forge a conflicting fast-path certificate and violate agreement.",
       "model_sha256": "afa67e3c171238b7f3779ede78c17dfcba249b00f2fc31f86f17de4dbdf741ee"
+    },
+    {
+      "file": "reliable_broadcast_safe_live.trs",
+      "family": "reliable-broadcast",
+      "class": "expected_safe",
+      "verify": "safe",
+      "prove": "safe",
+      "k": 10,
+      "proof_engine": "kinduction",
+      "cegar_iters": 0,
+      "notes": "Reliable Broadcast with liveness property (termination). Safety (agreement) holds; bounded fair-liveness may report spurious cycle due to counter abstraction over-approximation.",
+      "model_sha256": "91513a2d7b655462bc3f3ea75d0b60e2d526c587c0ad29c330104971f84ad26e"
+    },
+    {
+      "file": "reliable_broadcast_live_buggy.trs",
+      "family": "reliable-broadcast",
+      "class": "expected_safe",
+      "verify": "safe",
+      "k": 10,
+      "proof_engine": "kinduction",
+      "cegar_iters": 0,
+      "notes": "Reliable Broadcast with liveness bug: self-loop in echoed phase allows non-termination under weak fairness. Safety (agreement) still holds since the bug is a liveness bug, not a safety bug.",
+      "model_sha256": "3cd7ced6b09d384de954578cff6ce7146556a432c22319e0b34dec18630bd54a"
+    },
+    {
+      "file": "voting_enum_phases.trs",
+      "family": "voting",
+      "class": "expected_safe",
+      "verify": "safe",
+      "k": 6,
+      "proof_engine": "kinduction",
+      "cegar_iters": 0,
+      "notes": "Example demonstrating enum type declarations in the DSL. Simple majority-vote protocol with enum Vote { yes, no } phases.",
+      "model_sha256": "58982b4aee598b4e8a8953673e6b3d00a49312b9424566ffacf3e9792e643af8"
+    },
+    {
+      "file": "reliable_broadcast_cohort_selective.trs",
+      "family": "reliable-broadcast",
+      "class": "expected_safe",
+      "verify": "safe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "Reliable Broadcast with cohort-selective network semantics. Demonstrates per-cohort Byzantine delivery channels with higher-fidelity counter abstraction.",
+      "model_sha256": "838f230c56df47c771f26e7c2d3249c53cb324e5edb5e9b87a73ea53037de85e"
+    },
+    {
+      "file": "reliable_broadcast_process_selective.trs",
+      "family": "reliable-broadcast",
+      "class": "expected_safe",
+      "verify": "safe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "Reliable Broadcast with process-selective network semantics. Demonstrates concrete process identities with per-process channels for instance-exact verification.",
+      "model_sha256": "d208f88fbfd06d537e6a7fcf5e4775c99d2a1515a9bd281e4b47dfe22d7fd8fa"
     }
   ]
 }

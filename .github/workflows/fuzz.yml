@@ -1,0 +1,52 @@
+name: Fuzzing
+
+on:
+  schedule:
+    # Run weekly: Sunday at 03:00 UTC
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - fuzz_parse
+          - fuzz_lower
+          - fuzz_encode
+          - fuzz_proof_kernel
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Seed corpus from examples
+        run: |
+          mkdir -p fuzz/corpus/${{ matrix.target }}
+          find examples -name '*.trs' -exec cp {} fuzz/corpus/${{ matrix.target }}/ \;
+
+      - name: Run fuzzer (${{ matrix.target }})
+        run: |
+          cd fuzz
+          cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=600
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: |
+            fuzz/artifacts/${{ matrix.target }}/**

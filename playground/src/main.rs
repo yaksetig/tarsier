@@ -1,24 +1,115 @@
+use std::collections::HashMap;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use axum::extract::State;
-use axum::http::{header, StatusCode};
+use axum::extract::{ConnectInfo, State};
+use axum::http::{header, HeaderValue, Method, Request, StatusCode};
+use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use subtle::ConstantTimeEq;
 use tarsier_dsl::ast::{PropertyKind, Span as DslSpan};
 use tarsier_engine::pipeline::{
     self, FairnessMode, PipelineOptions, ProofEngine, SolverChoice, SoundnessMode,
 };
 use tarsier_engine::result::{
-    FairLivenessResult, InductionCtiSummary, LivenessResult, UnboundedFairLivenessResult,
-    UnboundedSafetyResult, VerificationResult,
+    FairLivenessResult, InductionCtiSummary, LivenessResult, LivenessUnknownReason,
+    UnboundedFairLivenessResult, UnboundedSafetyResult, VerificationResult,
 };
 use tarsier_engine::visualization::{render_trace_mermaid, render_trace_timeline};
 use tarsier_ir::counter_system::Trace;
 use tarsier_ir::threshold_automaton::ThresholdAutomaton;
+use tokio::sync::{Mutex, Semaphore};
+use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::trace::TraceLayer;
 use tracing::info;
+
+#[derive(Clone)]
+struct ServerConfig {
+    max_request_bytes: usize,
+    max_source_bytes: usize,
+    max_response_bytes: usize,
+    max_depth: usize,
+    max_timeout_secs: u64,
+    max_concurrent_solvers: usize,
+    rate_limit_per_min: usize,
+    auth_token: Option<String>,
+    allowed_origins: Vec<String>,
+}
+
+impl ServerConfig {
+    fn from_env() -> Self {
+        fn env_or<T: std::str::FromStr>(key: &str, default: T) -> T {
+            std::env::var(key)
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default)
+        }
+        Self {
+            max_request_bytes: env_or("TARSIER_MAX_REQUEST_BYTES", 524_288),
+            max_source_bytes: env_or("TARSIER_MAX_SOURCE_BYTES", 262_144),
+            max_response_bytes: env_or("TARSIER_MAX_RESPONSE_BYTES", 8_388_608),
+            max_depth: env_or("TARSIER_MAX_DEPTH", 20),
+            max_timeout_secs: env_or("TARSIER_MAX_TIMEOUT_SECS", 120),
+            max_concurrent_solvers: env_or("TARSIER_MAX_CONCURRENT_SOLVERS", 4),
+            rate_limit_per_min: env_or("TARSIER_RATE_LIMIT_PER_MIN", 60),
+            auth_token: std::env::var("TARSIER_AUTH_TOKEN")
+                .ok()
+                .filter(|s| !s.is_empty()),
+            allowed_origins: std::env::var("TARSIER_ALLOWED_ORIGINS")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.split(',').map(|o| o.trim().to_string()).collect())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+struct RateLimiter {
+    window: Duration,
+    max_requests: usize,
+    clients: Mutex<HashMap<IpAddr, Vec<Instant>>>,
+}
+
+impl RateLimiter {
+    fn new(max_requests: usize) -> Self {
+        Self {
+            window: Duration::from_secs(60),
+            max_requests,
+            clients: Mutex::new(HashMap::new()),
+        }
+    }
+
+    async fn check(&self, ip: IpAddr) -> Result<(), u64> {
+        let now = Instant::now();
+        let cutoff = now - self.window;
+        let mut clients = self.clients.lock().await;
+        let timestamps = clients.entry(ip).or_default();
+        timestamps.retain(|t| *t > cutoff);
+        if timestamps.len() >= self.max_requests {
+            let oldest = timestamps.first().copied().unwrap_or(now);
+            let retry_after = self.window.saturating_sub(now.duration_since(oldest));
+            return Err(retry_after.as_secs().max(1));
+        }
+        timestamps.push(now);
+        Ok(())
+    }
+
+    async fn cleanup(&self) {
+        let now = Instant::now();
+        let cutoff = now - self.window;
+        let mut clients = self.clients.lock().await;
+        clients.retain(|_, timestamps| {
+            timestamps.retain(|t| *t > cutoff);
+            !timestamps.is_empty()
+        });
+    }
+}
 
 #[derive(Clone, Serialize)]
 struct ExampleSnippet {
@@ -27,12 +118,14 @@ struct ExampleSnippet {
     source: &'static str,
 }
 
-#[derive(Clone)]
 struct AppState {
     examples: Vec<ExampleSnippet>,
+    config: ServerConfig,
+    solver_semaphore: Semaphore,
+    rate_limiter: Arc<RateLimiter>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RunRequest {
     source: String,
     check: String,
@@ -45,7 +138,7 @@ struct RunRequest {
     fairness: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RunResponse {
     ok: bool,
     check: String,
@@ -59,6 +152,25 @@ struct RunResponse {
     mermaid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     timeline: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WorkerRequest {
+    request: RunRequest,
+    max_depth: usize,
+    max_timeout: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ParseRequest {
+    source: String,
+    filename: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ParseResponse {
+    ok: bool,
+    ast: Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -78,12 +190,24 @@ struct LintSourceSpan {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct LintFix {
+    label: String,
+    snippet: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    insert_offset: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct LintIssue {
     severity: String,
     code: String,
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     suggestion: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    soundness_impact: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fix: Option<LintFix>,
     #[serde(skip_serializing_if = "Option::is_none")]
     source_span: Option<LintSourceSpan>,
 }
@@ -106,8 +230,156 @@ struct AssistResponse {
     source: String,
 }
 
+fn build_cors_layer(config: &ServerConfig) -> CorsLayer {
+    let origins = if config.allowed_origins.is_empty() {
+        AllowOrigin::any()
+    } else {
+        let parsed: Vec<HeaderValue> = config
+            .allowed_origins
+            .iter()
+            .filter_map(|o| o.parse().ok())
+            .collect();
+        AllowOrigin::list(parsed)
+    };
+    CorsLayer::new()
+        .allow_origin(origins)
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+}
+
+#[allow(clippy::result_large_err)]
+fn validate_source(source: &str, config: &ServerConfig) -> Result<(), Response> {
+    if source.trim().is_empty() {
+        return Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "source must not be empty".into(),
+        ));
+    }
+    if source.len() > config.max_source_bytes {
+        return Err(error_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "source size {} exceeds limit of {} bytes",
+                source.len(),
+                config.max_source_bytes
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn truncate_response_if_needed(mut response: RunResponse, config: &ServerConfig) -> RunResponse {
+    let serialized_len = serde_json::to_string(&response)
+        .map(|s| s.len())
+        .unwrap_or(0);
+    if serialized_len > config.max_response_bytes {
+        response.output = "[truncated: response exceeded size limit]".into();
+        response.trace = None;
+        response.mermaid = None;
+        response.timeline = None;
+        if let Some(details) = response.details.as_object_mut() {
+            details.insert("truncated".into(), json!(true));
+        }
+    }
+    response
+}
+
+async fn rate_limit_middleware(
+    State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    request: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    match state.rate_limiter.check(addr.ip()).await {
+        Ok(()) => next.run(request).await,
+        Err(retry_after) => (
+            StatusCode::TOO_MANY_REQUESTS,
+            [(
+                header::RETRY_AFTER,
+                HeaderValue::from_str(&retry_after.to_string())
+                    .unwrap_or_else(|_| HeaderValue::from_static("60")),
+            )],
+            Json(json!({"ok": false, "error": "rate limit exceeded"})),
+        )
+            .into_response(),
+    }
+}
+
+async fn auth_middleware(
+    State(state): State<Arc<AppState>>,
+    request: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    let Some(ref expected_token) = state.config.auth_token else {
+        return next.run(request).await;
+    };
+    let auth_header = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok());
+    match auth_header {
+        None => error_response(
+            StatusCode::UNAUTHORIZED,
+            "missing Authorization header".into(),
+        ),
+        Some(value) => {
+            let provided = value.strip_prefix("Bearer ").unwrap_or("");
+            let expected_bytes = expected_token.as_bytes();
+            let provided_bytes = provided.as_bytes();
+            // Constant-time comparison (pad shorter to same length to avoid timing leak)
+            let max_len = expected_bytes.len().max(provided_bytes.len()).max(1);
+            let mut expected_padded = vec![0u8; max_len];
+            let mut provided_padded = vec![0u8; max_len];
+            expected_padded[..expected_bytes.len()].copy_from_slice(expected_bytes);
+            provided_padded[..provided_bytes.len()].copy_from_slice(provided_bytes);
+            let len_match = expected_bytes.len() == provided_bytes.len();
+            if len_match && expected_padded.ct_eq(&provided_padded).into() {
+                next.run(request).await
+            } else {
+                error_response(StatusCode::FORBIDDEN, "invalid auth token".into())
+            }
+        }
+    }
+}
+
+fn run_worker_mode() {
+    use std::io::Read;
+    let mut input = String::new();
+    if let Err(e) = std::io::stdin().read_to_string(&mut input) {
+        eprintln!("worker: failed to read stdin: {e}");
+        std::process::exit(1);
+    }
+    let worker_req: WorkerRequest = match serde_json::from_str(&input) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("worker: failed to parse request: {e}");
+            std::process::exit(1);
+        }
+    };
+    let result = execute_run(
+        worker_req.request,
+        worker_req.max_depth,
+        worker_req.max_timeout,
+    );
+    let response = match result {
+        Ok(r) => json!({"ok": true, "data": r}),
+        Err(e) => json!({"ok": false, "error": e}),
+    };
+    if let Err(e) = serde_json::to_writer(std::io::stdout(), &response) {
+        eprintln!("worker: failed to write response: {e}");
+        std::process::exit(1);
+    }
+}
+
 #[tokio::main]
 async fn main() {
+    // Worker subprocess mode — must be checked before any server setup
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(|s| s.as_str()) == Some("--worker") {
+        run_worker_mode();
+        return;
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -121,39 +393,113 @@ async fn main() {
         .and_then(|raw| raw.parse::<u16>().ok())
         .unwrap_or(7878);
 
+    let config = ServerConfig::from_env();
+
+    let mode = if config.auth_token.is_some() {
+        "hosted"
+    } else {
+        "local"
+    };
+    info!(
+        mode,
+        max_request_bytes = config.max_request_bytes,
+        max_source_bytes = config.max_source_bytes,
+        max_depth = config.max_depth,
+        max_timeout_secs = config.max_timeout_secs,
+        max_concurrent_solvers = config.max_concurrent_solvers,
+        rate_limit_per_min = config.rate_limit_per_min,
+        auth = config.auth_token.is_some(),
+        cors_origins = if config.allowed_origins.is_empty() {
+            "*".to_string()
+        } else {
+            config.allowed_origins.join(", ")
+        },
+        "server config loaded"
+    );
+
+    let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit_per_min));
+
     let state = Arc::new(AppState {
         examples: vec![
             ExampleSnippet {
                 id: "pbft",
-                name: "PBFT (Simple)",
-                source: include_str!("../../examples/pbft_simple.trs"),
+                name: "PBFT",
+                source: include_str!("../../examples/library/pbft_simple_safe_faithful.trs"),
             },
             ExampleSnippet {
-                id: "pbft_liveness",
-                name: "PBFT (Faithful Liveness)",
-                source: include_str!("../../examples/pbft_faithful_liveness.trs"),
+                id: "reliable_broadcast",
+                name: "Reliable Broadcast",
+                source: include_str!("../../examples/library/reliable_broadcast_safe_faithful.trs"),
             },
             ExampleSnippet {
-                id: "rb_bug",
+                id: "hotstuff",
+                name: "HotStuff",
+                source: include_str!("../../examples/library/hotstuff_simple_safe_faithful.trs"),
+            },
+            ExampleSnippet {
+                id: "tendermint",
+                name: "Tendermint",
+                source: include_str!(
+                    "../../examples/library/tendermint_crypto_qc_safe_faithful.trs"
+                ),
+            },
+            ExampleSnippet {
+                id: "raft",
+                name: "Raft",
+                source: include_str!("../../examples/library/raft_election_safety.trs"),
+            },
+            ExampleSnippet {
+                id: "paxos",
+                name: "Paxos",
+                source: include_str!("../../examples/library/paxos_basic.trs"),
+            },
+            ExampleSnippet {
+                id: "rb_buggy",
                 name: "Reliable Broadcast (Buggy)",
-                source: include_str!("../../examples/reliable_broadcast_buggy.trs"),
-            },
-            ExampleSnippet {
-                id: "trivial_live",
-                name: "Trivial Live",
-                source: include_str!("../../examples/trivial_live.trs"),
+                source: include_str!("../../examples/library/reliable_broadcast_buggy.trs"),
             },
         ],
+        solver_semaphore: Semaphore::new(config.max_concurrent_solvers),
+        rate_limiter: rate_limiter.clone(),
+        config,
     });
+
+    // Background rate limiter cleanup
+    let cleanup_limiter = rate_limiter;
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            cleanup_limiter.cleanup().await;
+        }
+    });
+
+    let api_routes = Router::new()
+        .route("/api/assist", post(generate_assist))
+        .route("/api/parse", post(parse_source))
+        .route("/api/run", post(run_analysis))
+        .route("/api/lint", post(run_lint))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ));
 
     let app = Router::new()
         .route("/", get(index))
         .route("/app.js", get(app_js))
+        .route("/visual-model.js", get(visual_model_js))
+        .route("/visual-editor.js", get(visual_editor_js))
+        .route("/codegen.js", get(codegen_js))
         .route("/api/health", get(health))
         .route("/api/examples", get(list_examples))
-        .route("/api/assist", post(generate_assist))
-        .route("/api/run", post(run_analysis))
-        .route("/api/lint", post(run_lint))
+        .merge(api_routes)
+        .layer(TraceLayer::new_for_http())
+        .layer(build_cors_layer(&state.config))
+        .layer(RequestBodyLimitLayer::new(state.config.max_request_bytes))
         .with_state(state);
 
     let addr = format!("{host}:{port}");
@@ -162,9 +508,12 @@ async fn main() {
         .expect("failed to bind playground address");
 
     info!(%addr, "tarsier playground ready");
-    axum::serve(listener, app)
-        .await
-        .expect("playground server failed");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("playground server failed");
 }
 
 async fn index() -> Html<&'static str> {
@@ -181,6 +530,36 @@ async fn app_js() -> impl IntoResponse {
     )
 }
 
+async fn visual_model_js() -> impl IntoResponse {
+    (
+        [(
+            header::CONTENT_TYPE,
+            "application/javascript; charset=utf-8",
+        )],
+        include_str!("../static/visual-model.js"),
+    )
+}
+
+async fn visual_editor_js() -> impl IntoResponse {
+    (
+        [(
+            header::CONTENT_TYPE,
+            "application/javascript; charset=utf-8",
+        )],
+        include_str!("../static/visual-editor.js"),
+    )
+}
+
+async fn codegen_js() -> impl IntoResponse {
+    (
+        [(
+            header::CONTENT_TYPE,
+            "application/javascript; charset=utf-8",
+        )],
+        include_str!("../static/codegen.js"),
+    )
+}
+
 async fn health() -> Json<Value> {
     Json(json!({"ok": true}))
 }
@@ -189,7 +568,33 @@ async fn list_examples(State(state): State<Arc<AppState>>) -> Json<Vec<ExampleSn
     Json(state.examples.clone())
 }
 
-async fn generate_assist(Json(request): Json<AssistRequest>) -> Response {
+async fn parse_source(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ParseRequest>,
+) -> Response {
+    if let Err(resp) = validate_source(&request.source, &state.config) {
+        return resp;
+    }
+    let timeout = Duration::from_secs(30);
+    let task = tokio::task::spawn_blocking(move || execute_parse(request));
+    match tokio::time::timeout(timeout, task).await {
+        Ok(Ok(Ok(response))) => (StatusCode::OK, Json(response)).into_response(),
+        Ok(Ok(Err(error))) => error_response(StatusCode::BAD_REQUEST, error),
+        Ok(Err(join_error)) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("parse task crashed: {join_error}"),
+        ),
+        Err(_) => error_response(
+            StatusCode::GATEWAY_TIMEOUT,
+            "parse request timed out".into(),
+        ),
+    }
+}
+
+async fn generate_assist(
+    State(_state): State<Arc<AppState>>,
+    Json(request): Json<AssistRequest>,
+) -> Response {
     let kind = request.kind.trim().to_lowercase();
     let Some(source) = assistant_template(&kind) else {
         return error_response(
@@ -208,31 +613,161 @@ async fn generate_assist(Json(request): Json<AssistRequest>) -> Response {
         .into_response()
 }
 
-async fn run_analysis(Json(request): Json<RunRequest>) -> Response {
-    let task = tokio::task::spawn_blocking(move || execute_run(request));
-    match task.await {
-        Ok(Ok(response)) => (StatusCode::OK, Json(response)).into_response(),
-        Ok(Err(error)) => error_response(StatusCode::BAD_REQUEST, error),
-        Err(join_error) => error_response(
+async fn run_analysis(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<RunRequest>,
+) -> Response {
+    if let Err(resp) = validate_source(&request.source, &state.config) {
+        return resp;
+    }
+    let _permit = match state.solver_semaphore.try_acquire() {
+        Ok(permit) => permit,
+        Err(_) => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "server busy: too many concurrent solver runs".into(),
+            );
+        }
+    };
+    let server_timeout = Duration::from_secs(state.config.max_timeout_secs + 5);
+    let worker_req = WorkerRequest {
+        request,
+        max_depth: state.config.max_depth,
+        max_timeout: state.config.max_timeout_secs,
+    };
+    let input_json = match serde_json::to_string(&worker_req) {
+        Ok(j) => j,
+        Err(e) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to serialize worker request: {e}"),
+            );
+        }
+    };
+
+    let exe = std::env::current_exe().unwrap_or_else(|_| "tarsier-playground".into());
+    let mut child = match tokio::process::Command::new(&exe)
+        .arg("--worker")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to spawn worker: {e}"),
+            );
+        }
+    };
+
+    // Write request to stdin, then drop to signal EOF
+    if let Some(mut stdin) = child.stdin.take() {
+        use tokio::io::AsyncWriteExt;
+        if let Err(e) = stdin.write_all(input_json.as_bytes()).await {
+            let _ = child.kill().await;
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to write to worker stdin: {e}"),
+            );
+        }
+        // stdin dropped here, signaling EOF to the child
+    }
+
+    // Wait for the child with a timeout; kill_on_drop ensures cleanup on timeout
+    match tokio::time::timeout(server_timeout, child.wait_with_output()).await {
+        Ok(Ok(output)) => {
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!(
+                        "worker process failed ({}): {}",
+                        output.status,
+                        stderr.trim()
+                    ),
+                );
+            }
+            let parsed: Value = match serde_json::from_slice(&output.stdout) {
+                Ok(v) => v,
+                Err(e) => {
+                    return error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to parse worker output: {e}"),
+                    );
+                }
+            };
+            if parsed.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                match serde_json::from_value::<RunResponse>(parsed["data"].clone()) {
+                    Ok(response) => {
+                        let response = truncate_response_if_needed(response, &state.config);
+                        (StatusCode::OK, Json(response)).into_response()
+                    }
+                    Err(e) => error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to deserialize worker response: {e}"),
+                    ),
+                }
+            } else {
+                let error_msg = parsed["error"]
+                    .as_str()
+                    .unwrap_or("unknown worker error")
+                    .to_string();
+                error_response(StatusCode::BAD_REQUEST, error_msg)
+            }
+        }
+        Ok(Err(e)) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("analysis task crashed: {join_error}"),
+            format!("worker process error: {e}"),
         ),
+        Err(_) => {
+            // Timeout — child is dropped here, kill_on_drop sends SIGKILL
+            error_response(
+                StatusCode::GATEWAY_TIMEOUT,
+                "analysis request timed out".into(),
+            )
+        }
     }
 }
 
-async fn run_lint(Json(request): Json<LintRequest>) -> Response {
+async fn run_lint(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<LintRequest>,
+) -> Response {
+    if let Err(resp) = validate_source(&request.source, &state.config) {
+        return resp;
+    }
+    let timeout = Duration::from_secs(30);
     let task = tokio::task::spawn_blocking(move || execute_lint(request));
-    match task.await {
-        Ok(Ok(response)) => (StatusCode::OK, Json(response)).into_response(),
-        Ok(Err(error)) => error_response(StatusCode::BAD_REQUEST, error),
-        Err(join_error) => error_response(
+    match tokio::time::timeout(timeout, task).await {
+        Ok(Ok(Ok(response))) => (StatusCode::OK, Json(response)).into_response(),
+        Ok(Ok(Err(error))) => error_response(StatusCode::BAD_REQUEST, error),
+        Ok(Err(join_error)) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("lint task crashed: {join_error}"),
         ),
+        Err(_) => error_response(StatusCode::GATEWAY_TIMEOUT, "lint request timed out".into()),
     }
 }
 
-fn execute_run(request: RunRequest) -> Result<RunResponse, String> {
+fn execute_parse(request: ParseRequest) -> Result<ParseResponse, String> {
+    if request.source.trim().is_empty() {
+        return Err("source must not be empty".into());
+    }
+    let filename = request.filename.unwrap_or_else(|| "playground.trs".into());
+    let program =
+        tarsier_dsl::parse(&request.source, &filename).map_err(|e| format!("parse error: {e}"))?;
+    let ast = serde_json::to_value(&program).map_err(|e| format!("serialization error: {e}"))?;
+    Ok(ParseResponse { ok: true, ast })
+}
+
+fn execute_run(
+    request: RunRequest,
+    max_depth: usize,
+    max_timeout: u64,
+) -> Result<RunResponse, String> {
     if request.source.trim().is_empty() {
         return Err("source must not be empty".into());
     }
@@ -242,7 +777,7 @@ fn execute_run(request: RunRequest) -> Result<RunResponse, String> {
         .filename
         .clone()
         .unwrap_or_else(|| "playground.trs".into());
-    let options = build_options(&request)?;
+    let options = build_options(&request, max_depth, max_timeout)?;
 
     // Parse+lower for visualization (best-effort, don't block analysis on failure)
     let ta = pipeline::parse(&request.source, &filename)
@@ -311,6 +846,104 @@ fn byte_offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
     (line, column)
 }
 
+fn line_col_to_byte_offset(source: &str, line: usize, column: usize) -> usize {
+    if line <= 1 && column <= 1 {
+        return 0;
+    }
+    let mut cur_line = 1usize;
+    let mut cur_col = 1usize;
+    for (idx, ch) in source.char_indices() {
+        if cur_line == line && cur_col == column {
+            return idx;
+        }
+        if ch == '\n' {
+            cur_line += 1;
+            cur_col = 1;
+        } else {
+            cur_col += 1;
+        }
+    }
+    source.len()
+}
+
+fn advance_one_char(source: &str, start: usize) -> usize {
+    if start >= source.len() {
+        return start;
+    }
+    let tail = &source[start..];
+    let char_len = tail.chars().next().map(char::len_utf8).unwrap_or(1);
+    (start + char_len).min(source.len())
+}
+
+fn infer_parse_error_span(source: &str, message: &str) -> Option<DslSpan> {
+    let marker = "-->";
+    if let Some(idx) = message.find(marker) {
+        let tail = &message[idx + marker.len()..];
+        let mut digits = String::new();
+        let mut chars = tail.trim_start().chars().peekable();
+        while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+            digits.push(chars.next().unwrap_or_default());
+        }
+        if !digits.is_empty() && chars.peek() == Some(&':') {
+            let _ = chars.next();
+            let mut col_digits = String::new();
+            while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+                col_digits.push(chars.next().unwrap_or_default());
+            }
+            if let (Ok(line), Ok(column)) = (digits.parse::<usize>(), col_digits.parse::<usize>()) {
+                let start = line_col_to_byte_offset(source, line.max(1), column.max(1));
+                let end = advance_one_char(source, start);
+                return Some(DslSpan { start, end });
+            }
+        }
+    }
+    if source.is_empty() {
+        None
+    } else {
+        Some(DslSpan {
+            start: 0,
+            end: advance_one_char(source, 0),
+        })
+    }
+}
+
+fn lint_soundness_impact(code: &str, severity: &str) -> Option<String> {
+    let impact = match code {
+        "parse_error" | "lowering_error" => {
+            "Model could not be analyzed; no soundness claim can be established."
+        }
+        "missing_resilience" => {
+            "Fault assumptions are under-specified; safety/liveness claims may be vacuous."
+        }
+        "missing_safety_property" => {
+            "No explicit safety objective is checked; security claims may omit core invariants."
+        }
+        "missing_fault_bound" => {
+            "Adversary power is under-constrained; verification may be unsound or misleading."
+        }
+        "distinct_requires_signed_auth" => {
+            "Distinct-sender thresholds need authenticated identities; otherwise sender-counting is unsound."
+        }
+        "byzantine_network_not_identity_selective" => {
+            "Legacy network abstraction weakens protocol-faithful guarantees under Byzantine behavior."
+        }
+        _ => {
+            if severity == "error" {
+                "Blocking modeling issue; verification soundness claim is not currently defensible."
+            } else if severity == "warn" {
+                "Modeling assumption weakens confidence in soundness/fidelity."
+            } else {
+                ""
+            }
+        }
+    };
+    if impact.is_empty() {
+        None
+    } else {
+        Some(impact.to_string())
+    }
+}
+
 fn to_lint_source_span(source: &str, span: DslSpan) -> LintSourceSpan {
     let start = span.start.min(source.len());
     let end = span.end.min(source.len()).max(start);
@@ -336,12 +969,17 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
     let parsed = match tarsier_dsl::parse(&request.source, &filename) {
         Ok(program) => program,
         Err(error) => {
+            let parse_error = error.to_string();
+            let parse_span = infer_parse_error_span(&request.source, &parse_error)
+                .map(|s| to_lint_source_span(&request.source, s));
             issues.push(LintIssue {
                 severity: "error".into(),
                 code: "parse_error".into(),
-                message: error.to_string(),
+                message: parse_error,
                 suggestion: None,
-                source_span: None,
+                soundness_impact: lint_soundness_impact("parse_error", "error"),
+                fix: None,
+                source_span: parse_span,
             });
             return Ok(LintResponse { ok: false, issues });
         }
@@ -356,6 +994,12 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
             message: "No resilience clause found; safety claims are usually under-constrained."
                 .into(),
             suggestion: Some("Add `resilience: n = 3*f+1;` (or protocol-specific bound).".into()),
+            soundness_impact: lint_soundness_impact("missing_resilience", "warn"),
+            fix: Some(LintFix {
+                label: "insert resilience clause".into(),
+                snippet: "\n    resilience: n = 3*f + 1;".into(),
+                insert_offset: protocol_span.map(|s| s.end.saturating_sub(1)),
+            }),
             source_span: protocol_span.map(|s| to_lint_source_span(&request.source, s)),
         });
     }
@@ -381,6 +1025,14 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
             suggestion: Some(
                 "Declare one `property ...: safety|agreement|invariant|validity { ... }`.".into(),
             ),
+            soundness_impact: lint_soundness_impact("missing_safety_property", "warn"),
+            fix: Some(LintFix {
+                label: "insert safety property".into(),
+                snippet:
+                    "\n    property safety_inv: safety { forall p: Role. p.decided == false }\n"
+                        .into(),
+                insert_offset: protocol_span.map(|s| s.end.saturating_sub(1)),
+            }),
             source_span: protocol_span.map(|s| to_lint_source_span(&request.source, s)),
         });
     } else if safety_count > 1 {
@@ -391,6 +1043,8 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
                 "Found {safety_count} safety-style properties; verify flow will use one primary objective."
             ),
             suggestion: Some("Split checks or keep one canonical safety property for CI.".into()),
+            soundness_impact: lint_soundness_impact("multiple_safety_properties", "info"),
+            fix: None,
             source_span: protocol
                 .properties
                 .first()
@@ -412,6 +1066,13 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
                 "No explicit liveness property declared; liveness checks will use decided=true fallback."
                     .into(),
             suggestion: Some("Add `property live: liveness { forall p: Role. p.decided == true }`.".into()),
+            soundness_impact: lint_soundness_impact("missing_liveness_property", "info"),
+            fix: Some(LintFix {
+                label: "insert liveness property".into(),
+                snippet: "\n    property live: liveness { forall p: Role. p.decided == true }\n"
+                    .into(),
+                insert_offset: protocol_span.map(|s| s.end.saturating_sub(1)),
+            }),
             source_span: protocol_span.map(|s| to_lint_source_span(&request.source, s)),
         });
     }
@@ -434,6 +1095,12 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
                 code: "distinct_requires_signed_auth".into(),
                 message: "Distinct-sender thresholds should use `adversary { auth: signed; }` for sound sender-identity modeling.".into(),
                 suggestion: Some("Add `adversary { auth: signed; }`.".into()),
+                soundness_impact: lint_soundness_impact("distinct_requires_signed_auth", "warn"),
+                fix: Some(LintFix {
+                    label: "set signed auth".into(),
+                    snippet: "auth: signed;".into(),
+                    insert_offset: auth_item_span.map(|s| s.start),
+                }),
                 source_span: auth_item_span
                     .or(protocol_span)
                     .map(|s| to_lint_source_span(&request.source, s)),
@@ -472,6 +1139,15 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
             code: "byzantine_network_not_identity_selective".into(),
             message: "Byzantine model is using `network: classic`; prefer `network: process_selective` (or `identity_selective`) for recipient-coupled identity semantics.".into(),
             suggestion: Some("Set `adversary { network: process_selective; }`.".into()),
+            soundness_impact: lint_soundness_impact(
+                "byzantine_network_not_identity_selective",
+                "warn",
+            ),
+            fix: Some(LintFix {
+                label: "set faithful network mode".into(),
+                snippet: "network: process_selective;".into(),
+                insert_offset: network_item_span.or(model_item_span).map(|s| s.start),
+            }),
             source_span: network_item_span
                 .or(model_item_span)
                 .or(protocol_span)
@@ -489,6 +1165,12 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
                         "No adversary bound parameter found; fault reasoning may be underspecified."
                             .into(),
                     suggestion: Some("Add `adversary { bound: f; }`.".into()),
+                    soundness_impact: lint_soundness_impact("missing_fault_bound", "warn"),
+                    fix: Some(LintFix {
+                        label: "set adversary bound".into(),
+                        snippet: "bound: f;".into(),
+                        insert_offset: protocol_span.map(|s| s.end.saturating_sub(1)),
+                    }),
                     source_span: protocol_span.map(|s| to_lint_source_span(&request.source, s)),
                 });
             }
@@ -498,6 +1180,8 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
                     code: "no_roles".into(),
                     message: "No roles detected after lowering.".into(),
                     suggestion: None,
+                    soundness_impact: lint_soundness_impact("no_roles", "error"),
+                    fix: None,
                     source_span: protocol_span.map(|s| to_lint_source_span(&request.source, s)),
                 });
             }
@@ -508,6 +1192,8 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
                 code: "lowering_error".into(),
                 message: error.to_string(),
                 suggestion: None,
+                soundness_impact: lint_soundness_impact("lowering_error", "error"),
+                fix: None,
                 source_span: protocol_span.map(|s| to_lint_source_span(&request.source, s)),
             });
         }
@@ -767,15 +1453,19 @@ fn protocol_uses_distinct_thresholds(protocol: &tarsier_dsl::ast::ProtocolDecl) 
     })
 }
 
-fn build_options(request: &RunRequest) -> Result<PipelineOptions, String> {
+fn build_options(
+    request: &RunRequest,
+    max_depth: usize,
+    max_timeout: u64,
+) -> Result<PipelineOptions, String> {
     let solver = parse_solver_choice(request.solver.as_deref().unwrap_or("z3"))?;
     let soundness = parse_soundness_mode(request.soundness.as_deref().unwrap_or("strict"))?;
     let proof_engine = parse_proof_engine(request.proof_engine.as_deref().unwrap_or("kinduction"))?;
 
     Ok(PipelineOptions {
         solver,
-        max_depth: request.depth.unwrap_or(12),
-        timeout_secs: request.timeout_secs.unwrap_or(60),
+        max_depth: request.depth.unwrap_or(12).min(max_depth),
+        timeout_secs: request.timeout_secs.unwrap_or(60).min(max_timeout),
         dump_smt: None,
         soundness,
         proof_engine,
@@ -1164,7 +1854,10 @@ fn run_response_from_prove_fair(
             output,
             trace: None,
             cti: None,
-            details: json!({"reason": reason}),
+            details: json!({
+                "reason": reason,
+                "reason_code": LivenessUnknownReason::classify(&reason).code(),
+            }),
             mermaid: None,
             timeline: None,
         },
@@ -1236,6 +1929,9 @@ fn trace_to_json(trace: &Trace) -> Value {
 fn cti_to_json(cti: &InductionCtiSummary) -> Value {
     json!({
         "k": cti.k,
+        "classification": format!("{}", cti.classification),
+        "classification_evidence": cti.classification_evidence,
+        "rationale": cti.rationale,
         "params": named_values_json(&cti.params),
         "hypothesis_locations": named_values_json(&cti.hypothesis_locations),
         "hypothesis_shared": named_values_json(&cti.hypothesis_shared),
@@ -1260,30 +1956,76 @@ fn error_response(status: StatusCode, message: String) -> Response {
 }
 
 #[cfg(test)]
+fn test_config() -> ServerConfig {
+    ServerConfig {
+        max_request_bytes: 524_288,
+        max_source_bytes: 262_144,
+        max_response_bytes: 8_388_608,
+        max_depth: 20,
+        max_timeout_secs: 120,
+        max_concurrent_solvers: 4,
+        rate_limit_per_min: 60,
+        auth_token: None,
+        allowed_origins: vec![],
+    }
+}
+
+#[cfg(test)]
+fn test_state() -> Arc<AppState> {
+    test_state_with_config(test_config())
+}
+
+#[cfg(test)]
+fn test_state_with_config(config: ServerConfig) -> Arc<AppState> {
+    Arc::new(AppState {
+        examples: vec![ExampleSnippet {
+            id: "test",
+            name: "Test Example",
+            source: "protocol Test { params n, f; }",
+        }],
+        solver_semaphore: Semaphore::new(config.max_concurrent_solvers),
+        rate_limiter: Arc::new(RateLimiter::new(config.rate_limit_per_min)),
+        config,
+    })
+}
+
+#[cfg(test)]
+fn test_app() -> Router {
+    test_app_with_state(test_state())
+}
+
+#[cfg(test)]
+fn test_app_with_state(state: Arc<AppState>) -> Router {
+    let api_routes = Router::new()
+        .route("/api/assist", post(generate_assist))
+        .route("/api/parse", post(parse_source))
+        .route("/api/run", post(run_analysis))
+        .route("/api/lint", post(run_lint))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
+
+    Router::new()
+        .route("/", get(index))
+        .route("/app.js", get(app_js))
+        .route("/visual-model.js", get(visual_model_js))
+        .route("/visual-editor.js", get(visual_editor_js))
+        .route("/codegen.js", get(codegen_js))
+        .route("/api/health", get(health))
+        .route("/api/examples", get(list_examples))
+        .merge(api_routes)
+        .layer(build_cors_layer(&state.config))
+        .layer(RequestBodyLimitLayer::new(state.config.max_request_bytes))
+        .with_state(state)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use axum::body::Body;
     use http_body_util::BodyExt;
     use tower::ServiceExt;
-
-    fn test_app() -> Router {
-        let state = Arc::new(AppState {
-            examples: vec![ExampleSnippet {
-                id: "test",
-                name: "Test Example",
-                source: "protocol Test { params n, f; }",
-            }],
-        });
-        Router::new()
-            .route("/", get(index))
-            .route("/app.js", get(app_js))
-            .route("/api/health", get(health))
-            .route("/api/examples", get(list_examples))
-            .route("/api/assist", post(generate_assist))
-            .route("/api/lint", post(run_lint))
-            .route("/api/run", post(run_analysis))
-            .with_state(state)
-    }
 
     #[tokio::test]
     async fn test_health_endpoint() {
@@ -1310,7 +2052,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        assert!(json.as_array().unwrap().len() >= 1);
+        assert!(!json.as_array().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -1359,10 +2101,10 @@ mod tests {
     #[tokio::test]
     async fn test_lint_valid_source() {
         let app = test_app();
-        let source = include_str!("../../examples/pbft_simple.trs");
+        let source = include_str!("../../examples/library/pbft_simple_safe_faithful.trs");
         let body = serde_json::to_string(&serde_json::json!({
             "source": source,
-            "filename": "pbft_simple.trs",
+            "filename": "pbft_simple_safe_faithful.trs",
         }))
         .unwrap();
         let request = axum::http::Request::builder()
@@ -1379,6 +2121,124 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_lint_parse_error_has_source_span_and_soundness_impact() {
+        let app = test_app();
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/lint")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"source":"this is not valid trs","filename":"bad.trs"}"#,
+            ))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        let issues = json["issues"].as_array().expect("issues should be array");
+        let parse_issue = issues
+            .iter()
+            .find(|issue| issue["code"] == "parse_error")
+            .expect("parse_error issue should exist");
+        assert!(parse_issue.get("source_span").is_some());
+        assert!(parse_issue["source_span"].is_object());
+        assert!(parse_issue
+            .get("soundness_impact")
+            .and_then(|v| v.as_str())
+            .is_some());
+    }
+
+    #[test]
+    fn test_lint_missing_core_sections_include_fix_snippets() {
+        let src = r#"
+protocol MissingCoreSections {
+    params n, f;
+    role Replica {
+        init idle;
+        phase idle {}
+    }
+}
+"#;
+        let report = execute_lint(LintRequest {
+            source: src.into(),
+            filename: Some("missing_core_sections.trs".into()),
+        })
+        .expect("lint should succeed");
+
+        let resilience = report
+            .issues
+            .iter()
+            .find(|i| i.code == "missing_resilience")
+            .expect("missing_resilience should be emitted");
+        let resilience_fix = resilience
+            .fix
+            .as_ref()
+            .expect("missing_resilience should include a fix snippet");
+        assert!(resilience_fix.snippet.contains("resilience: n = 3*f + 1;"));
+
+        let safety = report
+            .issues
+            .iter()
+            .find(|i| i.code == "missing_safety_property")
+            .expect("missing_safety_property should be emitted");
+        let safety_fix = safety
+            .fix
+            .as_ref()
+            .expect("missing_safety_property should include a fix snippet");
+        assert!(safety_fix.snippet.contains("property safety_inv: safety"));
+    }
+
+    #[tokio::test]
+    async fn test_lint_endpoint_includes_fix_object_in_json() {
+        let app = test_app();
+        let source = r#"
+protocol MissingResilience {
+    params n, f;
+    role Replica {
+        init idle;
+        phase idle {}
+    }
+}
+"#;
+        let body = serde_json::to_string(&serde_json::json!({
+            "source": source,
+            "filename": "missing_resilience.trs",
+        }))
+        .unwrap();
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/lint")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        let issues = json["issues"].as_array().expect("issues should be array");
+        let resilience = issues
+            .iter()
+            .find(|issue| issue["code"] == "missing_resilience")
+            .expect("missing_resilience issue should exist");
+        assert!(
+            resilience.get("fix").is_some(),
+            "fix object should be present"
+        );
+        assert_eq!(
+            resilience["fix"]["label"].as_str(),
+            Some("insert resilience clause")
+        );
+        assert!(resilience["fix"]["snippet"]
+            .as_str()
+            .unwrap_or("")
+            .contains("resilience: n = 3*f + 1;"));
+        assert!(resilience
+            .get("soundness_impact")
+            .and_then(|v| v.as_str())
+            .is_some());
+    }
+
+    #[tokio::test]
     async fn test_assist_new_templates() {
         for kind in &["tendermint", "streamlet", "casper"] {
             let app = test_app();
@@ -1391,5 +2251,307 @@ mod tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK, "failed for kind: {kind}");
         }
+    }
+
+    #[tokio::test]
+    async fn test_parse_valid_source() {
+        let app = test_app();
+        let source = include_str!("../../examples/library/pbft_simple_safe_faithful.trs");
+        let body = serde_json::to_string(&serde_json::json!({
+            "source": source,
+            "filename": "pbft.trs",
+        }))
+        .unwrap();
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/parse")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["ok"], true);
+        assert!(json["ast"]["protocol"]["node"]["name"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_parse_invalid_source() {
+        let app = test_app();
+        let body = serde_json::to_string(&serde_json::json!({
+            "source": "this is not valid trs",
+        }))
+        .unwrap();
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/parse")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_parse_empty_source() {
+        let app = test_app();
+        let body = serde_json::to_string(&serde_json::json!({
+            "source": "",
+        }))
+        .unwrap();
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/parse")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+    use axum::body::Body;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_request_body_too_large() {
+        let mut config = test_config();
+        config.max_request_bytes = 1024;
+        let app = test_app_with_state(test_state_with_config(config));
+        let big_body = "x".repeat(2048);
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/parse")
+            .header("content-type", "application/json")
+            .body(Body::from(big_body))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn test_source_size_exceeds_limit() {
+        let mut config = test_config();
+        config.max_source_bytes = 64;
+        let app = test_app_with_state(test_state_with_config(config));
+        let big_source = "a".repeat(128);
+        let body = serde_json::to_string(&json!({"source": big_source})).unwrap();
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/parse")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[test]
+    fn test_depth_capped_to_server_max() {
+        let request = RunRequest {
+            source: "protocol T { params n, f; }".into(),
+            check: "verify".into(),
+            filename: None,
+            solver: None,
+            depth: Some(100),
+            timeout_secs: None,
+            soundness: None,
+            proof_engine: None,
+            fairness: None,
+        };
+        let opts = build_options(&request, 8, 120).unwrap();
+        assert_eq!(opts.max_depth, 8);
+    }
+
+    #[test]
+    fn test_timeout_capped_to_server_max() {
+        let request = RunRequest {
+            source: "protocol T { params n, f; }".into(),
+            check: "verify".into(),
+            filename: None,
+            solver: None,
+            depth: None,
+            timeout_secs: Some(999),
+            soundness: None,
+            proof_engine: None,
+            fairness: None,
+        };
+        let opts = build_options(&request, 20, 30).unwrap();
+        assert_eq!(opts.timeout_secs, 30);
+    }
+
+    #[tokio::test]
+    async fn test_solver_concurrency_limit_returns_503() {
+        let mut config = test_config();
+        config.max_concurrent_solvers = 1;
+        let state = test_state_with_config(config);
+        // Clone Arc so permit borrows from one copy while the other is moved into the app
+        let state2 = state.clone();
+        let _permit = state2.solver_semaphore.try_acquire().unwrap();
+        let app = test_app_with_state(state);
+        let body = serde_json::to_string(&json!({
+            "source": "protocol T { params n, f; }",
+            "check": "verify",
+        }))
+        .unwrap();
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/run")
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_allows_under_limit() {
+        let limiter = RateLimiter::new(5);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        for _ in 0..5 {
+            assert!(limiter.check(ip).await.is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_blocks_over_limit() {
+        let limiter = RateLimiter::new(3);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        for _ in 0..3 {
+            assert!(limiter.check(ip).await.is_ok());
+        }
+        assert!(limiter.check(ip).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_independent_ips() {
+        let limiter = RateLimiter::new(2);
+        let ip1: IpAddr = "10.0.0.1".parse().unwrap();
+        let ip2: IpAddr = "10.0.0.2".parse().unwrap();
+        assert!(limiter.check(ip1).await.is_ok());
+        assert!(limiter.check(ip1).await.is_ok());
+        assert!(limiter.check(ip1).await.is_err());
+        // ip2 should still have quota
+        assert!(limiter.check(ip2).await.is_ok());
+        assert!(limiter.check(ip2).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_auth_required_returns_401() {
+        let mut config = test_config();
+        config.auth_token = Some("secret-token".into());
+        let app = test_app_with_state(test_state_with_config(config));
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/parse")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"source": "protocol T { params n; }"}"#))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_auth_wrong_token_returns_403() {
+        let mut config = test_config();
+        config.auth_token = Some("secret-token".into());
+        let app = test_app_with_state(test_state_with_config(config));
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/parse")
+            .header("content-type", "application/json")
+            .header("authorization", "Bearer wrong-token")
+            .body(Body::from(r#"{"source": "protocol T { params n; }"}"#))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_auth_correct_token_passes() {
+        let mut config = test_config();
+        config.auth_token = Some("secret-token".into());
+        let app = test_app_with_state(test_state_with_config(config));
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/assist")
+            .header("content-type", "application/json")
+            .header("authorization", "Bearer secret-token")
+            .body(Body::from(r#"{"kind": "pbft"}"#))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_auth_not_required_local_mode() {
+        let config = test_config(); // auth_token is None
+        let app = test_app_with_state(test_state_with_config(config));
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/assist")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"kind": "pbft"}"#))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_get_endpoints_bypass_auth() {
+        let mut config = test_config();
+        config.auth_token = Some("secret-token".into());
+        let app = test_app_with_state(test_state_with_config(config));
+        let request = axum::http::Request::builder()
+            .uri("/api/health")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_cors_permissive_local_mode() {
+        let config = test_config(); // no allowed_origins
+        let app = test_app_with_state(test_state_with_config(config));
+        let request = axum::http::Request::builder()
+            .method("OPTIONS")
+            .uri("/api/health")
+            .header("origin", "http://example.com")
+            .header("access-control-request-method", "GET")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        let allow_origin = response
+            .headers()
+            .get("access-control-allow-origin")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert_eq!(allow_origin, "*");
+    }
+
+    #[tokio::test]
+    async fn test_cors_restrictive_hosted_mode() {
+        let mut config = test_config();
+        config.allowed_origins = vec!["https://allowed.example.com".into()];
+        let app = test_app_with_state(test_state_with_config(config));
+        let request = axum::http::Request::builder()
+            .method("OPTIONS")
+            .uri("/api/health")
+            .header("origin", "https://allowed.example.com")
+            .header("access-control-request-method", "GET")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        let allow_origin = response
+            .headers()
+            .get("access-control-allow-origin")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert_eq!(allow_origin, "https://allowed.example.com");
     }
 }

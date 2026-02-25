@@ -24,7 +24,7 @@ fi
 mkdir -p "$ARTIFACTS_DIR"
 
 CMD=(
-  cargo run -p tarsier-cli -- cert-suite
+  cargo run -p tarsier-cli --features governance -- cert-suite
   --manifest "$MANIFEST"
   --engine "$ENGINE"
   --k "$K"

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "protocol_name": "SimpleVote",
+  "params": [["n", 4], ["t", 1], ["f", 1]],
+  "peers": [
+    {
+      "peer_id": 0,
+      "role": "Process",
+      "steps": [
+        {
+          "event": "boot",
+          "index": 0,
+          "state": "Process_waiting[decided=false,decision=false]"
+        },
+        {
+          "event": "commit",
+          "index": 1,
+          "value": "true"
+        }
+      ]
+    }
+  ]
+}

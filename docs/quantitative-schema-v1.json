@@ -1,0 +1,438 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/quantitative-schema-v1.json",
+  "title": "Tarsier Quantitative Output Schema v1",
+  "description": "Machine-readable schema for communication/quantitative analysis outputs emitted by `tarsier-cli comm`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "model_metadata",
+    "model_assumptions",
+    "assumption_notes",
+    "bound_annotations",
+    "depth",
+    "n_param",
+    "adv_param",
+    "min_decision_steps",
+    "finality_failure_probability_upper",
+    "finality_success_probability_lower",
+    "expected_rounds_to_finality",
+    "rounds_for_90pct_finality",
+    "rounds_for_95pct_finality",
+    "rounds_for_99pct_finality",
+    "expected_total_messages_upper",
+    "messages_for_90pct_finality_upper",
+    "messages_for_99pct_finality_upper",
+    "expected_total_messages_with_adv_upper",
+    "messages_for_90pct_finality_with_adv_upper",
+    "messages_for_99pct_finality_with_adv_upper",
+    "max_sends_per_rule",
+    "max_sends_per_rule_by_type",
+    "adversary_per_step_bound",
+    "adversary_per_depth_bound",
+    "per_step_bound",
+    "per_depth_bound",
+    "per_step_bound_with_adv",
+    "per_depth_bound_with_adv",
+    "per_step_bound_big_o",
+    "per_depth_bound_big_o",
+    "per_step_type_bounds",
+    "per_depth_type_bounds",
+    "adversary_per_step_type_bounds",
+    "adversary_per_depth_type_bounds",
+    "per_step_type_bounds_with_adv",
+    "per_depth_type_bounds_with_adv",
+    "per_step_type_big_o",
+    "per_depth_type_big_o",
+    "per_role_step_bounds",
+    "per_role_depth_bounds",
+    "per_phase_step_bounds",
+    "per_phase_depth_bounds",
+    "sensitivity",
+    "probabilistic_confidence_intervals"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "model_metadata": {
+      "$ref": "#/$defs/model_metadata"
+    },
+    "model_assumptions": {
+      "$ref": "#/$defs/model_assumptions"
+    },
+    "assumption_notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/assumption_note"
+      }
+    },
+    "bound_annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bound_annotation"
+      }
+    },
+    "depth": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "n_param": {
+      "type": ["string", "null"]
+    },
+    "adv_param": {
+      "type": ["string", "null"]
+    },
+    "min_decision_steps": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "finality_failure_probability_upper": {
+      "type": ["number", "null"],
+      "minimum": 0.0
+    },
+    "finality_success_probability_lower": {
+      "type": ["number", "null"],
+      "minimum": 0.0
+    },
+    "expected_rounds_to_finality": {
+      "type": ["number", "null"],
+      "minimum": 0.0
+    },
+    "rounds_for_90pct_finality": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "rounds_for_95pct_finality": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "rounds_for_99pct_finality": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "expected_total_messages_upper": {
+      "type": ["string", "null"]
+    },
+    "messages_for_90pct_finality_upper": {
+      "type": ["string", "null"]
+    },
+    "messages_for_99pct_finality_upper": {
+      "type": ["string", "null"]
+    },
+    "expected_total_messages_with_adv_upper": {
+      "type": ["string", "null"]
+    },
+    "messages_for_90pct_finality_with_adv_upper": {
+      "type": ["string", "null"]
+    },
+    "messages_for_99pct_finality_with_adv_upper": {
+      "type": ["string", "null"]
+    },
+    "max_sends_per_rule": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_sends_per_rule_by_type": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_uint_pair"
+      }
+    },
+    "adversary_per_step_bound": {
+      "type": ["string", "null"]
+    },
+    "adversary_per_depth_bound": {
+      "type": ["string", "null"]
+    },
+    "per_step_bound": {
+      "type": "string"
+    },
+    "per_depth_bound": {
+      "type": "string"
+    },
+    "per_step_bound_with_adv": {
+      "type": ["string", "null"]
+    },
+    "per_depth_bound_with_adv": {
+      "type": ["string", "null"]
+    },
+    "per_step_bound_big_o": {
+      "type": "string"
+    },
+    "per_depth_bound_big_o": {
+      "type": "string"
+    },
+    "per_step_type_bounds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "per_depth_type_bounds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "adversary_per_step_type_bounds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "adversary_per_depth_type_bounds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "per_step_type_bounds_with_adv": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "per_depth_type_bounds_with_adv": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "per_step_type_big_o": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "per_depth_type_big_o": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "per_role_step_bounds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "per_role_depth_bounds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "per_phase_step_bounds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "per_phase_depth_bounds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/string_string_pair"
+      }
+    },
+    "sensitivity": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sensitivity_point"
+      }
+    },
+    "probabilistic_confidence_intervals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/probabilistic_confidence_interval"
+      }
+    }
+  },
+  "$defs": {
+    "assumption_note": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "message"],
+      "properties": {
+        "level": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "bound_annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "kind", "description", "assumptions"],
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["upper_bound", "lower_bound", "estimate", "exact"]
+        },
+        "description": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "model_assumptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fault_model",
+        "timing_model",
+        "authentication_mode",
+        "equivocation_mode",
+        "network_semantics",
+        "gst_param"
+      ],
+      "properties": {
+        "fault_model": {
+          "type": "string"
+        },
+        "timing_model": {
+          "type": "string"
+        },
+        "authentication_mode": {
+          "type": "string"
+        },
+        "equivocation_mode": {
+          "type": "string"
+        },
+        "network_semantics": {
+          "type": "string"
+        },
+        "gst_param": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "model_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_hash", "filename", "analysis_depth", "engine_version"],
+      "properties": {
+        "source_hash": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "analysis_depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "engine_version": {
+          "type": "string"
+        }
+      }
+    },
+    "sensitivity_point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parameter",
+        "base_value",
+        "varied_value",
+        "metric",
+        "base_result",
+        "varied_result"
+      ],
+      "properties": {
+        "parameter": {
+          "type": "string"
+        },
+        "base_value": {
+          "type": "number"
+        },
+        "varied_value": {
+          "type": "number"
+        },
+        "metric": {
+          "type": "string"
+        },
+        "base_result": {
+          "type": "number"
+        },
+        "varied_result": {
+          "type": "number"
+        }
+      }
+    },
+    "probabilistic_confidence_interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "level", "lower", "upper", "sample_size", "method", "assumptions"],
+      "properties": {
+        "metric": {
+          "type": "string"
+        },
+        "level": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "lower": {
+          "type": "number"
+        },
+        "upper": {
+          "type": "number"
+        },
+        "sample_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "method": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "string_uint_pair": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer",
+          "minimum": 0
+        }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "string_string_pair": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    }
+  }
+}

@@ -5,10 +5,12 @@ use tracing::info;
 
 use tarsier_ir::counter_system::CounterSystem;
 use tarsier_ir::properties::SafetyProperty;
-use tarsier_ir::threshold_automaton::{LocalValue, RoleIdentityScope, SharedVarKind};
+use tarsier_ir::threshold_automaton::{LocalValue, PorMode, RoleIdentityScope, SharedVarKind};
 
 use crate::backends::smtlib_printer::to_smtlib;
-use crate::encoder::{encode_bmc, encode_k_induction_step, BmcEncoding};
+use crate::encoder::{
+    delta_var, encode_bmc, encode_k_induction_step, gamma_var, kappa_var, time_var, BmcEncoding,
+};
 use crate::solver::{Model, SatResult, SmtSolver};
 use crate::sorts::SmtSort;
 use crate::terms::SmtTerm;
@@ -38,6 +40,11 @@ pub struct SmtRunProfile {
     pub symmetry_candidates: u64,
     pub symmetry_pruned: u64,
     pub stutter_signature_normalizations: u64,
+    pub por_pending_obligation_dedup_hits: u64,
+    pub por_dynamic_ample_queries: u64,
+    pub por_dynamic_ample_fast_sat: u64,
+    pub por_dynamic_ample_unsat_rechecks: u64,
+    pub por_dynamic_ample_unsat_recheck_sat: u64,
 }
 
 thread_local! {
@@ -115,6 +122,42 @@ fn record_stutter_signature_normalization(count: u64) {
         let mut p = cell.borrow_mut();
         p.stutter_signature_normalizations =
             p.stutter_signature_normalizations.saturating_add(count);
+    });
+}
+
+fn record_por_pending_obligation_dedup_hit() {
+    SMT_RUN_PROFILE.with(|cell| {
+        let mut p = cell.borrow_mut();
+        p.por_pending_obligation_dedup_hits = p.por_pending_obligation_dedup_hits.saturating_add(1);
+    });
+}
+
+fn record_por_dynamic_ample_query() {
+    SMT_RUN_PROFILE.with(|cell| {
+        let mut p = cell.borrow_mut();
+        p.por_dynamic_ample_queries = p.por_dynamic_ample_queries.saturating_add(1);
+    });
+}
+
+fn record_por_dynamic_ample_fast_sat() {
+    SMT_RUN_PROFILE.with(|cell| {
+        let mut p = cell.borrow_mut();
+        p.por_dynamic_ample_fast_sat = p.por_dynamic_ample_fast_sat.saturating_add(1);
+    });
+}
+
+fn record_por_dynamic_ample_unsat_recheck() {
+    SMT_RUN_PROFILE.with(|cell| {
+        let mut p = cell.borrow_mut();
+        p.por_dynamic_ample_unsat_rechecks = p.por_dynamic_ample_unsat_rechecks.saturating_add(1);
+    });
+}
+
+fn record_por_dynamic_ample_unsat_recheck_sat() {
+    SMT_RUN_PROFILE.with(|cell| {
+        let mut p = cell.borrow_mut();
+        p.por_dynamic_ample_unsat_recheck_sat =
+            p.por_dynamic_ample_unsat_recheck_sat.saturating_add(1);
     });
 }
 
@@ -355,7 +398,7 @@ pub fn run_bmc_with_deadline<S: SmtSolver>(
                 info!(depth, "BMC: UNSAFE - counterexample found");
                 return Ok(BmcResult::Unsafe {
                     depth,
-                    model: model.unwrap(),
+                    model: model.expect("SAT result must include a model"),
                 });
             }
             SatResult::Unsat => {
@@ -416,7 +459,7 @@ pub fn run_bmc_at_depth<S: SmtSolver>(
             info!(depth, "BMC: UNSAFE - counterexample found");
             Ok(BmcResult::Unsafe {
                 depth,
-                model: model.unwrap(),
+                model: model.expect("SAT result must include a model"),
             })
         }
         SatResult::Unsat => {
@@ -538,7 +581,7 @@ pub fn run_bmc_with_extra_assertions_with_deadline<S: SmtSolver>(
                 info!(depth, "BMC: UNSAFE - counterexample found");
                 return Ok(BmcResult::Unsafe {
                     depth,
-                    model: model.unwrap(),
+                    model: model.expect("SAT result must include a model"),
                 });
             }
             SatResult::Unsat => {
@@ -602,7 +645,7 @@ pub fn run_bmc_with_extra_assertions_at_depth<S: SmtSolver>(
             info!(depth, "BMC: UNSAFE - counterexample found");
             Ok(BmcResult::Unsafe {
                 depth,
-                model: model.unwrap(),
+                model: model.expect("SAT result must include a model"),
             })
         }
         SatResult::Unsat => {
@@ -756,9 +799,12 @@ impl Cube {
                     });
                 }
                 SmtSort::Bool => {
-                    // State cubes currently only support integer variables.
-                    let _ = model.get_bool(name)?;
-                    return None;
+                    // Encode Bool as integer: false=0, true=1.
+                    let b = model.get_bool(name)?;
+                    lits.push(CubeLiteral {
+                        state_var_idx: i,
+                        value: if b { 1 } else { 0 },
+                    });
                 }
             }
         }
@@ -777,8 +823,12 @@ impl Cube {
                     parts.push(SmtTerm::var(name.clone()).eq(SmtTerm::int(lit.value)));
                 }
                 SmtSort::Bool => {
-                    // Not used in current counter-system states.
-                    parts.push(SmtTerm::bool(false));
+                    // Bool cube literal: value 1 = true, 0 = false.
+                    if lit.value != 0 {
+                        parts.push(SmtTerm::var(name.clone()));
+                    } else {
+                        parts.push(SmtTerm::not(SmtTerm::var(name.clone())));
+                    }
                 }
             }
         }
@@ -853,6 +903,14 @@ impl PdrFrame {
 }
 
 #[derive(Debug, Clone)]
+struct PdrRuleEffect {
+    from_loc: usize,
+    to_loc: usize,
+    updated_shared_vars: Vec<usize>,
+    delta_var: String,
+}
+
+#[derive(Debug, Clone)]
 struct PdrArtifacts {
     declarations: Vec<(String, SmtSort)>,
     state_vars_pre: Vec<(String, SmtSort)>,
@@ -862,18 +920,14 @@ struct PdrArtifacts {
     init_assertions: Vec<SmtTerm>,
     transition_assertions: Vec<SmtTerm>,
     bad_pre: SmtTerm,
+    num_locations: usize,
+    num_shared_vars: usize,
+    rule_effects: Vec<PdrRuleEffect>,
+    por_mode: PorMode,
 }
 
-fn kappa_var(step: usize, loc: usize) -> String {
-    format!("kappa_{step}_{loc}")
-}
-
-fn gamma_var(step: usize, var: usize) -> String {
-    format!("g_{step}_{var}")
-}
-
-fn time_var(step: usize) -> String {
-    format!("time_{step}")
+fn pdr_delta_var(rule: usize) -> String {
+    delta_var(0, rule)
 }
 
 fn build_pdr_artifacts(cs: &CounterSystem, property: &SafetyProperty) -> Option<PdrArtifacts> {
@@ -904,13 +958,15 @@ fn build_pdr_artifacts(cs: &CounterSystem, property: &SafetyProperty) -> Option<
     let mut state_vars_pre = Vec::new();
     let mut state_vars_post = Vec::new();
     let mut symmetry_templates_post = Vec::new();
-    for l in 0..cs.num_locations() {
+    let num_locations = cs.num_locations();
+    let num_shared_vars = cs.num_shared_vars();
+    for l in 0..num_locations {
         state_vars_pre.push((kappa_var(0, l), SmtSort::Int));
         state_vars_post.push((kappa_var(1, l), SmtSort::Int));
         let key = location_symmetry_key(cs, l);
         symmetry_templates_post.push(key);
     }
-    for v in 0..cs.num_shared_vars() {
+    for v in 0..num_shared_vars {
         state_vars_pre.push((gamma_var(0, v), SmtSort::Int));
         state_vars_post.push((gamma_var(1, v), SmtSort::Int));
         let key = shared_var_symmetry_key(cs, v);
@@ -919,6 +975,24 @@ fn build_pdr_artifacts(cs: &CounterSystem, property: &SafetyProperty) -> Option<
     state_vars_pre.push((time_var(0), SmtSort::Int));
     state_vars_post.push((time_var(1), SmtSort::Int));
     symmetry_templates_post.push("time".into());
+
+    let rule_effects = cs
+        .automaton
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(rule_id, rule)| {
+            let mut updated_shared_vars = rule.updates.iter().map(|u| u.var).collect::<Vec<_>>();
+            updated_shared_vars.sort_unstable();
+            updated_shared_vars.dedup();
+            PdrRuleEffect {
+                from_loc: rule.from,
+                to_loc: rule.to,
+                updated_shared_vars,
+                delta_var: pdr_delta_var(rule_id),
+            }
+        })
+        .collect();
 
     Some(PdrArtifacts {
         declarations: step1.declarations,
@@ -929,6 +1003,10 @@ fn build_pdr_artifacts(cs: &CounterSystem, property: &SafetyProperty) -> Option<
         init_assertions,
         transition_assertions,
         bad_pre,
+        num_locations,
+        num_shared_vars,
+        rule_effects,
+        por_mode: cs.automaton.por_mode,
     })
 }
 
@@ -985,6 +1063,44 @@ struct PdrQueryEngine<'a, S: SmtSolver> {
     extra_assertions: &'a [SmtTerm],
     base: PdrQueryBase,
     assumption_nonce: usize,
+}
+
+fn dynamic_ample_disabled_rules_for_cube(
+    cube: &Cube,
+    num_locations: usize,
+    num_shared_vars: usize,
+    rule_effects: &[PdrRuleEffect],
+) -> Vec<usize> {
+    if rule_effects.is_empty() {
+        return Vec::new();
+    }
+
+    let mut constrained_locations = HashSet::new();
+    let mut constrained_shared_vars = HashSet::new();
+    for lit in &cube.lits {
+        if lit.state_var_idx < num_locations {
+            constrained_locations.insert(lit.state_var_idx);
+            continue;
+        }
+        let shared_idx = lit.state_var_idx.saturating_sub(num_locations);
+        if shared_idx < num_shared_vars {
+            constrained_shared_vars.insert(shared_idx);
+        }
+    }
+
+    let mut disabled = Vec::new();
+    for (rule_id, effect) in rule_effects.iter().enumerate() {
+        let touches_location = constrained_locations.contains(&effect.from_loc)
+            || constrained_locations.contains(&effect.to_loc);
+        let touches_shared = effect
+            .updated_shared_vars
+            .iter()
+            .any(|var| constrained_shared_vars.contains(var));
+        if !(touches_location || touches_shared) {
+            disabled.push(rule_id);
+        }
+    }
+    disabled
 }
 
 impl<'a, S: SmtSolver> PdrQueryEngine<'a, S> {
@@ -1047,6 +1163,76 @@ impl<'a, S: SmtSolver> PdrQueryEngine<'a, S> {
         name
     }
 
+    fn dynamic_ample_disabled_rules(&self, cube: &Cube) -> Vec<usize> {
+        if self.artifacts.por_mode != PorMode::Full {
+            return Vec::new();
+        }
+        dynamic_ample_disabled_rules_for_cube(
+            cube,
+            self.artifacts.num_locations,
+            self.artifacts.num_shared_vars,
+            &self.artifacts.rule_effects,
+        )
+    }
+
+    fn assert_rules_disabled(&mut self, disabled_rule_ids: &[usize]) -> Result<(), S::Error> {
+        for rule_id in disabled_rule_ids {
+            if let Some(effect) = self.artifacts.rule_effects.get(*rule_id) {
+                self.solver
+                    .assert(&SmtTerm::var(effect.delta_var.clone()).eq(SmtTerm::int(0)))?;
+            }
+        }
+        Ok(())
+    }
+
+    fn solve_transition_query(
+        &mut self,
+        with_model: bool,
+    ) -> Result<(SatQueryResult, Option<Cube>), S::Error> {
+        if with_model {
+            let var_refs: Vec<(&str, &SmtSort)> = self
+                .artifacts
+                .state_vars_pre
+                .iter()
+                .map(|(n, s)| (n.as_str(), s))
+                .collect();
+            let (result, model) = check_sat_with_model_profiled(self.solver, &var_refs)?;
+            return Ok(match result {
+                SatResult::Sat => {
+                    if let Some(model) = model {
+                        if let Some(pred_cube) =
+                            Cube::from_model(&model, &self.artifacts.state_vars_pre)
+                        {
+                            (SatQueryResult::Sat, Some(pred_cube))
+                        } else {
+                            (
+                                SatQueryResult::Unknown(
+                                    "PDR: failed to extract predecessor cube from model".into(),
+                                ),
+                                None,
+                            )
+                        }
+                    } else {
+                        (
+                            SatQueryResult::Unknown(
+                                "PDR: solver reported SAT but returned no model".into(),
+                            ),
+                            None,
+                        )
+                    }
+                }
+                SatResult::Unsat => (SatQueryResult::Unsat, None),
+                SatResult::Unknown(reason) => (SatQueryResult::Unknown(reason), None),
+            });
+        }
+
+        Ok(match check_sat_profiled(self.solver)? {
+            SatResult::Sat => (SatQueryResult::Sat, None),
+            SatResult::Unsat => (SatQueryResult::Unsat, None),
+            SatResult::Unknown(reason) => (SatQueryResult::Unknown(reason), None),
+        })
+    }
+
     fn query_bad_state_in_frame(&mut self, frame: &PdrFrame) -> Result<CubeQueryResult, S::Error> {
         self.prepare_state_base()?;
         self.with_scope(|engine| {
@@ -1105,48 +1291,34 @@ impl<'a, S: SmtSolver> PdrQueryEngine<'a, S> {
                 .solver
                 .assert(&cube.to_conjunction_term(&engine.artifacts.state_vars_post))?;
 
-            if with_model {
-                let var_refs: Vec<(&str, &SmtSort)> = engine
-                    .artifacts
-                    .state_vars_pre
-                    .iter()
-                    .map(|(n, s)| (n.as_str(), s))
-                    .collect();
-                let (result, model) = check_sat_with_model_profiled(engine.solver, &var_refs)?;
-                return Ok(match result {
-                    SatResult::Sat => {
-                        if let Some(model) = model {
-                            if let Some(pred_cube) =
-                                Cube::from_model(&model, &engine.artifacts.state_vars_pre)
-                            {
-                                (SatQueryResult::Sat, Some(pred_cube))
-                            } else {
-                                (
-                                    SatQueryResult::Unknown(
-                                        "PDR: failed to extract predecessor cube from model".into(),
-                                    ),
-                                    None,
-                                )
-                            }
-                        } else {
-                            (
-                                SatQueryResult::Unknown(
-                                    "PDR: solver reported SAT but returned no model".into(),
-                                ),
-                                None,
-                            )
-                        }
+            let dynamic_disabled = engine.dynamic_ample_disabled_rules(cube);
+            if !dynamic_disabled.is_empty() {
+                record_por_dynamic_ample_query();
+                let reduced = engine.with_scope(|engine| {
+                    engine.assert_rules_disabled(&dynamic_disabled)?;
+                    engine.solve_transition_query(with_model)
+                })?;
+                match reduced.0 {
+                    SatQueryResult::Sat => {
+                        record_por_dynamic_ample_fast_sat();
+                        return Ok(reduced);
                     }
-                    SatResult::Unsat => (SatQueryResult::Unsat, None),
-                    SatResult::Unknown(reason) => (SatQueryResult::Unknown(reason), None),
-                });
+                    SatQueryResult::Unsat => {
+                        record_por_dynamic_ample_unsat_recheck();
+                        let full = engine.solve_transition_query(with_model)?;
+                        if matches!(full.0, SatQueryResult::Sat) {
+                            record_por_dynamic_ample_unsat_recheck_sat();
+                        }
+                        return Ok(full);
+                    }
+                    SatQueryResult::Unknown(_) => {
+                        // Fall back to full query for robustness against reduced-query
+                        // incompleteness.
+                    }
+                }
             }
 
-            Ok(match check_sat_profiled(engine.solver)? {
-                SatResult::Sat => (SatQueryResult::Sat, None),
-                SatResult::Unsat => (SatQueryResult::Unsat, None),
-                SatResult::Unknown(reason) => (SatQueryResult::Unknown(reason), None),
-            })
+            engine.solve_transition_query(with_model)
         })
     }
 
@@ -1161,6 +1333,40 @@ impl<'a, S: SmtSolver> PdrQueryEngine<'a, S> {
             engine
                 .solver
                 .assert(&cube.to_conjunction_term(&engine.artifacts.state_vars_post))?;
+            let dynamic_disabled = engine.dynamic_ample_disabled_rules(cube);
+            if !dynamic_disabled.is_empty() {
+                record_por_dynamic_ample_query();
+                let reduced = engine.with_scope(|engine| {
+                    engine.assert_rules_disabled(&dynamic_disabled)?;
+                    Ok(match check_sat_profiled(engine.solver)? {
+                        SatResult::Unsat => SatQueryResult::Unsat,
+                        SatResult::Sat => SatQueryResult::Sat,
+                        SatResult::Unknown(reason) => SatQueryResult::Unknown(reason),
+                    })
+                })?;
+                match reduced {
+                    SatQueryResult::Sat => {
+                        record_por_dynamic_ample_fast_sat();
+                        return Ok(SatQueryResult::Sat);
+                    }
+                    SatQueryResult::Unsat => {
+                        record_por_dynamic_ample_unsat_recheck();
+                        let full = match check_sat_profiled(engine.solver)? {
+                            SatResult::Unsat => SatQueryResult::Unsat,
+                            SatResult::Sat => SatQueryResult::Sat,
+                            SatResult::Unknown(reason) => SatQueryResult::Unknown(reason),
+                        };
+                        if matches!(full, SatQueryResult::Sat) {
+                            record_por_dynamic_ample_unsat_recheck_sat();
+                        }
+                        return Ok(full);
+                    }
+                    SatQueryResult::Unknown(_) => {
+                        // Fall back to full query for robustness against reduced-query
+                        // incompleteness.
+                    }
+                }
+            }
             Ok(match check_sat_profiled(engine.solver)? {
                 SatResult::Unsat => SatQueryResult::Unsat,
                 SatResult::Sat => SatQueryResult::Sat,
@@ -1525,10 +1731,13 @@ fn block_cube_with_obligations<S: SmtSolver>(
     deadline: Option<Instant>,
 ) -> Result<BlockingOutcome, S::Error> {
     let max_obligations = pdr_obligation_budget(query_engine.artifacts.state_vars_pre.len(), level);
-    let mut obligations = vec![(initial_cube, level)];
+    let mut obligations = vec![(initial_cube.clone(), level)];
+    let mut queued: HashSet<(usize, Cube)> = HashSet::new();
+    queued.insert((level, initial_cube));
     let mut processed = 0usize;
 
     while let Some((cube, level)) = obligations.pop() {
+        queued.remove(&(level, cube.clone()));
         if deadline_exceeded(deadline) {
             return Ok(BlockingOutcome::Unknown(OVERALL_TIMEOUT_REASON.into()));
         }
@@ -1564,8 +1773,18 @@ fn block_cube_with_obligations<S: SmtSolver>(
             SatQueryResult::Sat => {
                 if let Some(pred_cube) = pred_cube {
                     // Re-try this obligation after blocking predecessor.
-                    obligations.push((cube, level));
-                    obligations.push((pred_cube, level - 1));
+                    let current_key = (level, cube.clone());
+                    if queued.insert(current_key) {
+                        obligations.push((cube, level));
+                    } else {
+                        record_por_pending_obligation_dedup_hit();
+                    }
+                    let pred_key = (level - 1, pred_cube.clone());
+                    if queued.insert(pred_key) {
+                        obligations.push((pred_cube, level - 1));
+                    } else {
+                        record_por_pending_obligation_dedup_hit();
+                    }
                 } else {
                     return Ok(BlockingOutcome::Unknown(
                         "PDR: predecessor query returned SAT without predecessor model".into(),
@@ -1784,78 +2003,19 @@ fn run_pdr_internal<S: SmtSolver>(
             BmcResult::Safe { .. } => {}
         }
 
-        let mut query_engine = PdrQueryEngine::new(solver, &artifacts, extra_assertions);
+        let recover_depth = {
+            let mut query_engine = PdrQueryEngine::new(solver, &artifacts, extra_assertions);
 
-        info!(
-            frontier,
-            "pdr: checking and blocking bad states in frontier frame"
-        );
-        let mut blocked_bad_cubes = 0usize;
-        let max_bad_cubes = pdr_bad_cube_budget(artifacts.state_vars_pre.len(), frontier);
+            info!(
+                frontier,
+                "pdr: checking and blocking bad states in frontier frame"
+            );
+            let mut blocked_bad_cubes = 0usize;
+            let max_bad_cubes = pdr_bad_cube_budget(artifacts.state_vars_pre.len(), frontier);
+            let mut recover_depth = None;
 
-        // Block all bad states in the frontier frame.
-        loop {
-            if deadline_exceeded(deadline) {
-                return Ok((
-                    KInductionResult::Unknown {
-                        reason: OVERALL_TIMEOUT_REASON.into(),
-                    },
-                    None,
-                ));
-            }
-            match query_engine.query_bad_state_in_frame(&frames[frontier])? {
-                CubeQueryResult::Unsat => break,
-                CubeQueryResult::Unknown(reason) => {
-                    return Ok((KInductionResult::Unknown { reason }, None));
-                }
-                CubeQueryResult::Sat(bad_cube) => {
-                    blocked_bad_cubes += 1;
-                    if blocked_bad_cubes > max_bad_cubes {
-                        return Ok((
-                            KInductionResult::Unknown {
-                                reason: format!(
-                                    "PDR: blocked over {max_bad_cubes} bad cubes \
-                                     at frame {frontier} (adaptive budget); state space appears too large for \
-                                     current abstraction."
-                                ),
-                            },
-                            None,
-                        ));
-                    }
-                    match block_cube_with_obligations(
-                        &mut query_engine,
-                        &mut frames,
-                        frontier,
-                        bad_cube,
-                        deadline,
-                    )? {
-                        BlockingOutcome::Blocked => {}
-                        BlockingOutcome::Unknown(reason) => {
-                            return Ok((KInductionResult::Unknown { reason }, None));
-                        }
-                        BlockingOutcome::Counterexample => {
-                            drop(query_engine);
-                            return Ok((
-                                recover_counterexample_via_bmc(
-                                    solver,
-                                    cs,
-                                    property,
-                                    frontier,
-                                    extra_assertions,
-                                )?,
-                                None,
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Propagate blocked cubes forward.
-        info!(frontier, "pdr: propagating clauses");
-        for level in 1..frontier {
-            let to_consider: Vec<Cube> = frames[level].cubes().cloned().collect();
-            for cube in to_consider {
+            // Block all bad states in the frontier frame.
+            loop {
                 if deadline_exceeded(deadline) {
                     return Ok((
                         KInductionResult::Unknown {
@@ -1864,28 +2024,93 @@ fn run_pdr_internal<S: SmtSolver>(
                         None,
                     ));
                 }
-                if frames[level + 1].contains(&cube) {
-                    continue;
-                }
-                match can_push_cube_to_next_frame(&mut query_engine, &frames[level], &cube)? {
-                    SatQueryResult::Unsat => {
-                        frames[level + 1].insert(cube);
-                    }
-                    SatQueryResult::Sat => {}
-                    SatQueryResult::Unknown(reason) => {
+                match query_engine.query_bad_state_in_frame(&frames[frontier])? {
+                    CubeQueryResult::Unsat => break,
+                    CubeQueryResult::Unknown(reason) => {
                         return Ok((KInductionResult::Unknown { reason }, None));
                     }
+                    CubeQueryResult::Sat(bad_cube) => {
+                        blocked_bad_cubes += 1;
+                        if blocked_bad_cubes > max_bad_cubes {
+                            return Ok((
+                                KInductionResult::Unknown {
+                                    reason: format!(
+                                        "PDR: blocked over {max_bad_cubes} bad cubes \
+                                         at frame {frontier} (adaptive budget); state space appears too large for \
+                                         current abstraction."
+                                    ),
+                                },
+                                None,
+                            ));
+                        }
+                        match block_cube_with_obligations(
+                            &mut query_engine,
+                            &mut frames,
+                            frontier,
+                            bad_cube,
+                            deadline,
+                        )? {
+                            BlockingOutcome::Blocked => {}
+                            BlockingOutcome::Unknown(reason) => {
+                                return Ok((KInductionResult::Unknown { reason }, None));
+                            }
+                            BlockingOutcome::Counterexample => {
+                                recover_depth = Some(frontier);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
-        }
 
-        // Convergence: if F_i == F_{i+1}, then F_i is inductive.
-        for i in 1..frontier {
-            if frames[i] == frames[i + 1] {
-                info!(frame = i, "pdr: converged");
-                let cert = build_pdr_invariant_certificate(&artifacts, &frames[i], i);
-                return Ok((KInductionResult::Proved { k: i }, Some(cert)));
+            if recover_depth.is_none() {
+                // Propagate blocked cubes forward.
+                info!(frontier, "pdr: propagating clauses");
+                for level in 1..frontier {
+                    let to_consider: Vec<Cube> = frames[level].cubes().cloned().collect();
+                    for cube in to_consider {
+                        if deadline_exceeded(deadline) {
+                            return Ok((
+                                KInductionResult::Unknown {
+                                    reason: OVERALL_TIMEOUT_REASON.into(),
+                                },
+                                None,
+                            ));
+                        }
+                        if frames[level + 1].contains(&cube) {
+                            continue;
+                        }
+                        match can_push_cube_to_next_frame(&mut query_engine, &frames[level], &cube)?
+                        {
+                            SatQueryResult::Unsat => {
+                                frames[level + 1].insert(cube);
+                            }
+                            SatQueryResult::Sat => {}
+                            SatQueryResult::Unknown(reason) => {
+                                return Ok((KInductionResult::Unknown { reason }, None));
+                            }
+                        }
+                    }
+                }
+
+                // Convergence: if F_i == F_{i+1}, then F_i is inductive.
+                for i in 1..frontier {
+                    if frames[i] == frames[i + 1] {
+                        info!(frame = i, "pdr: converged");
+                        let cert = build_pdr_invariant_certificate(&artifacts, &frames[i], i);
+                        return Ok((KInductionResult::Proved { k: i }, Some(cert)));
+                    }
+                }
             }
+
+            recover_depth
+        };
+
+        if let Some(depth_hint) = recover_depth {
+            return Ok((
+                recover_counterexample_via_bmc(solver, cs, property, depth_hint, extra_assertions)?,
+                None,
+            ));
         }
 
         if frontier >= max_k {
@@ -2030,6 +2255,76 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_ample_disables_rules_unrelated_to_cube_constraints() {
+        let rule_effects = vec![
+            PdrRuleEffect {
+                from_loc: 0,
+                to_loc: 1,
+                updated_shared_vars: vec![0],
+                delta_var: pdr_delta_var(0),
+            },
+            PdrRuleEffect {
+                from_loc: 2,
+                to_loc: 2,
+                updated_shared_vars: vec![1],
+                delta_var: pdr_delta_var(1),
+            },
+            PdrRuleEffect {
+                from_loc: 1,
+                to_loc: 2,
+                updated_shared_vars: Vec::new(),
+                delta_var: pdr_delta_var(2),
+            },
+        ];
+        let cube = Cube {
+            lits: vec![
+                CubeLiteral {
+                    state_var_idx: 0, // location 0
+                    value: 1,
+                },
+                CubeLiteral {
+                    state_var_idx: 4, // shared var 1 (num_locations + 1)
+                    value: 2,
+                },
+            ],
+        };
+
+        let disabled = dynamic_ample_disabled_rules_for_cube(&cube, 3, 2, &rule_effects);
+        assert_eq!(
+            disabled,
+            vec![2],
+            "only rules unrelated to constrained locations/shared vars should be disabled"
+        );
+    }
+
+    #[test]
+    fn dynamic_ample_can_disable_all_rules_for_time_only_cube() {
+        let rule_effects = vec![
+            PdrRuleEffect {
+                from_loc: 0,
+                to_loc: 1,
+                updated_shared_vars: vec![0],
+                delta_var: pdr_delta_var(0),
+            },
+            PdrRuleEffect {
+                from_loc: 1,
+                to_loc: 2,
+                updated_shared_vars: Vec::new(),
+                delta_var: pdr_delta_var(1),
+            },
+        ];
+        let cube = Cube {
+            lits: vec![CubeLiteral {
+                state_var_idx: 5, // time var index (num_locations + num_shared_vars)
+                value: 7,
+            }],
+        };
+
+        let disabled = dynamic_ample_disabled_rules_for_cube(&cube, 3, 2, &rule_effects);
+        assert_eq!(disabled, vec![0, 1]);
+    }
+
+    #[test]
     fn pdr_frame_insert_uses_cube_subsumption() {
         let specific = Cube {
             lits: vec![
@@ -2118,5 +2413,464 @@ mod tests {
             cube_symmetry_signature(&cube_a, &templates),
             cube_symmetry_signature(&cube_b, &templates)
         );
+    }
+
+    // --- SmtRunProfile tests ---
+
+    #[test]
+    fn smt_run_profile_default_has_all_zeroes() {
+        let profile = SmtRunProfile::default();
+        assert_eq!(profile.encode_calls, 0);
+        assert_eq!(profile.encode_elapsed_ms, 0);
+        assert_eq!(profile.solve_calls, 0);
+        assert_eq!(profile.solve_elapsed_ms, 0);
+        assert_eq!(profile.assertion_candidates, 0);
+        assert_eq!(profile.assertion_unique, 0);
+        assert_eq!(profile.assertion_dedup_hits, 0);
+        assert_eq!(profile.incremental_depth_reuse_steps, 0);
+        assert_eq!(profile.incremental_decl_reuse_hits, 0);
+        assert_eq!(profile.incremental_assertion_reuse_hits, 0);
+        assert_eq!(profile.symmetry_candidates, 0);
+        assert_eq!(profile.symmetry_pruned, 0);
+        assert_eq!(profile.stutter_signature_normalizations, 0);
+        assert_eq!(profile.por_pending_obligation_dedup_hits, 0);
+        assert_eq!(profile.por_dynamic_ample_queries, 0);
+        assert_eq!(profile.por_dynamic_ample_fast_sat, 0);
+        assert_eq!(profile.por_dynamic_ample_unsat_rechecks, 0);
+        assert_eq!(profile.por_dynamic_ample_unsat_recheck_sat, 0);
+    }
+
+    #[test]
+    fn smt_run_profile_fields_are_mutable_and_cloneable() {
+        let profile = SmtRunProfile {
+            encode_calls: 5,
+            solve_calls: 10,
+            symmetry_pruned: 42,
+            ..SmtRunProfile::default()
+        };
+        let cloned = profile.clone();
+        assert_eq!(cloned.encode_calls, 5);
+        assert_eq!(cloned.solve_calls, 10);
+        assert_eq!(cloned.symmetry_pruned, 42);
+    }
+
+    // --- Thread-local profiling tests ---
+
+    #[test]
+    fn reset_smt_run_profile_clears_thread_local() {
+        // Mutate the thread-local profile directly.
+        SMT_RUN_PROFILE.with(|cell| {
+            let mut p = cell.borrow_mut();
+            p.encode_calls = 99;
+            p.solve_calls = 77;
+        });
+        let before = current_smt_run_profile();
+        assert_eq!(before.encode_calls, 99);
+
+        reset_smt_run_profile();
+        let after = current_smt_run_profile();
+        assert_eq!(after.encode_calls, 0);
+        assert_eq!(after.solve_calls, 0);
+    }
+
+    #[test]
+    fn take_smt_run_profile_returns_and_resets() {
+        reset_smt_run_profile();
+        SMT_RUN_PROFILE.with(|cell| {
+            let mut p = cell.borrow_mut();
+            p.encode_calls = 33;
+            p.solve_elapsed_ms = 1234;
+        });
+
+        let taken = take_smt_run_profile();
+        assert_eq!(taken.encode_calls, 33);
+        assert_eq!(taken.solve_elapsed_ms, 1234);
+
+        // After take, the thread-local should be default (all zeroes).
+        let after = current_smt_run_profile();
+        assert_eq!(after.encode_calls, 0);
+        assert_eq!(after.solve_elapsed_ms, 0);
+    }
+
+    #[test]
+    fn current_smt_run_profile_returns_clone_not_reference() {
+        reset_smt_run_profile();
+        SMT_RUN_PROFILE.with(|cell| {
+            cell.borrow_mut().solve_calls = 7;
+        });
+        let snapshot = current_smt_run_profile();
+        // Mutating the thread-local after snapshot should not affect snapshot.
+        SMT_RUN_PROFILE.with(|cell| {
+            cell.borrow_mut().solve_calls = 100;
+        });
+        assert_eq!(snapshot.solve_calls, 7);
+        // Clean up
+        reset_smt_run_profile();
+    }
+
+    // --- record_* profiling helper tests ---
+
+    #[test]
+    fn record_solve_profile_increments_counters() {
+        reset_smt_run_profile();
+        record_solve_profile(50);
+        record_solve_profile(25);
+        let p = current_smt_run_profile();
+        assert_eq!(p.solve_calls, 2);
+        assert_eq!(p.solve_elapsed_ms, 75);
+        reset_smt_run_profile();
+    }
+
+    #[test]
+    fn record_incremental_reuse_no_op_for_zero_values() {
+        reset_smt_run_profile();
+        record_incremental_reuse(0, 0);
+        let p = current_smt_run_profile();
+        assert_eq!(p.incremental_depth_reuse_steps, 0);
+        assert_eq!(p.incremental_decl_reuse_hits, 0);
+        assert_eq!(p.incremental_assertion_reuse_hits, 0);
+        reset_smt_run_profile();
+    }
+
+    #[test]
+    fn record_incremental_reuse_accumulates_nonzero_values() {
+        reset_smt_run_profile();
+        record_incremental_reuse(3, 7);
+        record_incremental_reuse(2, 0);
+        let p = current_smt_run_profile();
+        assert_eq!(p.incremental_depth_reuse_steps, 2);
+        assert_eq!(p.incremental_decl_reuse_hits, 5);
+        assert_eq!(p.incremental_assertion_reuse_hits, 7);
+        reset_smt_run_profile();
+    }
+
+    #[test]
+    fn record_symmetry_candidate_tracks_pruned_and_total() {
+        reset_smt_run_profile();
+        record_symmetry_candidate(false);
+        record_symmetry_candidate(true);
+        record_symmetry_candidate(true);
+        let p = current_smt_run_profile();
+        assert_eq!(p.symmetry_candidates, 3);
+        assert_eq!(p.symmetry_pruned, 2);
+        reset_smt_run_profile();
+    }
+
+    #[test]
+    fn record_stutter_signature_normalization_skips_zero() {
+        reset_smt_run_profile();
+        record_stutter_signature_normalization(0);
+        let p = current_smt_run_profile();
+        assert_eq!(p.stutter_signature_normalizations, 0);
+        record_stutter_signature_normalization(5);
+        let p = current_smt_run_profile();
+        assert_eq!(p.stutter_signature_normalizations, 5);
+        reset_smt_run_profile();
+    }
+
+    #[test]
+    fn record_por_counters_increment_independently() {
+        reset_smt_run_profile();
+        record_por_dynamic_ample_query();
+        record_por_dynamic_ample_query();
+        record_por_dynamic_ample_fast_sat();
+        record_por_dynamic_ample_unsat_recheck();
+        record_por_dynamic_ample_unsat_recheck_sat();
+        record_por_pending_obligation_dedup_hit();
+        record_por_pending_obligation_dedup_hit();
+        record_por_pending_obligation_dedup_hit();
+        let p = current_smt_run_profile();
+        assert_eq!(p.por_dynamic_ample_queries, 2);
+        assert_eq!(p.por_dynamic_ample_fast_sat, 1);
+        assert_eq!(p.por_dynamic_ample_unsat_rechecks, 1);
+        assert_eq!(p.por_dynamic_ample_unsat_recheck_sat, 1);
+        assert_eq!(p.por_pending_obligation_dedup_hits, 3);
+        reset_smt_run_profile();
+    }
+
+    // --- deadline_exceeded tests ---
+
+    #[test]
+    fn deadline_exceeded_returns_false_when_none() {
+        assert!(!deadline_exceeded(None));
+    }
+
+    #[test]
+    fn deadline_exceeded_returns_true_for_past_instant() {
+        use std::time::Duration;
+        // Create an instant in the past by subtracting duration from now.
+        let past = Instant::now() - Duration::from_secs(10);
+        assert!(deadline_exceeded(Some(past)));
+    }
+
+    #[test]
+    fn deadline_exceeded_returns_false_for_future_instant() {
+        use std::time::Duration;
+        let future = Instant::now() + Duration::from_secs(300);
+        assert!(!deadline_exceeded(Some(future)));
+    }
+
+    // --- local_value_key tests ---
+
+    #[test]
+    fn local_value_key_formats_all_variants() {
+        assert_eq!(local_value_key(&LocalValue::Bool(true)), "b:true");
+        assert_eq!(local_value_key(&LocalValue::Bool(false)), "b:false");
+        assert_eq!(local_value_key(&LocalValue::Int(42)), "i:42");
+        assert_eq!(local_value_key(&LocalValue::Int(-7)), "i:-7");
+        assert_eq!(
+            local_value_key(&LocalValue::Enum("Phase1".into())),
+            "e:Phase1"
+        );
+    }
+
+    // --- Cube tests ---
+
+    #[test]
+    fn cube_from_model_extracts_int_and_bool_literals() {
+        use crate::solver::{Model, ModelValue};
+        let mut values = HashMap::new();
+        values.insert("kappa_0_0".to_string(), ModelValue::Int(3));
+        values.insert("flag".to_string(), ModelValue::Bool(true));
+        let model = Model { values };
+
+        let state_vars = vec![
+            ("kappa_0_0".to_string(), SmtSort::Int),
+            ("flag".to_string(), SmtSort::Bool),
+        ];
+        let cube = Cube::from_model(&model, &state_vars).expect("should extract cube");
+        assert_eq!(cube.lits.len(), 2);
+        assert_eq!(cube.lits[0].state_var_idx, 0);
+        assert_eq!(cube.lits[0].value, 3);
+        assert_eq!(cube.lits[1].state_var_idx, 1);
+        assert_eq!(cube.lits[1].value, 1); // true -> 1
+    }
+
+    #[test]
+    fn cube_from_model_returns_none_on_missing_variable() {
+        use crate::solver::{Model, ModelValue};
+        let mut values = HashMap::new();
+        values.insert("kappa_0_0".to_string(), ModelValue::Int(3));
+        // "missing_var" is not in the model
+        let model = Model { values };
+
+        let state_vars = vec![
+            ("kappa_0_0".to_string(), SmtSort::Int),
+            ("missing_var".to_string(), SmtSort::Int),
+        ];
+        assert!(Cube::from_model(&model, &state_vars).is_none());
+    }
+
+    #[test]
+    fn cube_to_conjunction_term_empty_lits_returns_true() {
+        let cube = Cube { lits: vec![] };
+        let state_vars: Vec<(String, SmtSort)> = vec![];
+        let term = cube.to_conjunction_term(&state_vars);
+        assert_eq!(term, SmtTerm::BoolLit(true));
+    }
+
+    #[test]
+    fn cube_to_conjunction_and_blocking_clause_are_negation_related() {
+        let cube = Cube {
+            lits: vec![CubeLiteral {
+                state_var_idx: 0,
+                value: 5,
+            }],
+        };
+        let state_vars = vec![("x".to_string(), SmtSort::Int)];
+
+        let conj = cube.to_conjunction_term(&state_vars);
+        let blocking = cube.to_blocking_clause_term(&state_vars);
+
+        // blocking should be (not conj)
+        assert_eq!(blocking, SmtTerm::Not(Box::new(conj)));
+    }
+
+    #[test]
+    fn cube_to_conjunction_bool_literal_values() {
+        let cube = Cube {
+            lits: vec![
+                CubeLiteral {
+                    state_var_idx: 0,
+                    value: 1,
+                }, // true
+                CubeLiteral {
+                    state_var_idx: 1,
+                    value: 0,
+                }, // false
+            ],
+        };
+        let state_vars = vec![
+            ("a".to_string(), SmtSort::Bool),
+            ("b".to_string(), SmtSort::Bool),
+        ];
+        let conj = cube.to_conjunction_term(&state_vars);
+        // For Bool, value!=0 => var, value==0 => (not var)
+        let expected = SmtTerm::and(vec![
+            SmtTerm::var("a"),
+            SmtTerm::not(SmtTerm::var("b")),
+        ]);
+        assert_eq!(conj, expected);
+    }
+
+    #[test]
+    fn cube_subsumes_reflexive() {
+        let cube = Cube {
+            lits: vec![
+                CubeLiteral {
+                    state_var_idx: 0,
+                    value: 1,
+                },
+                CubeLiteral {
+                    state_var_idx: 1,
+                    value: 2,
+                },
+            ],
+        };
+        assert!(cube.subsumes(&cube));
+    }
+
+    #[test]
+    fn cube_subsumes_empty_subsumes_everything() {
+        let empty = Cube { lits: vec![] };
+        let nonempty = Cube {
+            lits: vec![CubeLiteral {
+                state_var_idx: 0,
+                value: 1,
+            }],
+        };
+        assert!(empty.subsumes(&nonempty));
+        assert!(empty.subsumes(&empty));
+    }
+
+    #[test]
+    fn cube_subsumes_different_values_not_subsumed() {
+        let a = Cube {
+            lits: vec![CubeLiteral {
+                state_var_idx: 0,
+                value: 1,
+            }],
+        };
+        let b = Cube {
+            lits: vec![CubeLiteral {
+                state_var_idx: 0,
+                value: 2,
+            }],
+        };
+        assert!(!a.subsumes(&b));
+        assert!(!b.subsumes(&a));
+    }
+
+    // --- rename_state_vars_in_term tests ---
+
+    #[test]
+    fn rename_state_vars_substitutes_var_names() {
+        let mut map = HashMap::new();
+        map.insert("x_0".to_string(), "x_1".to_string());
+        map.insert("y_0".to_string(), "y_1".to_string());
+
+        let term = SmtTerm::var("x_0").add(SmtTerm::var("y_0"));
+        let renamed = rename_state_vars_in_term(&term, &map);
+        let expected = SmtTerm::var("x_1").add(SmtTerm::var("y_1"));
+        assert_eq!(renamed, expected);
+    }
+
+    #[test]
+    fn rename_state_vars_leaves_unmapped_vars_unchanged() {
+        let mut map = HashMap::new();
+        map.insert("x".to_string(), "x_prime".to_string());
+
+        let term = SmtTerm::var("z").add(SmtTerm::var("x"));
+        let renamed = rename_state_vars_in_term(&term, &map);
+        let expected = SmtTerm::var("z").add(SmtTerm::var("x_prime"));
+        assert_eq!(renamed, expected);
+    }
+
+    #[test]
+    fn rename_state_vars_recursively_handles_all_term_variants() {
+        let mut map = HashMap::new();
+        map.insert("a".to_string(), "a_prime".to_string());
+
+        // Test with Not, And, Or, Implies, Eq, Lt, Le, Gt, Ge, Sub, Mul, Ite
+        let not_term = SmtTerm::var("a").not();
+        assert_eq!(
+            rename_state_vars_in_term(&not_term, &map),
+            SmtTerm::var("a_prime").not()
+        );
+
+        let and_term = SmtTerm::and(vec![SmtTerm::var("a"), SmtTerm::var("b")]);
+        let renamed_and = rename_state_vars_in_term(&and_term, &map);
+        assert_eq!(
+            renamed_and,
+            SmtTerm::and(vec![SmtTerm::var("a_prime"), SmtTerm::var("b")])
+        );
+
+        let ite = SmtTerm::Ite(
+            Box::new(SmtTerm::var("a")),
+            Box::new(SmtTerm::int(1)),
+            Box::new(SmtTerm::int(0)),
+        );
+        let renamed_ite = rename_state_vars_in_term(&ite, &map);
+        assert_eq!(
+            renamed_ite,
+            SmtTerm::Ite(
+                Box::new(SmtTerm::var("a_prime")),
+                Box::new(SmtTerm::int(1)),
+                Box::new(SmtTerm::int(0)),
+            )
+        );
+    }
+
+    #[test]
+    fn rename_state_vars_preserves_literals() {
+        let map = HashMap::new();
+        assert_eq!(
+            rename_state_vars_in_term(&SmtTerm::int(42), &map),
+            SmtTerm::int(42)
+        );
+        assert_eq!(
+            rename_state_vars_in_term(&SmtTerm::bool(true), &map),
+            SmtTerm::bool(true)
+        );
+    }
+
+    // --- wildcard_process_ids edge cases ---
+
+    #[test]
+    fn wildcard_process_ids_handles_no_hash() {
+        assert_eq!(wildcard_process_ids("plain_name"), "plain_name");
+    }
+
+    #[test]
+    fn wildcard_process_ids_handles_hash_at_end() {
+        assert_eq!(wildcard_process_ids("prefix#5"), "prefix#*");
+    }
+
+    #[test]
+    fn wildcard_process_ids_handles_multiple_hashes() {
+        assert_eq!(wildcard_process_ids("A#1B#2C#30"), "A#*B#*C#*");
+    }
+
+    // --- Budget helper edge cases ---
+
+    #[test]
+    fn pdr_budgets_respect_lower_bounds() {
+        assert!(pdr_bad_cube_budget(0, 0) >= 5_000);
+        assert!(pdr_obligation_budget(0, 0) >= 10_000);
+        assert!(pdr_single_literal_query_budget(0) >= 128);
+    }
+
+    #[test]
+    fn pdr_budgets_respect_upper_bounds() {
+        assert!(pdr_bad_cube_budget(usize::MAX, usize::MAX) <= 200_000);
+        assert!(pdr_obligation_budget(usize::MAX, usize::MAX) <= 300_000);
+        assert!(pdr_single_literal_query_budget(usize::MAX) <= 16_384);
+        assert!(pdr_pair_literal_query_budget(usize::MAX) <= 2_048);
+    }
+
+    #[test]
+    fn pdr_pair_literal_query_budget_zero_and_one_return_zero() {
+        assert_eq!(pdr_pair_literal_query_budget(0), 0);
+        assert_eq!(pdr_pair_literal_query_budget(1), 0);
     }
 }

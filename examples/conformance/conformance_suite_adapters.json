@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "suite_name": "adapter-conformance-reference",
+  "description": "Conformance adapter replay suite for CometBFT and etcd-raft families.",
+  "entries": [
+    {
+      "name": "cometbft_simple_vote_pass",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "examples/conformance/adapters/cometbft_simple_vote_pass.json",
+      "trace_adapter": "cometbft",
+      "checker_mode": "strict",
+      "expected_verdict": "pass",
+      "tags": ["adapter", "cometbft", "positive"],
+      "notes": "CometBFT-style trace that satisfies the SimpleVote guard and decide context."
+    },
+    {
+      "name": "cometbft_simple_vote_guard_violation",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "examples/conformance/adapters/cometbft_simple_vote_fail_guard.json",
+      "trace_adapter": "cometbft",
+      "checker_mode": "strict",
+      "expected_verdict": "fail",
+      "mismatch_hint": "impl_divergence",
+      "tags": ["adapter", "cometbft", "negative"],
+      "notes": "Insufficient Vote receives before waiting->done transition."
+    },
+    {
+      "name": "cometbft_unknown_mapping_permissive",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "examples/conformance/adapters/cometbft_unknown_mapping.json",
+      "trace_adapter": "cometbft",
+      "checker_mode": "permissive",
+      "expected_verdict": "pass",
+      "tags": ["adapter", "cometbft", "mode-permissive"],
+      "notes": "Unknown message mapping remains allowed in permissive mode."
+    },
+    {
+      "name": "cometbft_unknown_mapping_strict",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "examples/conformance/adapters/cometbft_unknown_mapping.json",
+      "trace_adapter": "cometbft",
+      "checker_mode": "strict",
+      "expected_verdict": "fail",
+      "mismatch_hint": "impl_divergence",
+      "tags": ["adapter", "cometbft", "mode-strict"],
+      "notes": "Unknown message mapping must be rejected in strict mode."
+    },
+    {
+      "name": "etcd_raft_simple_vote_pass",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "examples/conformance/adapters/etcd_raft_simple_vote_pass.json",
+      "trace_adapter": "etcd-raft",
+      "checker_mode": "strict",
+      "expected_verdict": "pass",
+      "tags": ["adapter", "etcd-raft", "positive"],
+      "notes": "etcd-raft-style peer steps mapped into SimpleVote counters."
+    },
+    {
+      "name": "etcd_raft_invalid_decide_context",
+      "protocol_file": "crates/tarsier-conformance/tests/fixtures/simple_vote.trs",
+      "trace_file": "examples/conformance/adapters/etcd_raft_invalid_decide_context.json",
+      "trace_adapter": "etcd-raft",
+      "checker_mode": "strict",
+      "expected_verdict": "fail",
+      "mismatch_hint": "impl_divergence",
+      "tags": ["adapter", "etcd-raft", "negative", "mode-strict"],
+      "notes": "Commit without reaching decided=true location should fail in strict mode."
+    }
+  ]
+}

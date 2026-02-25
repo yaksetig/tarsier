@@ -1,0 +1,64 @@
+# Optional real ByMC verification workflow.
+# Does NOT block PRs — fully opt-in via manual trigger or weekly schedule.
+name: ByMC Verification
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly: Monday 06:00 UTC
+
+jobs:
+  build-bymc-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ByMC Docker image
+        run: bash benchmarks/bymc/build-docker.sh
+
+      - name: Save Docker image
+        run: docker save tarsier-bymc:latest | gzip > /tmp/tarsier-bymc.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bymc-docker-image
+          path: /tmp/tarsier-bymc.tar.gz
+          retention-days: 1
+
+  run-real-bymc:
+    needs: build-bymc-image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bymc-docker-image
+          path: /tmp
+
+      - name: Load Docker image
+        run: gunzip -c /tmp/tarsier-bymc.tar.gz | docker load
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run cross-tool benchmark (real ByMC)
+        run: |
+          chmod +x benchmarks/bymc/run_bymc.sh
+          python3 benchmarks/cross_tool_runner.py \
+            --skip-build \
+            --tools bymc \
+            --bymc-binary benchmarks/bymc/run_bymc.sh \
+            --bymc-mode real \
+            --timeout 300 \
+            --out /tmp/cross-tool-real-bymc.json
+
+      - name: Verdict parity check
+        run: python3 .github/scripts/check_cross_tool_verdict_parity.py /tmp/cross-tool-real-bymc.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bymc-verification-report
+          path: /tmp/cross-tool-real-bymc.json

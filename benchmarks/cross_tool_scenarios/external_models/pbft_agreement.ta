@@ -1,0 +1,34 @@
+/* PBFT Simple — Agreement property.
+ *
+ * Threshold automaton for the simplified PBFT consensus protocol.
+ * Matches Tarsier model: examples/library/pbft_simple_safe.trs
+ *
+ * Locations:
+ *   loc0 = start      (initial)
+ *   loc1 = prepared    (received PrePrepare, sent Prepare)
+ *   loc2 = committed   (received 2t+1 Prepare, sent Commit)
+ *   loc3 = done        (received 2t+1 Commit, decided true)
+ *
+ * Shared counters:
+ *   nsnt_pp  — number of PrePrepare messages sent
+ *   nsnt_p   — number of Prepare messages sent
+ *   nsnt_c   — number of Commit messages sent
+ *
+ * Safety: agreement — all replicas that reach done decide the same value.
+ */
+skel Replica {
+  local pc;
+  shared nsnt_pp, nsnt_p, nsnt_c;
+  parameters N, T, F;
+  assumptions (1) { N > 3*T; }
+  locations (4) { loc0: [0]; loc1: [1]; loc2: [2]; loc3: [3]; }
+  inits (6) { loc0 == N; loc1 == 0; loc2 == 0; loc3 == 0; nsnt_pp == 0; nsnt_p == 0; nsnt_c == 0; }
+  rules (3) {
+    0: loc0 -> loc1 when (nsnt_pp >= 1) do { nsnt_pp' == nsnt_pp; nsnt_p' == nsnt_p + 1; nsnt_c' == nsnt_c; };
+    1: loc1 -> loc2 when (nsnt_p >= 1 + 2*T) do { nsnt_pp' == nsnt_pp; nsnt_p' == nsnt_p; nsnt_c' == nsnt_c + 1; };
+    2: loc2 -> loc3 when (nsnt_c >= 1 + 2*T) do { nsnt_pp' == nsnt_pp; nsnt_p' == nsnt_p; nsnt_c' == nsnt_c; };
+  }
+  specifications (1) {
+    agreement: [](loc3 > 0 -> [](loc3 >= 0));
+  }
+}

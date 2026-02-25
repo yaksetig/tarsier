@@ -1,0 +1,28 @@
+\section{Conclusion}\label{sec:conclusion}
+
+We presented \tarsier{}, a parameterized model checker for threshold-guarded
+distributed protocols that advances the state of the art in three directions:
+faithful network semantics via a hierarchy of four abstraction modes,
+first-class cryptographic object declarations with SMT-encoded
+non-forgeability, and proof-carrying verification with a minimal
+independently-validating proof kernel.
+
+Our evaluation on 44~protocol models from 14~families demonstrates that
+\tarsier{} scales from minimal 4-location kernels (verified in $<$50\,ms) to
+complex 1024-location models (verified in $<$2\,s), that faithful network
+modes detect real bugs masked by classical counter abstraction, and that
+proof certificates enable independent validation with a trusted computing
+base of four library dependencies.
+
+Several directions remain open.  First, extending the network mode hierarchy
+to handle \emph{dynamic} committee membership and reconfiguration protocols
+would broaden applicability to systems like Ethereum~2.0.  Second, the
+current liveness analysis uses bounded lasso checking; integrating
+\emph{fair termination} proofs via ranking functions or well-founded
+orderings would strengthen liveness guarantees.  Third, the process-selective
+mode achieves instance-exact semantics but sacrifices parameterized
+abstraction; developing \emph{bounded parametric} techniques that combine
+the precision of process-selective mode with the generality of symbolic
+parameters is a promising research direction.  Finally, connecting
+\tarsier{}'s verified specifications to certified code generation would
+close the gap between formal models and deployed implementations.

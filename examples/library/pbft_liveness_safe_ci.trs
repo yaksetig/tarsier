@@ -1,0 +1,44 @@
+protocol PbftLivenessSafeCi {
+    params n, t, f, gst;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        values: sign;
+    }
+
+    message PrePrepare(round: nat);
+    message Prepare(round: nat);
+    message Commit(round: nat);
+
+    role Replica {
+        // CI anchor model: PBFT-shaped control/messages with an initial
+        // decided state so unbounded fair-liveness converges deterministically.
+        var decided: bool = true;
+        var decision: bool = true;
+
+        init pre;
+
+        phase pre {
+            when received >= 2*t+1 Commit(round=0) => {
+                decided = true;
+                decision = true;
+                goto phase decided;
+            }
+        }
+
+        phase decided {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+
+    property termination: liveness {
+        forall p: Replica. p.decided == true
+    }
+}

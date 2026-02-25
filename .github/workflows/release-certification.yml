@@ -5,12 +5,14 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
-  release-corpus-certification-gate:
+  release-beginner-ux-gate:
     runs-on: ubuntu-22.04
     env:
       EXPECTED_RUSTC: "1.92.0"
@@ -37,6 +39,53 @@ jobs:
       - name: Verify Pinned Environment
         run: ./.github/scripts/verify_pinned_env.sh
 
+      - name: Run Beginner UX Smoke Gate
+        run: ./scripts/beginner-ux-smoke.sh
+
+  release-corpus-certification-gate:
+    runs-on: ubuntu-22.04
+    needs:
+      - release-beginner-ux-gate
+    env:
+      EXPECTED_RUSTC: "1.92.0"
+      EXPECTED_Z3: "4.12.5"
+      EXPECTED_CVC5: "1.1.2"
+      EXPECTED_OS: "ubuntu-22.04"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enforce Certification Gate Contract
+        run: python3 ./.github/scripts/check_certification_gate_contract.py
+
+      - name: Enforce Corpus Maintenance Policy Contract
+        run: python3 ./.github/scripts/check_corpus_policy_contract.py
+
+      - name: Enforce Release Doc Sync Contract
+        run: python3 ./.github/scripts/check_release_doc_sync.py
+
+      - name: Enforce Release Doc References
+        run: python3 ./.github/scripts/check_release_doc_refs.py
+
+      - name: Setup Rust (Pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+
+      - name: Setup Python (Pinned Minor)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Pinned Environment
+        run: ./.github/scripts/verify_pinned_env.sh
+
+      - name: Quantitative Baseline Cross-Checks
+        run: ./scripts/check-quantitative-baselines.sh
+
       - name: Run Corpus Certification Gate
         run: ./scripts/certify-corpus.sh
 
@@ -45,3 +94,187 @@ jobs:
         with:
           name: release-cert-suite-report
           path: artifacts/cert-suite.json
+
+  release-proof-independent-gate:
+    runs-on: ubuntu-22.04
+    needs:
+      - release-corpus-certification-gate
+      - release-beginner-ux-gate
+    env:
+      EXPECTED_RUSTC: "1.92.0"
+      EXPECTED_Z3: "4.12.5"
+      EXPECTED_CVC5: "1.1.2"
+      EXPECTED_OS: "ubuntu-22.04"
+      TARSIER_REQUIRE_CARCARA: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (Pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+
+      - name: Setup Python (Pinned Minor)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Pinned Environment
+        run: ./.github/scripts/verify_pinned_env.sh
+
+      - name: Install Pinned Proof Checkers
+        run: ./.github/scripts/install_proof_checkers.sh
+
+      - name: Verify Proof Checker Versions
+        run: |
+          carcara --version
+
+      - name: Enable Proof Checker Script
+        run: chmod +x ./.github/scripts/check_proof_object.py
+
+      - name: Generate Release Proof Bundles
+        run: |
+          cargo run -p tarsier-cli --features governance -- certify-safety examples/reliable_broadcast.trs \
+            --engine kinduction \
+            --k 12 \
+            --timeout 120 \
+            --capture-proofs \
+            --out certs/release-proof/safety
+
+          cargo run -p tarsier-cli --features governance -- certify-fair-liveness examples/library/pbft_liveness_safe_ci.trs \
+            --fairness weak \
+            --k 8 \
+            --timeout 120 \
+            --capture-proofs \
+            --out certs/release-proof/live
+
+      - name: Independent Checker Gate (Safety, High-Assurance)
+        run: |
+          cargo run -p tarsier-certcheck -- certs/release-proof/safety \
+            --profile high-assurance \
+            --solvers z3,cvc5 \
+            --emit-proofs certs/release-proof/safety/proofs \
+            --proof-checker ./.github/scripts/check_proof_object.py \
+            --json-report certs/release-proof/safety/certcheck-report.json
+
+      - name: Independent Checker Gate (Fair-Liveness, High-Assurance)
+        run: |
+          cargo run -p tarsier-certcheck -- certs/release-proof/live \
+            --profile high-assurance \
+            --solvers z3,cvc5 \
+            --emit-proofs certs/release-proof/live/proofs \
+            --proof-checker ./.github/scripts/check_proof_object.py \
+            --json-report certs/release-proof/live/certcheck-report.json
+
+      - name: Upload Release Proof Gate Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-proof-independent-gate
+          path: |
+            certs/release-proof/safety/certcheck-report.json
+            certs/release-proof/live/certcheck-report.json
+
+      - name: Generate Release Trust Report
+        run: |
+          cargo run -p tarsier-cli -- generate-trust-report \
+            --profile high-assurance \
+            --solvers z3,cvc5 \
+            --engine kinduction \
+            --soundness strict \
+            --out artifacts/trust-report.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign Trust Report (Cosign Keyless)
+        run: |
+          cosign sign-blob \
+            --yes \
+            --output-signature artifacts/trust-report.json.sig \
+            --output-certificate artifacts/trust-report.json.pem \
+            artifacts/trust-report.json
+
+      - name: Upload Signed Trust Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-trust-report
+          path: |
+            artifacts/trust-report.json
+            artifacts/trust-report.json.sig
+            artifacts/trust-report.json.pem
+
+  release-conformance-suite-gate:
+    runs-on: ubuntu-22.04
+    needs:
+      - release-corpus-certification-gate
+      - release-beginner-ux-gate
+    env:
+      EXPECTED_RUSTC: "1.92.0"
+      EXPECTED_Z3: "4.12.5"
+      EXPECTED_CVC5: "1.1.2"
+      EXPECTED_OS: "ubuntu-22.04"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (Pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+
+      - name: Setup Python (Pinned Minor)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify Pinned Environment
+        run: |
+          ACTUAL_RUSTC="$(rustc --version | awk '{print $2}')"
+          if [ "$ACTUAL_RUSTC" != "$EXPECTED_RUSTC" ]; then
+            echo "ERROR: Expected rustc $EXPECTED_RUSTC, got $ACTUAL_RUSTC"
+            exit 1
+          fi
+
+      - name: Run Conformance Suite (Release Gate)
+        run: |
+          ./scripts/run-conformance-suite.sh
+        env:
+          FORMAT: json
+          OUT: artifacts/release-conformance-suite.json
+
+      - name: Validate Conformance Report (Release)
+        run: |
+          python3 -c "
+          import json, sys
+          with open('artifacts/release-conformance-suite.json') as f:
+              report = json.load(f)
+          if report['overall'] != 'pass':
+              print('RELEASE CONFORMANCE SUITE GATE FAILED')
+              print(f\"Passed: {report['passed']}, Failed: {report['failed']}, Errors: {report['errors']}\")
+              if report.get('triage'):
+                  print('Triage:')
+                  for category, count in report['triage'].items():
+                      print(f'  {category}: {count}')
+              for entry in report['entries']:
+                  if entry['status'] != 'match':
+                      print(f\"  [{entry['status'].upper()}] {entry['name']}: expected={entry['expected_verdict']}, actual={entry['actual_verdict']}\")
+                      if entry.get('triage'):
+                          print(f\"    triage: {entry['triage']}\")
+                      if entry.get('error'):
+                          print(f\"    error: {entry['error']}\")
+              print()
+              print('See release-conformance-suite-report artifact for full details.')
+              sys.exit(1)
+          print(f\"RELEASE CONFORMANCE SUITE GATE PASSED ({report['passed']} entries)\")
+          "
+
+      - name: Upload Release Conformance Suite Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-conformance-suite-report
+          path: artifacts/release-conformance-suite.json

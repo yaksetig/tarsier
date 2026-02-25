@@ -1,0 +1,4115 @@
+schema_version: v1
+updated_at: '2026-02-22'
+description: Detailed execution tickets for ITEMS_1_TO_10 (IDs 1.1 through 10.11). This file is the authoritative definition-of-done
+  for strategic checklist IDs.
+global_definition_of_done:
+- 'U1: Code in production path (not mock/demo only).'
+- 'U2: At least one unit and one integration test per acceptance point.'
+- 'U3: Explicit CI gate for behavior.'
+- 'U4: User + reference docs updated.'
+- 'U5: FINAL_COMPLETION_STATUS.json evidence populated (code_refs/tests/ci_gates/docs).'
+- 'U6: pass only if all checks pass; otherwise in_progress or blocked.'
+tickets:
+- id: '1.1'
+  title: Formal semantics document for faithful network target
+  item: Protocol-Faithful Network Semantics
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Publish precise state, step relation, faults, auth, GST, and equivocation semantics in docs/SEMANTICS.md.
+  - Define sender/recipient/payload/auth as first-class semantic entities, not report-only metadata.
+  - Include explicit soundness scope and non-goals in docs/TRUST_BOUNDARY.md.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.2'
+  title: Sender/recipient/payload/auth enforced in transition semantics
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Lowering and SMT encoding must carry sender, recipient, payload variant, and auth provenance through transition constraints.
+  - Faithful mode must reject models that rely on role-collapsed delivery where identity-scoped delivery is required.
+  - Counterexamples must show these fields for each delivery event.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.3'
+  title: Identity-scoped equivocation per recipient
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Model must allow same byzantine sender to send different payloads to different recipients in one step.
+  - Equivocation admissibility must be tied to sender identity and configured policy.
+  - UNSAT constraints must block equivocation when policy is none.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.4'
+  title: Authentication semantics with key compromise behavior
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Signed channels must prevent forging under uncompromised keys.
+  - Compromised keys must enable adversarial signed forgery under explicit compromise state.
+  - Auth semantics must be shared across network and crypto-object transitions.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.5'
+  title: Unified fault model object for crash/omission/byzantine
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Crash, omission, and byzantine behaviors must be represented in a unified network object model.
+  - Per-recipient delivery/drop controls must work across all fault modes.
+  - Reports must state active fault mode and assumptions.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.6'
+  title: Published soundness transfer statement
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Document faithful-mode guarantees and legacy abstraction limitations with explicit transfer conditions.
+  - State which verdict directions are sound (SAFE/UNSAFE) under each abstraction relation.
+  - Include concrete examples where legacy and faithful intentionally diverge.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.7'
+  title: Differential faithful-vs-legacy testing with expected divergences
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Add shared-corpus differential tests for faithful and legacy modes.
+  - Codify expected divergence cases with rationale and stable assertions.
+  - Fail CI on unexplained divergence deltas.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.8'
+  title: Network-fidelity CI gate (positive + negative)
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.3'
+  - '1.4'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - CI must assert impossible forging traces are UNSAT and selective Byzantine behavior is SAT/reachable.
+  - CI must enforce equivocation constraints by policy (full vs none).
+  - Gate must be required for merge/release.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.9'
+  title: Strict faithful lint blocks underspecified models
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Strict mode must require explicit identity/auth/channel declarations in faithful mode.
+  - Diagnostics must reference source spans and explain soundness impact.
+  - No silent fallback to permissive semantics under strict faithful mode.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.10'
+  title: Counterexample output defaults include network-faithful fields
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Default text and JSON outputs must include sender/recipient/payload/auth for network events.
+  - Visualization/debugger views must expose filters for these fields.
+  - Trace schema version must reflect field contract.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.11'
+  title: Per-process selective Byzantine behavior (no role conflation)
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.2'
+  - '1.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Process-selective mode must distinguish process identities end-to-end in delivery semantics.
+  - Role-level counter abstraction must not mask selective recipient divergence in faithful mode.
+  - Regression tests must cover recipient-specific divergence scenarios.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '1.12'
+  title: Network faithfulness report and downgrade transparency
+  item: Protocol-Faithful Network Semantics
+  deps:
+  - '1.6'
+  - '1.8'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Reports must include an explicit Network Faithfulness section with enforced assumptions.
+  - If fallback/downgrade occurs, outputs must state exactly what abstraction changed and why.
+  - Machine-readable report fields must support CI governance checks.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests strict_mode_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests verify_accepts_process_selective_network_semantics -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests differential_regression_classic_vs_faithful_corpus -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:strict-faithful-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/INTERPRETATION_MATRIX.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.1'
+  title: Full temporal operator grammar and precedence contract
+  item: Richer Temporal Logic
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Define and test precedence/associativity for X, [], <>, U, W, R, ~> and boolean connectives.
+  - Parser errors for malformed temporal formulas must be explicit and source-spanned.
+  - Docs must mirror parser behavior exactly.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.2'
+  title: Multiple named properties per model
+  item: Richer Temporal Logic
+  deps:
+  - '2.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Support multiple independently named properties in a single model/run.
+  - Per-property verdicts and evidence must be emitted in machine-readable output.
+  - CLI must support selecting/all properties deterministically.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.3'
+  title: Unbounded proving supports temporal operators used in bounded mode
+  item: Richer Temporal Logic
+  deps:
+  - '2.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Unbounded engines must accept and compile the same temporal operator set as bounded checks.
+  - No silent weakening of temporal formulas on unbounded path.
+  - Unsupported shapes must fail fast with actionable diagnostics.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.4'
+  title: Quantification semantics are explicit and enforced
+  item: Richer Temporal Logic
+  deps:
+  - '2.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - At minimum, forall-over-role semantics must be specified and implemented consistently across engines.
+  - If exists quantification is supported, soundness conditions must be documented and tested.
+  - Counterexample projection for quantified properties must identify violating witness.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.5'
+  title: Deterministic property compilation pipeline
+  item: Richer Temporal Logic
+  deps:
+  - '2.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Compilation from property formula to monitor/constraints must be deterministic.
+  - Emit compilation trace artifacts for auditability.
+  - Round-trip compile outputs must be stable under fixed inputs.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.6'
+  title: Counterexamples include monitor-state evidence
+  item: Richer Temporal Logic
+  deps:
+  - '2.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Counterexample traces must include monitor automaton state/progress information.
+  - Reports must show exact failure condition for property violation.
+  - UI/debugger must expose monitor-state fields.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.7'
+  title: Temporal parser/pretty-printer round-trip tests
+  item: Richer Temporal Logic
+  deps:
+  - '2.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Add round-trip tests for supported temporal formulas.
+  - Pretty-printer output must parse back to equivalent AST.
+  - Canonical formatting must be deterministic.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.8'
+  title: LTL conformance suite in CI
+  item: Richer Temporal Logic
+  deps:
+  - '2.3'
+  - '2.7'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Add known satisfiable/unsatisfiable LTL examples and expected outcomes.
+  - CI temporal conformance gate must run and be required.
+  - Version and document the conformance corpus.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.9'
+  title: Fast-fail diagnostics for unsupported property shapes
+  item: Richer Temporal Logic
+  deps:
+  - '2.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Reject unsupported formula patterns with explicit error code and guidance.
+  - No fallback to weakened semantics.
+  - Diagnostics must include source span and suggested rewrite.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '2.10'
+  title: Per-property governance report contract
+  item: Richer Temporal Logic
+  deps:
+  - '2.2'
+  - '2.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Machine-readable reports must include property id, normalization, compilation hash, and verdict evidence.
+  - CLI text output must summarize per-property outcomes clearly.
+  - CI must validate report schema contract for multi-property runs.
+  acceptance_tests:
+  - cargo test -p tarsier-dsl temporal_ -- --nocapture
+  - cargo test -p tarsier-dsl roundtrip_ -- --nocapture
+  - cargo test -p tarsier-engine fragment_ -- --nocapture
+  - cargo test -p tarsier-engine ltl_failfast_ -- --nocapture
+  - cargo test -p tarsier-engine verify_all_properties_ -- --nocapture
+  - cargo test -p tarsier-engine temporal_counterexample_includes_monitor_state_metadata -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests fair_liveness_supports_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_accepts_ -- --nocapture
+  - python3 scripts/validate_items_1_to_10_tickets.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:build-test
+  - .github/workflows/ci.yml:temporal-conformance-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/LANGUAGE_REFERENCE.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.1'
+  title: Weak and strong fairness are first-class
+  item: Complete Unbounded Liveness Proofs
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Both weak and strong fairness modes must be implemented and selectable in proof pipeline.
+  - Semantics and differences must be documented with formal definitions.
+  - Tests must show differing outcomes on at least one benchmark model.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.2'
+  title: Production unbounded liveness engine
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Unbounded liveness proving must be available in production CLI path (not experimental-only).
+  - Engine selection and options must be stable and documented.
+  - Unknown outcomes must preserve diagnostics for governance.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.3'
+  title: Partial synchrony GST integrated in unbounded proofs
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - GST constraints must be encoded in unbounded fair-liveness proof obligations.
+  - Pre-GST-only cycles must not be accepted as post-GST counterexamples.
+  - Tests must exercise both async and partial synchrony modes.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.4'
+  title: Independently checkable liveness certificates
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Proof mode must emit liveness certificates with complete obligations for replay.
+  - Standalone checker must verify emitted liveness certificates.
+  - Certificate schema/docs must include liveness sections and examples.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.5'
+  title: Machine-readable Unknown reason categories
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Unknown outcomes must carry stable reason_code categories.
+  - Convergence diagnostics fields must be present and populated.
+  - CLI/JSON outputs must align on reason semantics.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.6'
+  title: Hard protocol liveness benchmark suite
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.2'
+  - '3.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Include PBFT/HotStuff/Tendermint-style liveness cases with expected outcomes.
+  - Benchmarks must be part of regression/certification suites.
+  - Document benchmark assumptions and interpretation.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.7'
+  title: Reproducible liveness verdicts and artifacts
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.4'
+  - '3.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Same model/options/environment must produce stable liveness verdict class.
+  - Artifacts (certificates/reports) must be deterministic or canonically equivalent.
+  - CI reproducibility checks must enforce this contract.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.8'
+  title: Cross-solver agreement gate for liveness obligations
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.4'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Replay liveness obligations across at least two solvers.
+  - Report and fail on solver disagreement beyond allowed policy.
+  - Document disagreement triage workflow.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.9'
+  title: Liveness performance guardrails
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Timeout and memory budgets must be enforceable and reported for liveness proofs.
+  - Unknown due to guardrails must be classified distinctly.
+  - CI must include budget smoke checks.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.10'
+  title: Governance-ready liveness reporting
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.4'
+  - '3.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Reports must include fairness model, GST assumptions, obligations checked, solver outcomes.
+  - Provide machine-readable schema with versioning.
+  - Release process must archive liveness report artifacts.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '3.11'
+  title: Convergence diagnostics and non-convergence policy
+  item: Complete Unbounded Liveness Proofs
+  deps:
+  - '3.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Record convergence frontier/progress metrics for failed/unknown proofs.
+  - Define and enforce policy for classifying non-convergence outcomes.
+  - Expose diagnostics in CLI and JSON.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test liveness_integration -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_fair_liveness_ -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:liveness-proof-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - docs/TRUST_BOUNDARY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.1'
+  title: Versioned and stable certificate schema
+  item: Independently Trusted Proof Checking
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Certificate schema must be versioned and backward-compatibility policy documented.
+  - Schema examples for safety and liveness must be published.
+  - Schema validation tests must run in CI.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.2'
+  title: Certificates include full replay obligations
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Safety and liveness certificates must include all obligations needed for independent replay.
+  - Omitted obligations must be treated as invalid certificates.
+  - Docs must map each obligation field to checker behavior.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.3'
+  title: Minimal standalone checker
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Checker binary must validate certificates without using engine internals.
+  - Dependency boundary must exclude tarsier-engine crate dependencies.
+  - Integration tests must prove standalone replay path works.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.4'
+  title: Checker rejects malformed/incomplete certificates
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.2'
+  - '4.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Malformed structure, missing obligations, and mismatched results must fail verification.
+  - Error messages must be deterministic and actionable.
+  - Negative tests must cover each major malformed class.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.5'
+  title: Replay with at least two SMT solvers
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Checker must support replay using at least Z3 and CVC5.
+  - Per-solver outcome recording must be included in report output.
+  - Policy for disagreement handling must be documented.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.6'
+  title: Optional proof-object validation path
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Provide optional proof-object validation for supported solvers.
+  - CI must run this path where solver tooling is available.
+  - Report must state whether proof-object validation was executed.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.7'
+  title: Explicit trust boundary documentation
+  item: Independently Trusted Proof Checking
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Trust boundary doc must explicitly separate trusted TCB from verified components.
+  - Include solver trust assumptions and limitations.
+  - Link trust boundary to proof/checker workflow docs.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.8'
+  title: Tampered certificate negative tests
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.4'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Tampering of obligations, results, metadata, or solver outputs must be detected and rejected.
+  - Negative tests must be deterministic and CI-gated.
+  - Checker output must classify tamper reason.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.9'
+  title: Deterministic certificate generation
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Same inputs/options produce byte-stable or canonically equivalent certificates.
+  - Determinism tests must run in CI.
+  - Report metadata must include deterministic fingerprint/hashes.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.10'
+  title: CI gate requires independent checker
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.3'
+  - '4.4'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Proof-mode CI/release gates must run independent checker replay before pass.
+  - Gate failures must block merge/release.
+  - Workflow docs must define required gate steps.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.11'
+  title: Checker dependency boundary hardening
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Automated boundary checks must fail if checker links forbidden internal crates.
+  - Boundary policy must be codified in CI scripts.
+  - Document allowed dependency surface.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '4.12'
+  title: Differential checker regression framework
+  item: Independently Trusted Proof Checking
+  deps:
+  - '4.5'
+  - '4.8'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Run checker outputs against reference corpus and detect regressions.
+  - Record mismatch taxonomy and triage path.
+  - CI gate must enforce no unexplained checker drift.
+  acceptance_tests:
+  - cargo test -p tarsier-proof-kernel -- --nocapture
+  - cargo test -p tarsier-certcheck -- --nocapture
+  - python3 .github/scripts/check_certcheck_dependency_boundary.py
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:proof-checking-gate
+  - .github/workflows/release-certification.yml:release-proof-independent
+  required_docs:
+  - docs/CERTIFICATE_SCHEMA.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/CHECKER_SOUNDNESS_ARGUMENT.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.1'
+  title: Classify counterexamples as concrete vs potentially spurious
+  item: CEGAR Refinement Loop
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - CEGAR baseline must classify witness traces with explicit rationale.
+  - Classification evidence must be surfaced in text and JSON outputs.
+  - Unknown classification must be explicit and non-silent.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.2'
+  title: Evidence-driven refinement planning
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Refinement stage selection must use extracted evidence (trace/CTI/core), not only fixed ladder.
+  - Report must show why each refinement stage was selected.
+  - Fallback ladder usage must be explicitly annotated.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.3'
+  title: Automatic predicate discovery from traces/cores
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Generate candidate predicates automatically from counterexamples and UNSAT cores.
+  - Validate candidates before adoption into refinement stages.
+  - Record discovered predicates with provenance.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.4'
+  title: Solver-backed UNSAT-core minimization for refinement
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Use assumption-literal based UNSAT cores for refinement selection.
+  - Minimize selected cores with solver-backed strategy.
+  - No re-check-only pseudo-core path for pass criteria.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.5'
+  title: Termination controls and deterministic stage reporting
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Expose max iterations/time budgets and enforce them deterministically.
+  - Report termination reason with stable machine-readable codes.
+  - CI must assert deterministic stage order under fixed seed/options.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.6'
+  title: Stage-by-stage model-delta report
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.2'
+  - '5.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Each stage must report model changes, eliminated traces, and adopted predicates.
+  - Reports must be auditable and schema-versioned.
+  - CLI must summarize stage deltas for human operators.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.7'
+  title: Explicit inconclusive verdict when baseline UNSAFE is eliminated
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.1'
+  - '5.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - If baseline UNSAFE is removed and no concrete UNSAFE remains, result must be Unknown/Inconclusive.
+  - Do not silently return SAFE in this scenario.
+  - Classification reason must be machine-readable.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.8'
+  title: Known spurious regression suite
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.7'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Add regression models that historically produced spurious traces.
+  - CEGAR must eliminate those traces and tests must enforce it.
+  - Document each sentinel and intended elimination behavior.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.9'
+  title: Scalability evidence for false-alarm reduction
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.8'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Benchmarks must quantify false-alarm reduction on harder models.
+  - Track and gate key metrics over time.
+  - Document observed tradeoffs/costs.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.10'
+  title: CLI/API refinement controls and machine-readable outputs
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.5'
+  - '5.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Expose refinement controls in CLI/API (iters, budgets, modes).
+  - Emit machine-readable CEGAR artifacts suitable for CI/governance.
+  - Contract tests must verify output schema and option wiring.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '5.11'
+  title: Deterministic CEGAR artifact contract
+  item: CEGAR Refinement Loop
+  deps:
+  - '5.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Remove non-deterministic fields from diff-critical artifact paths or isolate them.
+  - Add provenance fingerprint/hash for CEGAR run plan.
+  - CI snapshot tests must be diff-stable.
+  acceptance_tests:
+  - cargo test -p tarsier-engine --test integration_tests cegar_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests prove_with_cegar_ -- --nocapture
+  - cargo test -p tarsier-cli cegar -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:cegar-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/PERFORMANCE.md
+  - README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.1'
+  title: Formal operational semantics for crypto objects
+  item: Cryptographic Object Modeling
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Define QC/threshold-signature/lock/justify operational semantics in SEMANTICS.md.
+  - Lowering and encoding must implement those semantics consistently.
+  - Schema/examples must cover each object type.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.2'
+  title: Identity/key-scoped signing authority and compromise
+  item: Cryptographic Object Modeling
+  deps:
+  - '6.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Signing authority must be tied to identities/keys with explicit ownership model.
+  - Compromise state transitions must be explicit and testable.
+  - Forgery permissions must depend on compromise state.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.3'
+  title: Threshold semantics over signer sets
+  item: Cryptographic Object Modeling
+  deps:
+  - '6.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Threshold validation must use distinct signer identities, not pure counters.
+  - Signer-role constraints must be enforced in threshold checks.
+  - Tests must fail when threshold met only via duplicate sender counts.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.4'
+  title: Non-forgeability under uncompromised keys
+  item: Cryptographic Object Modeling
+  deps:
+  - '6.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Uncompromised-key signed messages/certs must be non-forgeable in model.
+  - Negative tests must prove UNSAT for illegal forging.
+  - Reports must describe non-forgeability assumptions.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.5'
+  title: Conflicting certificate/lock admissibility rules
+  item: Cryptographic Object Modeling
+  deps:
+  - '6.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Conflicting cert/lock policies must be explicit and configurable where protocol-dependent.
+  - Enforcement must happen at transition level and be test-covered.
+  - Counterexample explanations must include conflict policy context.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.6'
+  title: Crypto dependency chain enforced end-to-end
+  item: Cryptographic Object Modeling
+  deps:
+  - '6.1'
+  - '6.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Dependencies (e.g., QC from votes) must be checked through lowering and SMT transitions.
+  - Invalid dependency chains must be UNSAT.
+  - Valid chains must be SAT/reachable in positive tests.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.7'
+  title: Crypto provenance in counterexamples
+  item: Cryptographic Object Modeling
+  deps:
+  - '6.2'
+  - '6.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Counterexamples must show who signed, key state, and threshold witness summary.
+  - JSON schema must include provenance fields.
+  - Debugger/visualization must display provenance details.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.8'
+  title: Negative tests for impossible cert formation/forgery
+  item: Cryptographic Object Modeling
+  deps:
+  - '6.4'
+  - '6.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Impossible formation/forgery scenarios must be UNSAT and gated in CI.
+  - Tests must include uncompromised and policy-restricted variants.
+  - Failures must provide actionable diagnostics.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.9'
+  title: Positive tests for valid cert paths
+  item: Cryptographic Object Modeling
+  deps:
+  - '6.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Valid protocol snippets must produce SAT/reachable cert formation traces.
+  - Tests must cover at least one path per supported crypto object class.
+  - CI gate must include these positive regressions.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.10'
+  title: Corpus cases where crypto rules are decisive
+  item: Cryptographic Object Modeling
+  deps:
+  - '6.8'
+  - '6.9'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Library corpus must include PBFT/HotStuff/Tendermint variants where crypto semantics change verdicts.
+  - Expected outcomes and rationale must be documented.
+  - Certification suite must include these cases.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '6.11'
+  title: Explicit symbolic-vs-computational crypto boundary
+  item: Cryptographic Object Modeling
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Docs must explicitly separate symbolic guarantees from computational-crypto non-goals.
+  - Trust boundary report must reference this split.
+  - No documentation language may imply computational security proofs.
+  acceptance_tests:
+  - cargo test -p tarsier-ir lower_crypto_ -- --nocapture
+  - cargo test -p tarsier-smt crypto_ -- --nocapture
+  - cargo test -p tarsier-engine --test integration_tests crypto_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:crypto-semantics-gate
+  required_docs:
+  - docs/SEMANTICS.md
+  - docs/TRUST_BOUNDARY.md
+  - docs/LANGUAGE_REFERENCE.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.1'
+  title: Symmetry reduction for eligible models
+  item: Performance At Large Scale
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Implement and enable symmetry reduction where correctness conditions hold.
+  - Report when symmetry is applied or skipped and why.
+  - Add tests proving semantic equivalence with and without symmetry on eligible models.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.2'
+  title: POR/stuttering reduction via independence semantics
+  item: Performance At Large Scale
+  deps:
+  - '7.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Implement transition-pruning POR with sound commutativity/stuttering criteria.
+  - Document POR soundness conditions and unsupported cases.
+  - Regression suite must prove no missed bugs on known unsafe models.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.3'
+  title: Incremental solving across depths/frames/refinement
+  item: Performance At Large Scale
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Reuse solver state across BMC depth, PDR frames, and CEGAR stages where safe.
+  - Report incremental hit/miss metrics.
+  - Tests must ensure correctness under incremental and non-incremental modes.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.4'
+  title: Parallel portfolio with deterministic merge policy
+  item: Performance At Large Scale
+  deps:
+  - '7.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Run solver portfolio in parallel and merge outcomes deterministically.
+  - Define deterministic tie-break/precedence rules.
+  - CI tests must enforce merge determinism.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.5'
+  title: Per-phase memory/time profiling contract
+  item: Performance At Large Scale
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Emit profiling for parse/lower/encode/solve/check phases.
+  - Machine-readable schema for profile data must be documented and versioned.
+  - CLI text summary must remain stable for operators.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.6'
+  title: Large-model benchmark suite with budgets
+  item: Performance At Large Scale
+  deps:
+  - '7.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Maintain fixed large-model benchmark suite with target budgets.
+  - Track benchmark trend artifacts over time.
+  - Document benchmark methodology and hardware assumptions.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.7'
+  title: CI perf gate for statistical regressions
+  item: Performance At Large Scale
+  deps:
+  - '7.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Performance CI must fail on statistically significant regression beyond thresholds.
+  - Thresholds and comparison windows must be documented.
+  - Gate must distinguish noise vs real regressions.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.8'
+  title: Fast-fail heuristics and fallback transparency
+  item: Performance At Large Scale
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Explicitly enforce fast-fail budgets and abstraction fallback policies.
+  - Reports must explain triggered guardrails and chosen fallback path.
+  - No silent fallback in proof/audit modes.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.9'
+  title: Structural hashing/canonicalization with cache metrics
+  item: Performance At Large Scale
+  deps:
+  - '7.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Canonicalize encoding structures and expose cache hit-rate metrics.
+  - Tests must ensure canonicalization is semantics-preserving.
+  - Performance reports must include cache effectiveness indicators.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.10'
+  title: Scale limits and tuning guidance by mode
+  item: Performance At Large Scale
+  deps:
+  - '7.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Document practical limits and tuning knobs for quick/standard/proof/audit modes.
+  - Include guardrail recommendations and failure interpretation.
+  - Keep docs synced with measured benchmark limits.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '7.11'
+  title: Pinned environment for perf/release reproducibility
+  item: Performance At Large Scale
+  deps:
+  - '7.6'
+  - '7.7'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Perf and release certification runs must use pinned toolchain/runner/solver versions.
+  - CI must verify pinned environment before benchmark/proof jobs.
+  - Release docs must define pinning policy and update process.
+  acceptance_tests:
+  - python3 benchmarks/test_statistical_regression.py
+  - python3 benchmarks/test_cross_tool_runner.py
+  - cargo test -p tarsier-engine --test integration_tests por_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:performance-gate
+  required_docs:
+  - docs/PERFORMANCE.md
+  - benchmarks/README.md
+  - docs/RELEASE_PROCESS.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.1'
+  title: Communication complexity bounds per role/message/phase
+  item: Stronger Quantitative Analysis
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Quantitative engine must output communication bounds with per-role/message/phase breakdown.
+  - Reports must identify bound type (upper/lower/estimate).
+  - Tests must verify known formulas on canonical protocols.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.2'
+  title: Latency/finality metrics with assumptions
+  item: Stronger Quantitative Analysis
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Latency/finality outputs must include network, fault, fairness, and GST assumptions.
+  - Assumption omissions must fail validation.
+  - Docs must explain interpretation and limitations.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.3'
+  title: Confidence intervals and sensitivity for probabilistic outputs
+  item: Stronger Quantitative Analysis
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Probabilistic outputs must include confidence intervals.
+  - Sensitivity analysis to key parameters must be included.
+  - Reports must distinguish exact vs estimated/probabilistic values.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.4'
+  title: Explicit upper/lower/estimate classification
+  item: Stronger Quantitative Analysis
+  deps:
+  - '8.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Every quantitative metric must carry bound/estimate classification.
+  - Schema and CLI output must expose classification consistently.
+  - Tests must reject unclassified metrics.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.5'
+  title: Versioned quantitative JSON schema
+  item: Stronger Quantitative Analysis
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Maintain versioned quantitative output schema with backward-compat policy.
+  - Schema validation tests must run in CI.
+  - Docs must include migration guidance between schema versions.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.6'
+  title: Cross-check formulas against analytic baselines
+  item: Stronger Quantitative Analysis
+  deps:
+  - '8.1'
+  - '8.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - CI must run formula cross-checks against known analytic baselines.
+  - Mismatch thresholds and tolerances must be explicit.
+  - Failures must include metric-level diff diagnostics.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.7'
+  title: Quantitative report reproducibility binding
+  item: Stronger Quantitative Analysis
+  deps:
+  - '8.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Each quantitative report must embed model hash/options/environment fingerprint.
+  - Re-run under same fingerprint must produce equivalent result class.
+  - CI must validate reproducibility fields are always present.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.8'
+  title: Reject unsupported extrapolations
+  item: Stronger Quantitative Analysis
+  deps:
+  - '8.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Unsupported assumption/extrapolation combinations must fail explicitly.
+  - No silent extrapolation in quantitative outputs.
+  - Diagnostics must describe missing assumptions required for requested metric.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.9'
+  title: Quantitative golden-range corpus
+  item: Stronger Quantitative Analysis
+  deps:
+  - '8.1'
+  - '8.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Benchmark corpus must include expected quantitative ranges for representative protocols.
+  - Ranges and rationale must be documented and versioned.
+  - CI must enforce golden-range contract.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.10'
+  title: Reproducible CLI quantitative pipeline for CI
+  item: Stronger Quantitative Analysis
+  deps:
+  - '8.5'
+  - '8.7'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - CLI must provide stable command pipeline for reproducible quantitative analysis.
+  - Pipeline outputs must be machine-readable and schema-validated.
+  - CI gate must execute pipeline end-to-end.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '8.11'
+  title: Cross-tool quantitative calibration contract
+  item: Stronger Quantitative Analysis
+  deps:
+  - '8.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Cross-tool benchmark comparison must be documented and automated where feasible.
+  - Report parity metrics and tolerances against external baselines/tools.
+  - CI should fail on unexplained calibration drift beyond thresholds.
+  acceptance_tests:
+  - scripts/check-quantitative-baselines.sh
+  - scripts/check-quantitative-cli-pipeline.sh
+  - cargo test -p tarsier-engine --test integration_tests golden_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:quantitative-gate
+  required_docs:
+  - docs/QUANTITATIVE_SCHEMA.md
+  - docs/SEMANTICS.md
+  - benchmarks/README.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.1'
+  title: Broad canonical corpus coverage
+  item: Protocol Corpus + Certification Suite
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Maintain corpus spanning BFT and crash/omission families.
+  - Coverage matrix must be published and updated on additions.
+  - Certification suite must fail if required family coverage drops.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.2'
+  title: Expected outcomes with rationale and model hash
+  item: Protocol Corpus + Certification Suite
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Each corpus entry must include expected verdict classes and rationale.
+  - Each entry must include model hash/fingerprint.
+  - Schema validation must enforce these fields.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.3'
+  title: Versioned manifest schema and docs
+  item: Protocol Corpus + Certification Suite
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Manifest schema must be versioned and documented.
+  - Schema/doc sync checks must run in CI.
+  - Migration notes required for schema changes.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.4'
+  title: Known-bug regression sentinels
+  item: Protocol Corpus + Certification Suite
+  deps:
+  - '9.2'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Include intentionally buggy protocol variants as regression sentinels.
+  - Expected UNSAFE/not-live outcomes must be asserted in CI.
+  - Sentinel list and rationale must be documented.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.5'
+  title: One-command certification run with CI gate
+  item: Protocol Corpus + Certification Suite
+  deps:
+  - '9.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Provide one canonical command to run full certification suite.
+  - Release/CI must require this command to pass.
+  - Command behavior and artifacts must be documented.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.6'
+  title: Rich certification outputs
+  item: Protocol Corpus + Certification Suite
+  deps:
+  - '9.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Outputs must include verdict, timing, assumptions, and artifact links per protocol.
+  - Machine-readable report schema must be versioned.
+  - CLI summary must point to full artifact bundle.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.7'
+  title: Failure triage categories enforced
+  item: Protocol Corpus + Certification Suite
+  deps:
+  - '9.6'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Failures must be classified as model_change/engine_regression/expected_update.
+  - Classification must be present in reports and CI summaries.
+  - Unclassified failures must fail the certification gate.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.8'
+  title: Minimal and faithful variants where relevant
+  item: Protocol Corpus + Certification Suite
+  deps:
+  - '9.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Corpus must include minimal+faithful variants for protocols where abstraction matters.
+  - Expected divergence cases must be documented.
+  - Certification must run both variants for covered protocols.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.9'
+  title: New protocol contribution contract
+  item: Protocol Corpus + Certification Suite
+  deps:
+  - '9.3'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Adding a new protocol must require tests and expectation entries.
+  - Contribution guide must define required artifacts and review checklist.
+  - CI must reject manifest additions missing required fields/tests.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.10'
+  title: Pinned-environment release certification gate
+  item: Protocol Corpus + Certification Suite
+  deps:
+  - '9.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Release process must require passing corpus certification under pinned environment.
+  - Pinned toolchain/solver versions must be verified in workflow.
+  - Release docs must define pin update policy.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '9.11'
+  title: Corpus maintenance policy with ownership and cadence
+  item: Protocol Corpus + Certification Suite
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Document owners, review cadence, and SLA for corpus updates.
+  - Policy must include triage/escalation for failing sentinels.
+  - CI/release checklists must reference policy compliance.
+  acceptance_tests:
+  - scripts/certify-corpus.sh
+  - cargo test -p tarsier-engine --test integration_tests manifest_ -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/release-certification.yml:cert-suite
+  required_docs:
+  - examples/library/README.md
+  - docs/CERT_SUITE_SCHEMA.md
+  - docs/CORPUS_MAINTENANCE_POLICY.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.1'
+  title: End-to-end web/CLI model-edit-run-inspect flow
+  item: Designer-Grade UX
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - User can edit model, run analysis, and inspect results in both CLI and playground.
+  - Flow must work in default build without governance features.
+  - Smoke tests must cover end-to-end flow.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.2'
+  title: Counterexample debugger with rich filtering
+  item: Designer-Grade UX
+  deps:
+  - '10.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Debugger must support step/replay and filters by sender/recipient/message/value/auth.
+  - Filter behavior must be deterministic and test-covered.
+  - CLI and playground views must stay schema-compatible.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.3'
+  title: Timeline and MSC visualization with auth/equivocation metadata
+  item: Designer-Grade UX
+  deps:
+  - '10.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Visualization must include timeline and message-sequence-chart views.
+  - Auth and equivocation metadata must be displayed by default or one click away.
+  - Exported artifacts must preserve visualization data contract.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.4'
+  title: Semantic lint with actionable fixes
+  item: Designer-Grade UX
+  deps:
+  - '10.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Lint output must include actionable fixes/snippets, not generic warnings only.
+  - Messages must include source spans and soundness impact labels.
+  - Strict-mode lint rules must be discoverable in help/docs.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.5'
+  title: Guided protocol scaffolding assistant
+  item: Designer-Grade UX
+  deps:
+  - '10.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Assistant must scaffold major protocol families with sane defaults.
+  - Generated models must pass basic parse/lint checks out of the box.
+  - Scaffold templates must be versioned and documented.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.6'
+  title: Error diagnostics mapped to source spans + soundness impact
+  item: Designer-Grade UX
+  deps:
+  - '10.4'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Errors/warnings must include source-span coordinates in machine-readable reports.
+  - Messages must classify likely soundness impact.
+  - Contract tests must verify span and impact fields are populated.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.7'
+  title: Shareable/exportable reports and artifact bundles
+  item: Designer-Grade UX
+  deps:
+  - '10.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - CLI and playground must support export of Markdown/JSON/artifact bundles.
+  - Exported bundles must include enough context for offline review.
+  - Docs must provide sharing workflow examples.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.8'
+  title: Beginner/pro workflows without internal engine knowledge
+  item: Designer-Grade UX
+  deps:
+  - '10.1'
+  - '10.5'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Default beginner path must hide unnecessary internal knobs.
+  - Pro mode must remain available for advanced controls.
+  - Help/docs must clearly separate beginner/pro/governance paths.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.9'
+  title: Progressive documentation from first run to advanced modeling
+  item: Designer-Grade UX
+  deps: []
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - README, getting-started, tutorial, and reference docs must be consistent.
+  - Docs must cover faithful modeling, proofs, and troubleshooting progression.
+  - Doc consistency checks must run in CI.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.10'
+  title: Usability regression tests for playground and CLI
+  item: Designer-Grade UX
+  deps:
+  - '10.1'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Maintain UX regression suite for core user workflows.
+  - CI must execute regression suite and fail on contract drift.
+  - Snapshots/contracts must be versioned.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.
+- id: '10.11'
+  title: UX contract stability and accessibility baseline
+  item: Designer-Grade UX
+  deps:
+  - '10.9'
+  - '10.10'
+  scope_paths:
+  - crates/
+  - docs/
+  - .github/workflows/
+  - scripts/
+  - examples/library/
+  acceptance_criteria:
+  - Define and enforce UX output contracts (help text, report fields, key flows).
+  - Include accessibility sanity checks for key playground interactions.
+  - Release checklist must include UX contract verification.
+  acceptance_tests:
+  - ./scripts/beginner-ux-smoke.sh
+  - ./scripts/ux-regression-smoke.sh
+  - cargo test -p tarsier-cli --test beginner_onboarding_contract -- --nocapture
+  - python3 scripts/validate_final_completion.py
+  - python3 scripts/validate_final_completion.py --strict-evidence
+  required_ci_gates:
+  - .github/workflows/ci.yml:beginner-ux-gate
+  - .github/workflows/ci.yml:ux-regression-gate
+  required_docs:
+  - README.md
+  - docs/GETTING_STARTED.md
+  - docs/TUTORIAL.md
+  blocking_conditions:
+  - Any mandatory command listed in acceptance_tests fails.
+  - Required CI gate cannot be identified or does not enforce this ticket behavior.
+  - Required docs are missing or stale relative to implemented behavior.
+  - FINAL_COMPLETION_STATUS.json evidence is missing code_refs/tests/ci_gates/docs.
+  fail_criteria:
+  - Ticket marked pass without satisfying all acceptance_criteria.
+  - Ticket marked pass without at least one unit and one integration test proving behavior.
+  - Ticket marked pass without CI gate evidence and docs updates.

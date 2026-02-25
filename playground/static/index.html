@@ -384,6 +384,176 @@
       to { opacity: 1; }
     }
 
+    .editor-mode-toggle {
+      display: flex;
+      gap: 4px;
+    }
+
+    #visual-editor-container {
+      display: none;
+      grid-template-rows: auto 1fr auto;
+      min-height: 0;
+      height: 100%;
+    }
+
+    #visual-editor-container.active {
+      display: grid;
+    }
+
+    .visual-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(17,45,61,0.25);
+      flex-wrap: wrap;
+    }
+
+    .visual-toolbar select {
+      width: auto;
+      min-width: 100px;
+    }
+
+    #cy-canvas {
+      min-height: 350px;
+      background: rgba(3, 13, 20, 0.92);
+    }
+
+    #inspector-panel {
+      border-top: 1px solid var(--line);
+      padding: 10px 14px;
+      max-height: 280px;
+      overflow-y: auto;
+      background: rgba(17,45,61,0.15);
+      font-size: 13px;
+    }
+
+    .inspector-title {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: var(--accent);
+    }
+
+    .inspector-field {
+      margin-bottom: 6px;
+    }
+
+    .inspector-field label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 2px;
+    }
+
+    .inspector-field input[type="text"] {
+      width: 100%;
+      padding: 5px 8px;
+      font-size: 12px;
+      font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+    }
+
+    .inspector-value {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .inspector-list {
+      list-style: none;
+      padding: 0;
+      margin: 4px 0;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .inspector-list li {
+      padding: 2px 0;
+    }
+
+    .inspector-actions {
+      display: flex;
+      gap: 8px;
+      margin: 8px 0;
+    }
+
+    .inspector-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(58, 210, 159, 0.2);
+      color: var(--ok);
+      font-size: 11px;
+      border: 1px solid rgba(58, 210, 159, 0.4);
+    }
+
+    .inspector-transition {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .inspector-transition-header {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .inspector-action {
+      padding: 2px 6px;
+      font-size: 12px;
+      color: var(--text);
+      font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+    }
+
+    .inspector-action-edit {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .inspector-action-edit select {
+      width: auto;
+      min-width: 80px;
+      font-size: 11px;
+      padding: 3px 6px;
+    }
+
+    .inspector-action-edit input {
+      flex: 1;
+      font-size: 11px;
+      padding: 3px 6px;
+      font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+    }
+
+    .inspector-btn-small {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .inspector-btn-tiny {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .inspector-btn-danger {
+      color: var(--bad);
+      border-color: rgba(255, 123, 120, 0.4);
+    }
+
+    .inspector-btn-danger:hover {
+      background: rgba(255, 123, 120, 0.15);
+      border-color: var(--bad);
+    }
+
     @media (max-width: 1100px) {
       .layout {
         grid-template-columns: 1fr;
@@ -410,7 +580,7 @@
         <h1>Tarsier Playground</h1>
         <p>Model, verify, and prove BFT protocols from the browser.</p>
       </div>
-      <div class="status-pill" id="health-pill">Connecting...</div>
+      <div class="status-pill" id="health-pill" role="status" aria-live="polite">Connecting...</div>
     </header>
 
     <main class="layout">
@@ -501,6 +671,10 @@
         <div class="editor-wrap">
           <div class="editor-toolbar">
             <div class="toolbar-actions">
+              <div class="editor-mode-toggle">
+                <button id="mode-text-btn" class="tab active">Text</button>
+                <button id="mode-visual-btn" class="tab">Visual</button>
+              </div>
               <button id="load-example-btn">Load Example</button>
               <button id="assist-btn">Insert Scaffold</button>
               <button id="format-btn">Normalize Spacing</button>
@@ -509,16 +683,29 @@
             <button class="primary" id="run-btn">Run Analysis</button>
           </div>
           <textarea id="source-editor" spellcheck="false"></textarea>
+          <div id="visual-editor-container">
+            <div class="visual-toolbar" id="visual-toolbar">
+              <button id="add-phase-btn">+ Phase</button>
+              <button id="draw-edge-btn">Draw Edge</button>
+              <button id="auto-layout-btn">Auto Layout</button>
+              <label style="color: var(--muted); font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                Role:
+                <select id="visual-role-select"></select>
+              </label>
+            </div>
+            <div id="cy-canvas"></div>
+            <div id="inspector-panel"></div>
+          </div>
         </div>
       </section>
 
       <section class="panel">
         <div class="panel-head">
           <h2 class="panel-title">Results</h2>
-          <span id="run-meta" class="status-pill">Idle</span>
+          <span id="run-meta" class="status-pill" role="status" aria-live="polite">Idle</span>
         </div>
 
-        <div id="result-summary" class="result-summary summary-unknown">No analysis run yet.</div>
+        <div id="result-summary" class="result-summary summary-unknown" role="status" aria-live="assertive">No analysis run yet.</div>
 
         <div class="result-toolbar">
           <button id="export-json-btn">Download JSON</button>
@@ -553,6 +740,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <script>mermaid.initialize({ startOnLoad: false, theme: "dark" });</script>
-  <script src="/app.js" type="module"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.js"></script>
+  <script src="/visual-model.js"></script>
+  <script src="/visual-editor.js"></script>
+  <script src="/codegen.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

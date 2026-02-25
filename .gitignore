@@ -1,5 +1,6 @@
 # Build artifacts
 /target/
+**/target/
 **/*.rs.bk
 
 # IDE
@@ -25,3 +26,7 @@ benchmarks/results/
 
 # Z3 trace files
 .z3-trace
+
+# VS Code extension build artifacts
+node_modules/
+editors/vscode/out/

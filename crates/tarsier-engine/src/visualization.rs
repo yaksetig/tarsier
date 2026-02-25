@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use tarsier_ir::counter_system::{Configuration, MessageDeliveryEvent, Trace};
 use tarsier_ir::threshold_automaton::{
     LinearCombination, SharedVarKind, ThresholdAutomaton, UpdateKind,
@@ -97,14 +98,11 @@ fn eval_linear_combination(lc: &LinearCombination, params: &[i64]) -> i64 {
     value
 }
 
-fn parse_counter_metadata(
-    counter_name: &str,
-) -> Option<(String, String, Option<String>, Vec<(String, String)>)> {
+type ParsedCounterMetadata = (String, String, Option<String>, Vec<(String, String)>);
+
+fn parse_counter_metadata(counter_name: &str) -> Option<ParsedCounterMetadata> {
     let stripped = counter_name.strip_prefix("cnt_")?;
-    let (family_part, recipient_part) = stripped
-        .split_once('@')
-        .map(|(f, r)| (f, r))
-        .unwrap_or((stripped, "*"));
+    let (family_part, recipient_part) = stripped.split_once('@').unwrap_or((stripped, "*"));
     let channel = recipient_part
         .split_once('[')
         .map(|(recipient, _)| recipient)
@@ -512,6 +510,181 @@ pub fn render_trace_markdown(
     )
 }
 
+/// Options controlling the Graphviz DOT output for threshold automaton visualization.
+pub struct DotRenderOptions {
+    /// Group locations into subgraph clusters per (role, phase).
+    pub cluster_by_phase: bool,
+    /// Show guard conditions as edge labels.
+    pub show_guard_labels: bool,
+    /// Show update operations as edge labels.
+    pub show_update_labels: bool,
+    /// Highlight initial locations with green fill.
+    pub highlight_initial: bool,
+    /// Highlight decided locations with red fill.
+    pub highlight_decided: bool,
+}
+
+impl Default for DotRenderOptions {
+    fn default() -> Self {
+        Self {
+            cluster_by_phase: true,
+            show_guard_labels: true,
+            show_update_labels: true,
+            highlight_initial: true,
+            highlight_decided: true,
+        }
+    }
+}
+
+fn dot_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+}
+
+fn is_decided_location(loc: &tarsier_ir::threshold_automaton::Location) -> bool {
+    let name_lower = loc.name.to_lowercase();
+    name_lower.contains("decided")
+        || name_lower.contains("commit")
+        || name_lower.contains("done")
+        || name_lower.contains("accept")
+}
+
+/// Render a threshold automaton as a Graphviz DOT string.
+pub fn render_automaton_dot(ta: &ThresholdAutomaton, opts: &DotRenderOptions) -> String {
+    let mut out = String::new();
+    out.push_str("digraph TA {\n");
+    out.push_str("    rankdir=LR;\n");
+    out.push_str("    node [shape=box, style=filled, fillcolor=white, fontname=\"Helvetica\"];\n");
+    out.push_str("    edge [fontname=\"Helvetica\", fontsize=10];\n");
+    out.push('\n');
+
+    // Collect unique (role, phase) pairs for clustering
+    let mut role_phases: Vec<(String, String)> = Vec::new();
+    for loc in &ta.locations {
+        let key = (loc.role.clone(), loc.phase.clone());
+        if !role_phases.contains(&key) {
+            role_phases.push(key);
+        }
+    }
+
+    // Build location-to-cluster mapping
+    let _location_cluster: Vec<usize> = ta
+        .locations
+        .iter()
+        .map(|loc| {
+            role_phases
+                .iter()
+                .position(|(r, p)| r == &loc.role && p == &loc.phase)
+                .unwrap_or(0)
+        })
+        .collect();
+
+    // Collect decided locations
+    let decided_locations: BTreeSet<usize> = if opts.highlight_decided {
+        ta.locations
+            .iter()
+            .enumerate()
+            .filter(|(_, loc)| is_decided_location(loc))
+            .map(|(i, _)| i)
+            .collect()
+    } else {
+        BTreeSet::new()
+    };
+
+    // Emit nodes (potentially clustered)
+    if opts.cluster_by_phase && role_phases.len() > 1 {
+        for (cluster_idx, (role, phase)) in role_phases.iter().enumerate() {
+            out.push_str(&format!("    subgraph cluster_{} {{\n", cluster_idx));
+            out.push_str(&format!(
+                "        label=\"{}::{}\";\n",
+                dot_escape(role),
+                dot_escape(phase)
+            ));
+            out.push_str("        style=dashed;\n");
+            out.push_str("        color=grey;\n");
+
+            for (i, loc) in ta.locations.iter().enumerate() {
+                if loc.role == *role && loc.phase == *phase {
+                    emit_node(&mut out, i, loc, ta, opts, &decided_locations, "        ");
+                }
+            }
+
+            out.push_str("    }\n\n");
+        }
+    } else {
+        for (i, loc) in ta.locations.iter().enumerate() {
+            emit_node(&mut out, i, loc, ta, opts, &decided_locations, "    ");
+        }
+        out.push('\n');
+    }
+
+    // Emit edges
+    for (i, rule) in ta.rules.iter().enumerate() {
+        let mut label_parts: Vec<String> = Vec::new();
+        if opts.show_guard_labels {
+            label_parts.push(format!("{}", rule.guard));
+        }
+        if opts.show_update_labels && !rule.updates.is_empty() {
+            for upd in &rule.updates {
+                label_parts.push(format!("{}", upd));
+            }
+        }
+        let label = if label_parts.is_empty() {
+            format!("r{i}")
+        } else {
+            format!("r{i}: {}", dot_escape(&label_parts.join("\\n")))
+        };
+        out.push_str(&format!(
+            "    L{} -> L{} [label=\"{}\"];\n",
+            rule.from, rule.to, label
+        ));
+    }
+
+    out.push_str("}\n");
+    out
+}
+
+fn emit_node(
+    out: &mut String,
+    id: usize,
+    loc: &tarsier_ir::threshold_automaton::Location,
+    ta: &ThresholdAutomaton,
+    opts: &DotRenderOptions,
+    decided: &BTreeSet<usize>,
+    indent: &str,
+) {
+    let is_initial = ta.initial_locations.contains(&id);
+    let is_decided = decided.contains(&id);
+
+    let fillcolor = if opts.highlight_initial && is_initial {
+        "lightgreen"
+    } else if opts.highlight_decided && is_decided {
+        "lightcoral"
+    } else {
+        "white"
+    };
+
+    // Build label with local vars if any
+    let mut label = loc.name.clone();
+    if !loc.local_vars.is_empty() {
+        let vars: Vec<String> = loc
+            .local_vars
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect();
+        label.push_str(&format!("\\n[{}]", vars.join(", ")));
+    }
+
+    out.push_str(&format!(
+        "{}L{} [label=\"{}\", fillcolor={}];\n",
+        indent,
+        id,
+        dot_escape(&label),
+        fillcolor
+    ));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -520,8 +693,9 @@ mod tests {
         MessageIdentity, MessagePayloadVariant, SignatureProvenance, TraceStep,
     };
     use tarsier_ir::threshold_automaton::{
-        CmpOp, Guard, GuardAtom, LinearCombination, Location, Parameter, Rule, SharedVar,
-        SharedVarKind, ThresholdAutomaton, Update,
+        CmpOp, CryptoConflictPolicy, Guard, GuardAtom, IrCryptoObjectKind, IrCryptoObjectSpec,
+        LinearCombination, Location, Parameter, Rule, SharedVar, SharedVarKind, ThresholdAutomaton,
+        Update,
     };
 
     fn sample_ta_and_trace() -> (ThresholdAutomaton, Trace) {
@@ -604,6 +778,111 @@ mod tests {
                     gamma: vec![2],
                     params: vec![4],
                 },
+                por_status: None,
+            }],
+            param_values: vec![("n".into(), 4)],
+        };
+        (ta, trace)
+    }
+
+    fn sample_crypto_ta_and_trace() -> (ThresholdAutomaton, Trace) {
+        let mut ta = ThresholdAutomaton::new();
+        ta.add_parameter(Parameter { name: "n".into() });
+        let vote_var = ta.add_shared_var(SharedVar {
+            name: "cnt_Vote@Replica#1<-Replica#0[value=true]".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        let qc_var = ta.add_shared_var(SharedVar {
+            name: "cnt_QC@Replica#1<-Replica#0[value=true]".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        ta.crypto_objects.insert(
+            "QC".into(),
+            IrCryptoObjectSpec {
+                name: "QC".into(),
+                kind: IrCryptoObjectKind::QuorumCertificate,
+                source_message: "Vote".into(),
+                threshold: LinearCombination::constant(1),
+                signer_role: Some("Replica".into()),
+                conflict_policy: CryptoConflictPolicy::Exclusive,
+            },
+        );
+        ta.add_location(Location {
+            name: "replica.collect".into(),
+            role: "Replica".into(),
+            phase: "collect".into(),
+            local_vars: Default::default(),
+        });
+        ta.add_location(Location {
+            name: "replica.done".into(),
+            role: "Replica".into(),
+            phase: "done".into(),
+            local_vars: Default::default(),
+        });
+        ta.initial_locations = vec![0];
+        ta.add_rule(Rule {
+            from: 0,
+            to: 1,
+            guard: Guard::single(GuardAtom::Threshold {
+                vars: vec![vote_var],
+                op: CmpOp::Ge,
+                bound: LinearCombination::constant(1),
+                distinct: true,
+            }),
+            updates: vec![Update {
+                var: qc_var,
+                kind: UpdateKind::Increment,
+            }],
+        });
+
+        let trace = Trace {
+            initial_config: Configuration {
+                kappa: vec![1, 0],
+                gamma: vec![1, 0],
+                params: vec![4],
+            },
+            steps: vec![TraceStep {
+                smt_step: 0,
+                rule_id: 0,
+                delta: 1,
+                deliveries: vec![MessageDeliveryEvent {
+                    shared_var: qc_var,
+                    shared_var_name: "cnt_QC@Replica#1<-Replica#0[value=true]".into(),
+                    sender: MessageIdentity {
+                        role: "Replica".into(),
+                        process: Some("0".into()),
+                        key: Some("replica_key".into()),
+                    },
+                    recipient: MessageIdentity {
+                        role: "Replica".into(),
+                        process: Some("1".into()),
+                        key: Some("replica_key".into()),
+                    },
+                    payload: MessagePayloadVariant {
+                        family: "QC".into(),
+                        fields: vec![("value".into(), "true".into())],
+                        variant: "QC[value=true]".into(),
+                    },
+                    count: 1,
+                    kind: MessageEventKind::Deliver,
+                    auth: MessageAuthMetadata {
+                        authenticated_channel: true,
+                        signature_key: Some("replica_key".into()),
+                        key_owner_role: Some("Replica".into()),
+                        key_compromised: false,
+                        provenance: SignatureProvenance::OwnedKey,
+                    },
+                }],
+                config: Configuration {
+                    kappa: vec![0, 1],
+                    gamma: vec![1, 1],
+                    params: vec![4],
+                },
+                por_status: None,
             }],
             param_values: vec![("n".into(), 4)],
         };
@@ -643,5 +922,43 @@ mod tests {
         assert!(md.contains("```text"));
         assert!(md.contains("## Message Sequence Chart"));
         assert!(md.contains("```mermaid"));
+    }
+
+    #[test]
+    fn timeline_renders_crypto_provenance_block() {
+        let (ta, trace) = sample_crypto_ta_and_trace();
+        let text = render_trace_timeline(&trace, &ta, None);
+        assert!(text.contains("crypto.kind: certificate"));
+        assert!(text.contains("crypto.source: Vote"));
+        assert!(text.contains("crypto.signer_role: Replica"));
+        assert!(text.contains("crypto.conflicts: exclusive"));
+        assert!(
+            text.contains("crypto.threshold: 1 (observed_distinct_support=1, required=1)"),
+            "expected distinct-sender witness summary in timeline: {text}"
+        );
+    }
+
+    #[test]
+    fn dot_rendering_contains_graph_structure() {
+        let (ta, _trace) = sample_ta_and_trace();
+        let dot = render_automaton_dot(&ta, &DotRenderOptions::default());
+        assert!(dot.contains("digraph TA"));
+        assert!(dot.contains("L0"));
+        assert!(dot.contains("L1"));
+        assert!(dot.contains("L0 -> L1"));
+        assert!(dot.contains("lightgreen")); // initial location highlighted
+        assert!(dot.contains("replica.commit")); // location name in label
+    }
+
+    #[test]
+    fn dot_rendering_without_clusters() {
+        let (ta, _trace) = sample_ta_and_trace();
+        let opts = DotRenderOptions {
+            cluster_by_phase: false,
+            ..DotRenderOptions::default()
+        };
+        let dot = render_automaton_dot(&ta, &opts);
+        assert!(dot.contains("digraph TA"));
+        assert!(!dot.contains("subgraph cluster_"));
     }
 }

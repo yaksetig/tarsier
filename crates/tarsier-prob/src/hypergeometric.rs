@@ -26,6 +26,15 @@ pub struct HypergeometricParams {
 }
 
 impl HypergeometricParams {
+    /// Construct validated hypergeometric parameters.
+    ///
+    /// # Parameters
+    /// - `n`: Population size.
+    /// - `k`: Number of defective/Byzantine elements in the population.
+    /// - `s`: Draw count / committee size.
+    ///
+    /// # Returns
+    /// Validated parameters or [`HypergeometricError::InvalidParams`].
     pub fn new(n: u64, k: u64, s: u64) -> Result<Self, HypergeometricError> {
         if k > n || s > n {
             return Err(HypergeometricError::InvalidParams { n, k, s });
@@ -33,17 +42,26 @@ impl HypergeometricParams {
         Ok(Self { n, k, s })
     }
 
-    /// Minimum possible value of X.
+    /// Minimum possible value of `X`.
+    ///
+    /// # Returns
+    /// Lower bound on the support of `X`.
     pub fn min_val(&self) -> u64 {
         (self.s + self.k).saturating_sub(self.n)
     }
 
-    /// Maximum possible value of X.
+    /// Maximum possible value of `X`.
+    ///
+    /// # Returns
+    /// Upper bound on the support of `X`.
     pub fn max_val(&self) -> u64 {
         std::cmp::min(self.k, self.s)
     }
 
-    /// Expected value E[X] = S * K / N.
+    /// Expected value `E\[X\] = S * K / N`.
+    ///
+    /// # Returns
+    /// Floating-point expectation under the exact hypergeometric model.
     pub fn expected_value(&self) -> f64 {
         if self.n == 0 {
             return 0.0;
@@ -53,6 +71,13 @@ impl HypergeometricParams {
 }
 
 /// Exact binomial coefficient C(n, k) using BigInt.
+///
+/// # Parameters
+/// - `n`: Population count.
+/// - `k`: Selection count.
+///
+/// # Returns
+/// Exact integer value of `C(n, k)`.
 pub fn binomial(n: u64, k: u64) -> BigInt {
     if k > n {
         return BigInt::zero();
@@ -73,6 +98,13 @@ pub fn binomial(n: u64, k: u64) -> BigInt {
 /// Exact PMF: P(X = x) = C(K, x) * C(N-K, S-x) / C(N, S).
 ///
 /// Returns as BigRational for exact arithmetic.
+///
+/// # Parameters
+/// - `params`: Hypergeometric distribution parameters.
+/// - `x`: Query value.
+///
+/// # Returns
+/// Exact probability mass `P(X = x)`.
 pub fn pmf(params: &HypergeometricParams, x: u64) -> BigRational {
     if x > params.k || x > params.s {
         return BigRational::zero();
@@ -94,6 +126,13 @@ pub fn pmf(params: &HypergeometricParams, x: u64) -> BigRational {
 /// Exact survival function: P(X > b) = sum of PMF(x) for x = b+1..max_val.
 ///
 /// Returns as BigRational for exact arithmetic.
+///
+/// # Parameters
+/// - `params`: Hypergeometric distribution parameters.
+/// - `b`: Threshold value.
+///
+/// # Returns
+/// Exact tail probability `P(X > b)`.
 pub fn survival(params: &HypergeometricParams, b: u64) -> BigRational {
     let max_val = params.max_val();
     let mut result = BigRational::zero();
@@ -109,6 +148,13 @@ pub fn survival(params: &HypergeometricParams, b: u64) -> BigRational {
 /// Only converts to f64 at the final comparison, rounding UP for conservatism.
 ///
 /// Returns the derived bound b_max.
+///
+/// # Parameters
+/// - `params`: Hypergeometric distribution parameters.
+/// - `epsilon`: Maximum allowed tail probability.
+///
+/// # Returns
+/// Smallest `b` such that `P(X > b) <= epsilon`.
 pub fn inverse_survival(
     params: &HypergeometricParams,
     epsilon: f64,
@@ -335,5 +381,251 @@ mod tests {
         let params = HypergeometricParams::new(10, 3, 5).unwrap();
         assert!(inverse_survival(&params, 0.0).is_err());
         assert!(inverse_survival(&params, -1.0).is_err());
+    }
+
+    // ---------------------------------------------------------------
+    // Proptest: property-based / randomized tests
+    // ---------------------------------------------------------------
+
+    use proptest::prelude::*;
+    use proptest::test_runner::{Config as ProptestConfig, FileFailurePersistence, RngAlgorithm};
+
+    fn prob_proptest_config() -> ProptestConfig {
+        ProptestConfig {
+            cases: 64,
+            source_file: Some(file!()),
+            failure_persistence: Some(Box::new(FileFailurePersistence::WithSource(
+                "proptest-regressions",
+            ))),
+            rng_algorithm: RngAlgorithm::ChaCha,
+            ..ProptestConfig::default()
+        }
+    }
+
+    /// Strategy that produces valid (N, K, S) triples for HypergeometricParams.
+    /// Keeps N small enough that exact BigRational arithmetic completes quickly.
+    fn valid_params_strategy() -> impl Strategy<Value = (u64, u64, u64)> {
+        // N in [1, 200], then K in [0, N], S in [1, N]
+        (1u64..=200).prop_flat_map(|n| (Just(n), 0..=n, 1..=n))
+    }
+
+    proptest! {
+        #![proptest_config(prob_proptest_config())]
+
+        /// PMF values are always non-negative for all valid inputs and x values.
+        #[test]
+        fn pmf_is_non_negative(
+            (n, k, s) in valid_params_strategy(),
+            x_frac in 0.0f64..=1.0,
+        ) {
+            let params = HypergeometricParams::new(n, k, s).unwrap();
+            // Map x_frac to a value in [0, max_val]
+            let max_v = params.max_val();
+            let x = (x_frac * max_v as f64) as u64;
+            let p = pmf(&params, x);
+            prop_assert!(
+                p >= BigRational::zero(),
+                "PMF({x}) = {p} should be non-negative for N={n}, K={k}, S={s}"
+            );
+        }
+
+        /// PMF always sums to exactly 1 over the support [min_val, max_val].
+        #[test]
+        fn pmf_sums_to_one((n, k, s) in valid_params_strategy()) {
+            let params = HypergeometricParams::new(n, k, s).unwrap();
+            let mut total = BigRational::zero();
+            for x in params.min_val()..=params.max_val() {
+                total += pmf(&params, x);
+            }
+            prop_assert!(
+                total == BigRational::one(),
+                "PMF should sum to 1 for N={n}, K={k}, S={s}, got {total}"
+            );
+        }
+
+        /// CDF monotonicity: P(X <= k) should be monotonically non-decreasing in k.
+        /// Equivalently, the survival function P(X > b) is non-increasing in b.
+        #[test]
+        fn survival_is_monotonically_non_increasing((n, k, s) in valid_params_strategy()) {
+            let params = HypergeometricParams::new(n, k, s).unwrap();
+            let max_v = params.max_val();
+            let mut prev_survival = BigRational::one(); // P(X > -1) = 1 conceptually
+            // Compute survival at min_val first
+            let min_v = params.min_val();
+            // Build all survival values from 0 to max_val
+            for b in 0..=max_v {
+                let surv = survival(&params, b);
+                // survival(b) = prev - pmf(b), should be <= prev survival
+                prop_assert!(
+                    surv <= prev_survival,
+                    "survival({b}) = {surv} should be <= survival({}) = {prev_survival} \
+                     for N={n}, K={k}, S={s}",
+                    if b == 0 { "conceptual -1".to_string() } else { (b - 1).to_string() }
+                );
+                prev_survival = surv;
+            }
+            // Check that survival at min_val is < 1 when min_val > 0
+            // (meaning there is probability mass below min_val... but actually
+            // min_val is the minimum, so survival(min_val-1) should be close to 1).
+            // At max_val, survival must be exactly 0.
+            let s_max = survival(&params, max_v);
+            prop_assert!(
+                s_max == BigRational::zero(),
+                "survival(max_val={max_v}) should be 0 for N={n}, K={k}, S={s}, got {s_max}"
+            );
+            // At 0 (if min_val is 0), survival(0) = 1 - pmf(0) should be in [0, 1]
+            if min_v == 0 {
+                let s0 = survival(&params, 0);
+                prop_assert!(s0 >= BigRational::zero());
+                prop_assert!(s0 <= BigRational::one());
+            }
+        }
+
+        /// CDF bounds: for every b in support, 0 <= P(X > b) <= 1.
+        #[test]
+        fn survival_in_unit_interval((n, k, s) in valid_params_strategy()) {
+            let params = HypergeometricParams::new(n, k, s).unwrap();
+            for b in 0..=params.max_val() {
+                let surv = survival(&params, b);
+                prop_assert!(
+                    surv >= BigRational::zero(),
+                    "survival({b}) = {surv} should be >= 0"
+                );
+                prop_assert!(
+                    surv <= BigRational::one(),
+                    "survival({b}) = {surv} should be <= 1"
+                );
+            }
+        }
+
+        /// Hypergeometric symmetry: Hyper(N, K, S) at x has the same PMF as
+        /// Hyper(N, S, K) at x. This is because C(K,x)*C(N-K,S-x)/C(N,S)
+        /// = C(S,x)*C(N-S,K-x)/C(N,K) by combinatorial identity.
+        #[test]
+        fn pmf_symmetry_in_k_and_s((n, k, s) in valid_params_strategy()) {
+            let params_ks = HypergeometricParams::new(n, k, s).unwrap();
+            let params_sk = HypergeometricParams::new(n, s, k).unwrap();
+            // The support ranges may differ, so check over the union
+            let lo = std::cmp::min(params_ks.min_val(), params_sk.min_val());
+            let hi = std::cmp::max(params_ks.max_val(), params_sk.max_val());
+            for x in lo..=hi {
+                let p_ks = pmf(&params_ks, x);
+                let p_sk = pmf(&params_sk, x);
+                prop_assert!(
+                    p_ks == p_sk,
+                    "PMF({x}) should be the same for Hyper({n},{k},{s}) and Hyper({n},{s},{k}), \
+                     got {p_ks} vs {p_sk}"
+                );
+            }
+        }
+
+        /// Binomial coefficient Pascal's rule: C(n, k) = C(n-1, k-1) + C(n-1, k).
+        #[test]
+        fn binomial_pascals_rule(n in 1u64..200, k in 1u64..200) {
+            prop_assume!(k <= n);
+            let lhs = binomial(n, k);
+            let rhs = binomial(n - 1, k - 1) + binomial(n - 1, k);
+            prop_assert!(
+                lhs == rhs,
+                "C({n},{k}) = {lhs} should equal C({},{}) + C({},{}) = {rhs}",
+                n - 1, k - 1, n - 1, k
+            );
+        }
+
+        /// Binomial coefficient symmetry: C(n, k) = C(n, n-k).
+        #[test]
+        fn binomial_symmetry(n in 0u64..200, k in 0u64..200) {
+            prop_assume!(k <= n);
+            let lhs = binomial(n, k);
+            let rhs = binomial(n, n - k);
+            prop_assert!(
+                lhs == rhs,
+                "C({n},{k}) = {lhs} should equal C({n},{}) = {rhs}",
+                n - k
+            );
+        }
+
+        /// inverse_survival monotonicity: as epsilon increases (less strict),
+        /// the bound b_max should be non-increasing (same or smaller).
+        /// Conversely, a stricter (smaller) epsilon needs a larger b_max.
+        #[test]
+        fn inverse_survival_monotone_in_epsilon(
+            (n, k, s) in valid_params_strategy(),
+            eps1_exp in -12i32..=-1,
+            eps2_exp in -12i32..=-1,
+        ) {
+            let eps_small = 10f64.powi(std::cmp::min(eps1_exp, eps2_exp));
+            let eps_large = 10f64.powi(std::cmp::max(eps1_exp, eps2_exp));
+            prop_assume!(eps_small > 0.0 && eps_large > 0.0);
+
+            let params = HypergeometricParams::new(n, k, s).unwrap();
+            let b_strict = inverse_survival(&params, eps_small).unwrap();
+            let b_lax = inverse_survival(&params, eps_large).unwrap();
+            prop_assert!(
+                b_strict >= b_lax,
+                "b_max for eps={eps_small} (={b_strict}) should be >= \
+                 b_max for eps={eps_large} (={b_lax}), \
+                 N={n}, K={k}, S={s}"
+            );
+        }
+
+        /// inverse_survival result is always within [0, max_val].
+        #[test]
+        fn inverse_survival_within_bounds(
+            (n, k, s) in valid_params_strategy(),
+            eps_exp in -12i32..=-1,
+        ) {
+            let epsilon = 10f64.powi(eps_exp);
+            prop_assume!(epsilon > 0.0);
+            let params = HypergeometricParams::new(n, k, s).unwrap();
+            let b_max = inverse_survival(&params, epsilon).unwrap();
+            prop_assert!(
+                b_max <= params.max_val(),
+                "b_max={b_max} should be <= max_val={} for N={n}, K={k}, S={s}, eps={epsilon}",
+                params.max_val()
+            );
+        }
+
+        /// inverse_survival correctness: the actual survival at b_max should be <= epsilon.
+        /// (Due to conservative rounding, this is the key soundness property.)
+        #[test]
+        fn inverse_survival_satisfies_bound(
+            (n, k, s) in valid_params_strategy(),
+            eps_exp in -9i32..=-1,
+        ) {
+            let epsilon = 10f64.powi(eps_exp);
+            prop_assume!(epsilon > 0.0);
+            let params = HypergeometricParams::new(n, k, s).unwrap();
+            let b_max = inverse_survival(&params, epsilon).unwrap();
+            // The exact survival at b_max, converted to f64 (floor for checking).
+            let surv = survival(&params, b_max);
+            // surv is exact BigRational. Convert conservatively to f64.
+            // surv should be <= epsilon (the whole point of inverse_survival).
+            use num::ToPrimitive;
+            let surv_f64 = surv.numer().to_f64().unwrap_or(f64::INFINITY)
+                / surv.denom().to_f64().unwrap_or(1.0);
+            prop_assert!(
+                surv_f64 <= epsilon,
+                "P(X > {b_max}) = {surv_f64} should be <= epsilon={epsilon} \
+                 for N={n}, K={k}, S={s}"
+            );
+        }
+
+        /// min_val <= expected_value <= max_val (when N > 0).
+        #[test]
+        fn expected_value_in_support((n, k, s) in valid_params_strategy()) {
+            let params = HypergeometricParams::new(n, k, s).unwrap();
+            let ev = params.expected_value();
+            prop_assert!(
+                ev >= params.min_val() as f64,
+                "E[X]={ev} should be >= min_val={} for N={n}, K={k}, S={s}",
+                params.min_val()
+            );
+            prop_assert!(
+                ev <= params.max_val() as f64,
+                "E[X]={ev} should be <= max_val={} for N={n}, K={k}, S={s}",
+                params.max_val()
+            );
+        }
     }
 }

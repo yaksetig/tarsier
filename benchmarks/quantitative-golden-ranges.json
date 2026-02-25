@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "description": "Quantitative golden ranges for canonical protocol models.",
+  "entries": [
+    {
+      "file": "examples/library/pbft_simple_safe.trs",
+      "depth": 10,
+      "expectations": {
+        "per_step_bound_big_o": "O(n)",
+        "per_depth_bound_big_o": "O(k * n)",
+        "min_decision_steps": {
+          "min": 3,
+          "max": 12
+        }
+      }
+    },
+    {
+      "file": "examples/library/reliable_broadcast_safe.trs",
+      "depth": 5,
+      "expectations": {
+        "per_step_bound_big_o": "O(n)",
+        "per_depth_bound_big_o": "O(k * n)",
+        "min_decision_steps": {
+          "min": 1,
+          "max": 6
+        }
+      }
+    }
+  ]
+}

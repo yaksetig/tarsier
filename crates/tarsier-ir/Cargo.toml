@@ -2,10 +2,31 @@
 name = "tarsier-ir"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Intermediate representation and lowering for threshold automata"
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+serialize = ["serde", "dep:serde_json"]
+proptest = ["dep:proptest"]
 
 [dependencies]
-tarsier-dsl = { path = "../tarsier-dsl" }
+tarsier-dsl = { path = "../tarsier-dsl", version = "0.1.0" }
 thiserror.workspace = true
 indexmap.workspace = true
 tracing.workspace = true
 miette.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+proptest = { version = "1", optional = true }
+
+[dev-dependencies]
+proptest = "1"
+criterion.workspace = true
+
+[[bench]]
+name = "lowering_bench"
+harness = false
