@@ -289,7 +289,7 @@ pub(super) fn eval_field_expr(
                         .into(),
                 ))
             } else {
-                unreachable!()
+                unreachable!("i64 value is not ==0, >0, or <0")
             }
         }
         FieldDomain::AbstractIntSign(_values) => {

@@ -1,3 +1,5 @@
+// ParseError carries diagnostic spans and source fragments; boxing would lose
+// the zero-copy benefit and complicate call sites throughout the crate.
 #![allow(clippy::result_large_err)]
 
 use pest::Parser;

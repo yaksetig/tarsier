@@ -1,3 +1,5 @@
+// PipelineError carries diagnostic payloads (traces, footprints) that would lose
+// ergonomics if boxed; callers pattern-match directly on error variants.
 #![allow(clippy::result_large_err)]
 // Submodules use `use super::*` to access these imports; the unused_imports lint
 // fires because the items are not referenced directly in this file.

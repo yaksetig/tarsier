@@ -1,3 +1,5 @@
+// The lowering pass uses incremental assignment patterns where variables are
+// conditionally overwritten; the initial assignment triggers unused_assignments.
 #![allow(unused_assignments)]
 
 mod config;

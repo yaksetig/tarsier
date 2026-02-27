@@ -1431,7 +1431,7 @@ pub(crate) fn cegar_stage_counterexample_analysis_unbounded_safety(
                     format!("proof did not close up to k={max_k}")
                 }
                 UnboundedSafetyResult::Unknown { reason } => reason.clone(),
-                _ => unreachable!(),
+                _ => unreachable!("match arm already covered by outer pattern"),
             };
             Some(CegarCounterexampleAnalysis {
                 classification: "inconclusive".into(),
