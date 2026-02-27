@@ -1,74 +1,49 @@
 # Security Policy
 
+Tarsier is a verification framework for threshold automata protocols. Correctness
+and soundness of the verification engine are essential to its purpose.
+
 ## Supported Versions
 
-| Version | Supported |
-|---------|-----------|
-| latest release (v0.x.y) | Yes |
-| older releases | Best-effort only |
+Only the latest release is supported with security updates.
 
-Only the most recent tagged release receives security patches. Users on older versions should upgrade.
+| Version        | Supported |
+| -------------- | --------- |
+| Latest release | Yes       |
+| Older releases | No        |
 
 ## Reporting a Vulnerability
 
-**Do not open a public GitHub issue for security vulnerabilities.**
+If you discover a security issue, please report it through one of the following
+channels:
 
-To report a vulnerability, use one of these channels:
+- **Email:** security@tarsier-project.org
+- **GitHub Security Advisories:** use the "Report a vulnerability" button on the
+  repository's Security tab.
 
-1. **GitHub Security Advisories (preferred):** Use the "Report a vulnerability" button on the [Security tab](../../security/advisories) of this repository. This creates a private advisory visible only to maintainers.
-
-2. **Email:** Send a detailed report to the maintainers listed in the repository's `Cargo.toml` files.
-
-### What to Include
-
-- Description of the vulnerability and its impact.
-- Steps to reproduce (minimal example preferred).
-- Affected versions and components (e.g., `tarsier-engine`, `tarsier-cli`, `playground`).
-- Any suggested fix or mitigation.
-
-### Response Timeline
-
-| Stage | Target |
-|-------|--------|
-| Acknowledgment | Within 48 hours |
-| Initial assessment | Within 7 days |
-| Fix development | Within 30 days for critical/high severity |
-| Public disclosure | After fix is released, or 90 days from report (whichever comes first) |
-
-We follow coordinated disclosure: reporters are credited (unless they prefer anonymity) and fixes are released before full details are published.
+Please do **not** open a public GitHub issue for security vulnerabilities.
 
 ## Scope
 
-The following components are in scope for security reports:
+**Critical** -- the verification engine, proof kernel, and certificate chain.
+A bug in any of these components could cause Tarsier to produce incorrect
+verification results.
 
-- **tarsier-cli** and **tarsier-certcheck** release binaries.
-- **tarsier-playground** web server (all endpoints, middleware, and configuration).
-- **tarsier-engine** verification pipeline (soundness-critical logic).
-- **Build and release infrastructure** (CI workflows, signing, provenance).
-- **Dependencies** pulled into release artifacts.
+**Lower priority** -- the LSP server (`tarsier-lsp`) and CLI (`tarsier-cli`).
+Issues here are still welcome but are not treated as security-critical.
 
-Out of scope:
+### Soundness Bugs
 
-- The formal verification claims themselves (these are mathematical, not software vulnerabilities). Report modeling errors as regular issues.
-- Third-party solver binaries (Z3, cvc5). Report upstream.
+Soundness bugs -- where the tool reports a protocol as safe when it is not -- are
+treated as **critical security issues** regardless of which component is affected.
 
-## Supply-Chain Integrity
+## Response Timeline
 
-Release artifacts are protected by multiple layers:
+- **Acknowledgement:** within 48 hours of the report.
+- **Critical fixes:** within 30 days of acknowledgement.
+- **Non-critical fixes:** addressed in the next regular release cycle.
 
-- **Cosign signatures:** Every `.tar.gz` release artifact is signed with keyless Sigstore/Cosign (OIDC-based, tied to the GitHub Actions workflow identity).
-- **SBOM:** An SPDX Software Bill of Materials is generated for each release artifact.
-- **Build provenance:** GitHub Artifact Attestations provide SLSA provenance for each build.
-- **Trust report signatures:** Release trust reports are signed with Cosign keyless (Sigstore OIDC), binding each report to the CI workflow that produced it.
-- **Dependency scanning:** `cargo-deny` runs in CI to detect known vulnerabilities, license violations, and untrusted registries.
-- **Reproducible environment:** Release certification runs on a pinned environment (OS, Rust, solver versions) with SHA256-verified solver downloads.
+## Disclosure
 
-### Verifying Release Artifacts
-
-See `docs/RELEASE_CHECKLIST.md` for the full verification procedure, or use the quick verification script:
-
-```bash
-./scripts/verify-release-artifacts.sh v0.1.0
-```
-
-This verifies cosign signatures and downloads attestations for all release artifacts.
+We follow coordinated disclosure. We ask reporters to allow us a reasonable window
+to prepare a fix before publishing details.

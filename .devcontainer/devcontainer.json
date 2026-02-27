@@ -1,0 +1,35 @@
+{
+  "name": "Tarsier Development",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {}
+  },
+
+  // cmake and build-essential are needed to compile Z3 from source
+  // (the z3 crate with static-link-z3 feature builds Z3 via cmake).
+  // python3 is used by the cross-tool verification runner.
+  // For SPIN model checker cross-tool testing: apt-get install spin
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y cmake build-essential python3 && cargo check --workspace",
+
+  "containerEnv": {
+    "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+  },
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.cargo.allFeatures": true,
+        "[rust]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "rust-lang.rust-analyzer"
+        }
+      },
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  }
+}

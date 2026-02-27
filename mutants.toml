@@ -1,0 +1,36 @@
+# cargo-mutants configuration for tarsier
+# Focus on verifier-critical paths where a surviving mutant could
+# indicate a soundness gap in the verification pipeline.
+
+# Timeout per mutant (seconds). BMC/SMT tests can be slow.
+timeout = 300
+
+# Only examine source files in soundness-critical modules.
+examine_re = [
+    # BMC encoder — translates threshold automata to SMT constraints
+    "tarsier-smt/src/bmc\\.rs",
+    "tarsier-smt/src/encoder\\.rs",
+
+    # Exact probability computation for committee selection
+    "tarsier-prob/src/hypergeometric\\.rs",
+    "tarsier-prob/src/committee\\.rs",
+
+    # Verification orchestration and helpers
+    "tarsier-engine/src/pipeline/verification/orchestration\\.rs",
+    "tarsier-engine/src/pipeline/verification/bmc_helpers\\.rs",
+    "tarsier-engine/src/pipeline/verification/smt_helpers\\.rs",
+    "tarsier-engine/src/pipeline/verification/fair_pdr\\.rs",
+    "tarsier-engine/src/pipeline/verification/mod\\.rs",
+
+    # IR lowering from AST
+    "tarsier-ir/src/lowering\\.rs",
+]
+
+# Exclude test code — mutating tests is not useful.
+exclude_re = [
+    "/tests/",
+    "_test\\.rs$",
+    "tests\\.rs$",
+    "#\\[cfg\\(test\\)\\]",
+    "proptest_generators\\.rs$",
+]

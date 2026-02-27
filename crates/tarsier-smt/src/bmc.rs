@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
-use tracing::info;
+use tracing::{info, warn};
 
 use tarsier_ir::counter_system::CounterSystem;
 use tarsier_ir::properties::SafetyProperty;
@@ -396,10 +396,14 @@ pub fn run_bmc_with_deadline<S: SmtSolver>(
         match result {
             SatResult::Sat => {
                 info!(depth, "BMC: UNSAFE - counterexample found");
-                return Ok(BmcResult::Unsafe {
-                    depth,
-                    model: model.expect("SAT result must include a model"),
-                });
+                let Some(model) = model else {
+                    warn!(depth, "BMC: solver returned SAT without a model");
+                    return Ok(BmcResult::Unknown {
+                        depth,
+                        reason: "Solver returned SAT without a model".into(),
+                    });
+                };
+                return Ok(BmcResult::Unsafe { depth, model });
             }
             SatResult::Unsat => {
                 info!(depth, "BMC: safe at this depth");
@@ -457,10 +461,14 @@ pub fn run_bmc_at_depth<S: SmtSolver>(
     match result {
         SatResult::Sat => {
             info!(depth, "BMC: UNSAFE - counterexample found");
-            Ok(BmcResult::Unsafe {
-                depth,
-                model: model.expect("SAT result must include a model"),
-            })
+            let Some(model) = model else {
+                warn!(depth, "BMC: solver returned SAT without a model");
+                return Ok(BmcResult::Unknown {
+                    depth,
+                    reason: "Solver returned SAT without a model".into(),
+                });
+            };
+            Ok(BmcResult::Unsafe { depth, model })
         }
         SatResult::Unsat => {
             info!(depth, "BMC: safe at this depth");
@@ -579,10 +587,14 @@ pub fn run_bmc_with_extra_assertions_with_deadline<S: SmtSolver>(
         match result {
             SatResult::Sat => {
                 info!(depth, "BMC: UNSAFE - counterexample found");
-                return Ok(BmcResult::Unsafe {
-                    depth,
-                    model: model.expect("SAT result must include a model"),
-                });
+                let Some(model) = model else {
+                    warn!(depth, "BMC: solver returned SAT without a model");
+                    return Ok(BmcResult::Unknown {
+                        depth,
+                        reason: "Solver returned SAT without a model".into(),
+                    });
+                };
+                return Ok(BmcResult::Unsafe { depth, model });
             }
             SatResult::Unsat => {
                 info!(depth, "BMC: safe at this depth");
@@ -643,10 +655,14 @@ pub fn run_bmc_with_extra_assertions_at_depth<S: SmtSolver>(
     match result {
         SatResult::Sat => {
             info!(depth, "BMC: UNSAFE - counterexample found");
-            Ok(BmcResult::Unsafe {
-                depth,
-                model: model.expect("SAT result must include a model"),
-            })
+            let Some(model) = model else {
+                warn!(depth, "BMC: solver returned SAT without a model");
+                return Ok(BmcResult::Unknown {
+                    depth,
+                    reason: "Solver returned SAT without a model".into(),
+                });
+            };
+            Ok(BmcResult::Unsafe { depth, model })
         }
         SatResult::Unsat => {
             info!(depth, "BMC: safe at this depth");

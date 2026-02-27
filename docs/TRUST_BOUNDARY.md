@@ -249,7 +249,7 @@ Each link in this chain is checked:
 | Aspect | Guaranteed | Not Guaranteed |
 |--------|-----------|----------------|
 | Protocol logic fidelity | Generated phases, guards, transitions, actions match the `.trs` model | Optimality or efficiency of generated code |
-| Unsupported feature rejection | Fail-fast error for committee, channel, equivocation, identity constructs | Support for all DSL features |
+| Feature coverage | Codegen supports committee/channel/equivocation/identity surfaces in generated artifacts | Full behavioral parity and production hardening for every future DSL extension |
 | Certificate verification | Bundle integrity and all-UNSAT obligation check before generation | That the certificate corresponds to the *intended* theorem (see Section 7) |
 | Provenance embedding | Model hash, options hash, certificate reference in generated artifact | Tamper-resistance of generated files after creation |
 | Deterministic output | Same inputs always produce the same output | Stability across Tarsier versions |

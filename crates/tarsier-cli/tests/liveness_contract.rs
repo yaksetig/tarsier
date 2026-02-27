@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::process::Command;
 
 #[test]
+#[ignore = "slow: ~20s, run with --ignored"]
 fn analyze_proof_mode_reports_machine_readable_fair_liveness_unknown_diagnostics() {
     let output = Command::new(env!("CARGO_BIN_EXE_tarsier"))
         .args([

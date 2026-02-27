@@ -31,6 +31,7 @@ serde.workspace = true
 serde_json.workspace = true
 ratatui = "0.29"
 crossterm = "0.28"
+notify = "7"
 ring = { version = "0.17", optional = true }
 
 [features]

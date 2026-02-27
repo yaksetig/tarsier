@@ -1,0 +1,58 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    # Run weekly: Saturday at 04:00 UTC
+    - cron: "0 4 * * 6"
+  workflow_dispatch:
+
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  CARGO_TERM_COLOR: always
+  # Minimum mutation score (%) to pass the quality gate.
+  # Adjust upward as test coverage improves.
+  MUTATION_SCORE_MIN: "70"
+
+jobs:
+  mutation-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants
+
+      - name: Run mutation testing on critical paths
+        # Allow surviving mutants -- the quality gate below enforces the
+        # threshold.  We still want to collect results and artifacts even
+        # if some mutants survive, so we must not let a non-zero exit
+        # code abort the job.
+        run: |
+          cargo mutants --no-shuffle --timeout=300 -j 2 \
+            -p tarsier-smt \
+            -p tarsier-prob \
+            -p tarsier-engine \
+            -p tarsier-ir \
+          || true
+
+      - name: Mutation score quality gate
+        run: python .github/scripts/check_mutation_score.py
+
+      - name: Upload mutation testing results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-testing-results
+          path: mutants.out/
+          retention-days: 30

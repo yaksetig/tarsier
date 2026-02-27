@@ -376,6 +376,125 @@ For explicit liveness properties (`forall p: Role. ...` or `exists p: Role. ...`
   - `fair-liveness` / `prove-fair` compile the negated temporal property to a Büchi monitor and check fair accepting cycles in the product system.
   - Under partial synchrony, fair cycles are still constrained to post-GST behavior.
 
+## 5.3 Temporal Encoding Details
+
+This section provides the precise encoding rules used by the verification engine for temporal operators, bridging the high-level syntax (§5.2) to the SMT formulas emitted by `encode_quantified_temporal_formula_term_with_bindings()`.
+
+### 5.3.1 Fragment Classification and Routing
+
+Each quantified property is classified into a `QuantifiedFragment` that determines the verification path:
+
+| Fragment | Pattern | Verification Path |
+|----------|---------|-------------------|
+| `UniversalAgreement` | `forall p:R. forall q:R. p.x == q.x` | Counter abstraction: conflicting location pairs |
+| `UniversalInvariant` | `forall p:R. p.x == val` | Counter abstraction: bad-set invariant checking |
+| `UniversalTermination` | `forall p:R. <propositional>` (liveness kind) | Goal-location reachability |
+| `UniversalTemporal` | `forall ... . <temporal formula>` | BMC bounded encoding; Büchi monitor for unbounded |
+| `ExistentialTemporal` | `exists ... . <formula>` | Temporal encoding (occupancy constraints) |
+
+The first two fragments use counter abstraction and do not enter the temporal encoding pipeline. `UniversalTermination` uses goal-reachability. The temporal fragments (`UniversalTemporal`, `ExistentialTemporal`) use the bounded encoding described below for `verify`/`liveness`, and the Büchi construction for `prove-fair`/`fair-liveness`.
+
+### 5.3.2 Bounded Temporal Encoding
+
+Given a trace of depth `d`, the encoder unrolls temporal formulas over steps `k ∈ {0, ..., d}`. Each recursive call takes the current step `k` and the bound `d`. The implementation is in `property.rs:encode_quantified_temporal_formula_term_with_bindings()`.
+
+**Base case:** If `k > d`, the formula evaluates to `false`.
+
+**Non-temporal subformulas:** Comparison atoms, and formulas containing no temporal operators, are evaluated as state predicates at step `k` (delegated to `build_quantified_state_predicate_term_with_bindings`).
+
+**Propositional connectives** are handled structurally:
+
+- `¬φ [k,d]` = `¬(φ[k,d])`
+- `φ ∧ ψ [k,d]` = `φ[k,d] ∧ ψ[k,d]`
+- `φ ∨ ψ [k,d]` = `φ[k,d] ∨ ψ[k,d]`
+- `φ ⟹ ψ [k,d]` = `¬φ[k,d] ∨ ψ[k,d]`
+- `φ ⟺ ψ [k,d]` = `(φ[k,d] ∧ ψ[k,d]) ∨ (¬φ[k,d] ∧ ¬ψ[k,d])`
+
+**Temporal operators:**
+
+| Operator | Encoding `[k,d]` |
+|----------|-------------------|
+| `X φ` | `false` if `k = d`; otherwise `φ[k+1, d]` |
+| `[] φ` | `⋀{i ∈ k..=d} φ[i, d]` |
+| `<> φ` | `⋁{i ∈ k..=d} φ[i, d]` |
+| `φ U ψ` | `⋁{j ∈ k..=d} (ψ[j,d] ∧ ⋀{i ∈ k..j-1} φ[i,d])` |
+| `φ W ψ` | `(φ U ψ)[k,d] ∨ ([] φ)[k,d]` |
+| `φ R ψ` | `¬((¬φ) U (¬ψ))[k,d]` (release is the dual of until) |
+| `φ ~> ψ` | `⋀{i ∈ k..=d} (φ[i,d] ⟹ ⋁{j ∈ i..=d} ψ[j,d])` |
+
+### 5.3.3 Concrete Expansion Examples
+
+For a trace with depth `d = 3`, starting at step `k = 0`:
+
+**Eventually:** `<> p [0,3]` expands to:
+```
+p[0] ∨ p[1] ∨ p[2] ∨ p[3]
+```
+
+**Always:** `[] p [0,3]` expands to:
+```
+p[0] ∧ p[1] ∧ p[2] ∧ p[3]
+```
+
+**Next:** `X p [0,3]` expands to `p[1]`. At the boundary, `X p [3,3]` = `false`.
+
+**Until:** `p U q [0,3]` expands to:
+```
+  q[0]
+∨ (p[0] ∧ q[1])
+∨ (p[0] ∧ p[1] ∧ q[2])
+∨ (p[0] ∧ p[1] ∧ p[2] ∧ q[3])
+```
+
+**Leads-to:** `p ~> q [0,3]` expands to:
+```
+  (p[0] ⟹ q[0] ∨ q[1] ∨ q[2] ∨ q[3])
+∧ (p[1] ⟹ q[1] ∨ q[2] ∨ q[3])
+∧ (p[2] ⟹ q[2] ∨ q[3])
+∧ (p[3] ⟹ q[3])
+```
+
+### 5.3.4 Strong-Next Semantics
+
+The `X` (next) operator uses **strong-next semantics**: `X φ` at the final step (`k = d`) evaluates to `false`, not `true`.
+
+Rationale: In bounded model checking, a trace of depth `d` has no step `d+1`. Weak-next semantics (`X φ` is vacuously true at the boundary) would allow `X false` to be satisfied at the trace end, which is unsound for safety-oriented bounded checking — it would mask violations that would appear in longer traces. Strong-next is the conservative choice: it never vacuously satisfies a next-step obligation, ensuring that any property verified at depth `d` also holds at depth `d+1` (modulo the additional step).
+
+This choice is consistent with standard BMC practice (Biere et al.) and with the convention used in NuSMV/nuXmv bounded semantics.
+
+### 5.3.5 Unbounded Verification Path
+
+For `prove-fair` and `fair-liveness` modes, temporal properties are verified via the automata-theoretic approach rather than bounded unrolling:
+
+1. **Negation:** The property `φ` is negated to `¬φ`. A fair execution violating `φ` corresponds to an accepting run of a Büchi automaton for `¬φ`.
+
+2. **NNF conversion:** The negated formula is pushed to negation normal form. Dual conversions applied:
+   - `¬(φ ∧ ψ)` → `¬φ ∨ ¬ψ`
+   - `¬(φ ∨ ψ)` → `¬φ ∧ ¬ψ`
+   - `¬(X φ)` → `X(¬φ)`
+   - `¬([] φ)` → `<>(¬φ)`
+   - `¬(<> φ)` → `[](¬φ)`
+   - `¬(φ U ψ)` → `(¬φ) R (¬ψ)`
+   - `¬(φ R ψ)` → `(¬φ) U (¬ψ)`
+
+3. **Tableau construction:** A GPVW-style (Gerth–Pnueli–Vardi–Wolper) on-the-fly tableau converts the NNF formula into a generalized Büchi automaton. Each `Until` subformula `φ U ψ` contributes one acceptance set requiring `ψ` to hold infinitely often (or the Until to be discharged).
+
+4. **Product system:** The Büchi automaton is composed with the threshold automaton's transition system, yielding a product where states combine protocol configurations with automaton states.
+
+5. **Fair cycle detection:** The engine searches for fair accepting lasso cycles in the product system — cycles that satisfy all Büchi acceptance conditions and all fairness constraints (weak or strong, per §4.1). Under partial synchrony, fair cycles are additionally constrained to post-GST steps (§4.2).
+
+6. **Result interpretation:** If no fair accepting cycle exists, the property holds on all fair executions (`LiveProved`). If a cycle is found, it witnesses a fair violation (`FairCycleFound`).
+
+### 5.3.6 Leads-to as Non-Standard Operator
+
+The leads-to operator `φ ~> ψ` is not a standard LTL connective. Tarsier supports it as syntactic sugar with two distinct lowerings depending on the verification mode:
+
+- **Büchi construction (unbounded):** Desugared to `[](φ ⟹ <> ψ)` before tableau construction. This is the standard LTL encoding of "every φ is eventually followed by ψ".
+
+- **Bounded unrolling (BMC):** Expanded directly as shown in §5.3.2: for each step `i` where `φ` holds, there must exist some step `j ≥ i` (within the bound) where `ψ` holds. This direct encoding avoids an intermediate `Always`/`Eventually` nesting and produces a tighter CNF structure.
+
+The two encodings are semantically equivalent on infinite traces. On bounded traces, the direct encoding is slightly stronger (it does not assume anything about steps beyond the bound), which is consistent with the strong-next convention (§5.3.4).
+
 ## 6. Soundness Notes
 
 ## 6.1 Safety of `equivocation: full` (when guards are monotone)

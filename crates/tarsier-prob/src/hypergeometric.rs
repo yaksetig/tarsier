@@ -9,6 +9,8 @@ pub enum HypergeometricError {
     InvalidParams { n: u64, k: u64, s: u64 },
     #[error("Epsilon must be positive, got {0}")]
     InvalidEpsilon(f64),
+    #[error("BigInt too large for f64 conversion ({digits} digits)")]
+    PrecisionOverflow { digits: usize },
 }
 
 /// Parameters for a hypergeometric distribution.
@@ -178,7 +180,7 @@ pub fn inverse_survival(
     let mut current_survival = one - pmf_0; // P(X > 0) = P(X >= 1)
 
     // Check b = 0: P(X > 0) <= epsilon?
-    if rational_to_f64_ceil(&current_survival) <= epsilon {
+    if rational_to_f64_ceil(&current_survival)? <= epsilon {
         return Ok(0);
     }
 
@@ -189,7 +191,7 @@ pub fn inverse_survival(
         current_survival -= pmf_b;
 
         // Conservative comparison: round survival UP before comparing to epsilon
-        let survival_f64 = rational_to_f64_ceil(&current_survival);
+        let survival_f64 = rational_to_f64_ceil(&current_survival)?;
         if survival_f64 <= epsilon {
             return Ok(b);
         }
@@ -203,20 +205,20 @@ pub fn inverse_survival(
 ///
 /// This ensures conservative comparison: if the true probability is p,
 /// we return a value >= p, so P(X > b) <= epsilon is never falsely satisfied.
-fn rational_to_f64_ceil(r: &BigRational) -> f64 {
+fn rational_to_f64_ceil(r: &BigRational) -> Result<f64, HypergeometricError> {
     if r.is_zero() {
-        return 0.0;
+        return Ok(0.0);
     }
     if r < &BigRational::zero() {
-        return 0.0;
+        return Ok(0.0);
     }
 
     // Convert numerator and denominator to f64
-    let numer_f64 = bigint_to_f64(&r.numer().clone());
-    let denom_f64 = bigint_to_f64(&r.denom().clone());
+    let numer_f64 = bigint_to_f64(r.numer())?;
+    let denom_f64 = bigint_to_f64(r.denom())?;
 
     if denom_f64 == 0.0 {
-        return f64::INFINITY;
+        return Ok(f64::INFINITY);
     }
 
     let result = numer_f64 / denom_f64;
@@ -225,9 +227,9 @@ fn rational_to_f64_ceil(r: &BigRational) -> f64 {
     // This ensures we never underestimate the probability
     if result == 0.0 && !r.is_zero() {
         // Very small positive number
-        f64::MIN_POSITIVE
+        Ok(f64::MIN_POSITIVE)
     } else {
-        next_up(result)
+        Ok(next_up(result))
     }
 }
 
@@ -244,10 +246,15 @@ fn next_up(x: f64) -> f64 {
     f64::from_bits(next_bits)
 }
 
-/// Convert a BigInt to f64 (best-effort, may lose precision for very large values).
-fn bigint_to_f64(n: &BigInt) -> f64 {
+/// Convert a BigInt to f64, returning an error if the value is too large.
+pub(crate) fn bigint_to_f64(n: &BigInt) -> Result<f64, HypergeometricError> {
     use num::ToPrimitive;
-    n.to_f64().unwrap_or(f64::INFINITY)
+    match n.to_f64() {
+        Some(v) if v.is_finite() => Ok(v),
+        _ => Err(HypergeometricError::PrecisionOverflow {
+            digits: n.to_string().len(),
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -381,6 +388,186 @@ mod tests {
         let params = HypergeometricParams::new(10, 3, 5).unwrap();
         assert!(inverse_survival(&params, 0.0).is_err());
         assert!(inverse_survival(&params, -1.0).is_err());
+    }
+
+    // ---------------------------------------------------------------
+    // Degenerate / boundary edge-case tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn degenerate_single_node_byzantine() {
+        // N=1, K=1, S=1: only one node and it's Byzantine.
+        // X must be 1 with certainty.
+        let params = HypergeometricParams::new(1, 1, 1).unwrap();
+        assert_eq!(params.min_val(), 1);
+        assert_eq!(params.max_val(), 1);
+        assert_eq!(pmf(&params, 1), BigRational::one());
+        assert_eq!(pmf(&params, 0), BigRational::zero());
+        assert_eq!(survival(&params, 0), BigRational::one()); // P(X > 0) = 1
+        assert_eq!(survival(&params, 1), BigRational::zero()); // P(X > 1) = 0
+    }
+
+    #[test]
+    fn degenerate_single_node_honest() {
+        // N=1, K=0, S=1: single honest node.
+        let params = HypergeometricParams::new(1, 0, 1).unwrap();
+        assert_eq!(params.min_val(), 0);
+        assert_eq!(params.max_val(), 0);
+        assert_eq!(pmf(&params, 0), BigRational::one());
+        assert_eq!(survival(&params, 0), BigRational::zero());
+        let b = inverse_survival(&params, 0.5).unwrap();
+        assert_eq!(b, 0);
+    }
+
+    #[test]
+    fn degenerate_all_byzantine_all_drawn() {
+        // N=K=S: entire population is Byzantine and fully sampled.
+        let params = HypergeometricParams::new(5, 5, 5).unwrap();
+        assert_eq!(params.min_val(), 5);
+        assert_eq!(params.max_val(), 5);
+        assert_eq!(pmf(&params, 5), BigRational::one());
+        // P(X > 4) = 1 (guaranteed all 5 are Byzantine)
+        assert_eq!(survival(&params, 4), BigRational::one());
+        // inverse_survival should return max_val for any epsilon
+        let b = inverse_survival(&params, 0.5).unwrap();
+        assert_eq!(b, 5);
+    }
+
+    #[test]
+    fn degenerate_draw_entire_population() {
+        // S=N: sampling entire population without replacement.
+        // X must equal K deterministically.
+        let params = HypergeometricParams::new(10, 3, 10).unwrap();
+        assert_eq!(params.min_val(), 3);
+        assert_eq!(params.max_val(), 3);
+        assert_eq!(pmf(&params, 3), BigRational::one());
+        let b = inverse_survival(&params, 1e-15).unwrap();
+        assert_eq!(b, 3);
+    }
+
+    #[test]
+    fn epsilon_near_one() {
+        // With epsilon close to 1, even a loose bound suffices → b_max should be small.
+        let params = HypergeometricParams::new(100, 50, 20).unwrap();
+        let b = inverse_survival(&params, 0.99).unwrap();
+        // Expected ~10 Byzantine. With epsilon=0.99, b_max should be very small.
+        assert!(b <= 10, "b_max={b} should be small with epsilon near 1");
+    }
+
+    #[test]
+    fn epsilon_barely_above_zero() {
+        // Very strict epsilon, should push b_max toward max_val.
+        let params = HypergeometricParams::new(20, 10, 10).unwrap();
+        let b = inverse_survival(&params, 1e-15).unwrap();
+        assert_eq!(
+            b,
+            params.max_val(),
+            "Very strict epsilon should give max_val"
+        );
+    }
+
+    #[test]
+    fn bigint_to_f64_overflow_returns_error() {
+        // A BigInt with ~2400 digits (like C(10000, 5000)) exceeds f64 range.
+        let huge = binomial(10000, 5000);
+        let result = bigint_to_f64(&huge);
+        match result {
+            Err(HypergeometricError::PrecisionOverflow { digits }) => {
+                assert!(digits > 300, "expected many digits, got {digits}");
+            }
+            Err(other) => panic!("expected PrecisionOverflow, got: {other}"),
+            Ok(v) => panic!("expected error for C(10000,5000), got {v}"),
+        }
+    }
+
+    #[test]
+    fn bigint_to_f64_succeeds_for_small_values() {
+        let small = BigInt::from(42);
+        assert_eq!(bigint_to_f64(&small).unwrap(), 42.0);
+        let medium = BigInt::from(u64::MAX);
+        assert!(bigint_to_f64(&medium).is_ok());
+    }
+
+    #[test]
+    fn larger_population_verification() {
+        // N=2000, K=666, S=200, epsilon=1e-6
+        // (N=10000+ exceeds f64 precision for bigint_to_f64 on binomial coefficients)
+        let params = HypergeometricParams::new(2000, 666, 200).unwrap();
+        let b = inverse_survival(&params, 1e-6).unwrap();
+        let ev = params.expected_value();
+        // Expected ~66.6, b_max should be significantly above but below 200.
+        assert!(
+            b as f64 > ev,
+            "b_max={b} should exceed expected value {ev:.1}"
+        );
+        assert!(b < 200, "b_max={b} should be less than committee size");
+        // Verify the actual survival is <= epsilon
+        let surv = survival(&params, b);
+        use num::ToPrimitive;
+        let surv_f64 =
+            surv.numer().to_f64().unwrap_or(f64::INFINITY) / surv.denom().to_f64().unwrap_or(1.0);
+        assert!(
+            surv_f64 <= 1e-6,
+            "P(X > {b}) = {surv_f64} should be <= 1e-6"
+        );
+    }
+
+    #[test]
+    fn inverse_survival_conservative_rounding() {
+        // Verify that b_max is the SMALLEST valid bound by checking b_max - 1.
+        let params = HypergeometricParams::new(1000, 333, 100).unwrap();
+        let epsilon = 1e-9;
+        let b_max = inverse_survival(&params, epsilon).unwrap();
+
+        // At b_max, survival should be <= epsilon
+        let surv_at_bmax = survival(&params, b_max);
+        let surv_f64 = rational_to_f64_ceil(&surv_at_bmax).unwrap();
+        assert!(
+            surv_f64 <= epsilon,
+            "P(X > {b_max}) = {surv_f64} should be <= {epsilon}"
+        );
+
+        // At b_max - 1, survival should be > epsilon (otherwise b_max is not minimal)
+        if b_max > 0 {
+            let surv_at_prev = survival(&params, b_max - 1);
+            let prev_f64 = rational_to_f64_ceil(&surv_at_prev).unwrap();
+            assert!(
+                prev_f64 > epsilon,
+                "P(X > {}) = {prev_f64} should be > {epsilon} (proving b_max={b_max} is minimal)",
+                b_max - 1
+            );
+        }
+    }
+
+    #[test]
+    fn next_up_edge_cases() {
+        assert_eq!(next_up(0.0), f64::from_bits(1)); // smallest positive subnormal
+        assert_eq!(next_up(f64::INFINITY), f64::INFINITY);
+        assert!(next_up(f64::NAN).is_nan());
+        assert_eq!(next_up(f64::NEG_INFINITY), f64::MIN);
+        assert!(next_up(1.0) > 1.0);
+        assert!(next_up(-1.0) > -1.0);
+    }
+
+    #[test]
+    fn pmf_at_boundaries() {
+        let params = HypergeometricParams::new(10, 3, 4).unwrap();
+        // PMF outside support should be zero
+        assert_eq!(pmf(&params, 4), BigRational::zero()); // x > K=3
+        assert_eq!(pmf(&params, 100), BigRational::zero()); // x >> N
+
+        // Check min/max val PMF is positive
+        let p_min = pmf(&params, params.min_val());
+        let p_max = pmf(&params, params.max_val());
+        assert!(p_min > BigRational::zero());
+        assert!(p_max > BigRational::zero());
+    }
+
+    #[test]
+    fn expected_value_zero_population() {
+        // Direct struct construction to test N=0 edge case
+        let params = HypergeometricParams { n: 0, k: 0, s: 0 };
+        assert_eq!(params.expected_value(), 0.0);
     }
 
     // ---------------------------------------------------------------

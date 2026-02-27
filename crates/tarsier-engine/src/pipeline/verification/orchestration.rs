@@ -204,17 +204,12 @@ pub fn verify_all_properties(
                         );
                     }
                     LivenessSpec::Temporal {
-                        quantifier,
-                        quantified_var,
-                        role,
+                        quantifiers,
                         formula,
+                        ..
                     } => {
-                        let monitor = compile_temporal_buchi_automaton(
-                            *quantifier,
-                            quantified_var,
-                            role,
-                            formula,
-                        )?;
+                        let monitor =
+                            compile_temporal_buchi_automaton_with_bindings(quantifiers, formula)?;
                         temporal_monitor_for_witness = Some(monitor.clone());
                         let monitor_payload = temporal_buchi_monitor_canonical(&monitor);
                         let monitor_summary = format!(
@@ -233,12 +228,10 @@ pub fn verify_all_properties(
                             monitor_payload,
                         );
 
-                        let preview_encoding = encode_temporal_liveness_violation(
+                        let preview_encoding = encode_temporal_liveness_violation_with_bindings(
                             &ta,
                             &cs,
-                            *quantifier,
-                            quantified_var,
-                            role,
+                            quantifiers,
                             formula,
                             options.max_depth,
                             &committee_bounds,
@@ -1817,10 +1810,9 @@ pub fn check_liveness(
                 }
             }
             LivenessSpec::Temporal {
-                quantifier,
-                quantified_var,
-                role,
+                quantifiers,
                 formula,
+                ..
             } => {
                 let dummy_property = SafetyProperty::Agreement {
                     conflicting_pairs: Vec::new(),
@@ -1831,11 +1823,9 @@ pub fn check_liveness(
                 }
                 let extra = committee_bound_assertions(&committee_bounds);
                 encoding.assertions.extend(extra.iter().cloned());
-                let satisfied = encode_quantified_temporal_formula_term(
+                let satisfied = encode_quantified_temporal_formula_term_with_bindings(
                     &ta,
-                    quantifier,
-                    &quantified_var,
-                    &role,
+                    &quantifiers,
                     &formula,
                     0,
                     options.max_depth,

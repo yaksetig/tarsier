@@ -30,6 +30,64 @@
           "notes": "Blocking CI smoke gate for real SPIN execution."
         }
       }
+    },
+    {
+      "id": "reliable_broadcast_buggy_disagreement_real_spin_smoke",
+      "name": "Reliable Broadcast Buggy Disagreement (Real SPIN Smoke)",
+      "protocol_family": "reliable_broadcast",
+      "property": "agreement",
+      "property_description": "Buggy protocol with t+1 thresholds allows disagreement between true and false decisions.",
+      "expected_verdict": "unsafe",
+      "assumptions": {
+        "fault_model": "byzantine",
+        "fault_bound": "n >= 3f+1",
+        "network": "asynchronous",
+        "message_loss": false
+      },
+      "tool_inputs": {
+        "tarsier": {
+          "file": "examples/library/reliable_broadcast_buggy.trs",
+          "mode": "proof",
+          "depth": 8,
+          "k": 10,
+          "timeout_secs": 120
+        },
+        "spin": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/reliable_broadcast_buggy_disagreement.pml",
+          "command_template": "{binary} -run {model_file}",
+          "execution_mode": "real",
+          "notes": "Unsafe scenario: buggy thresholds allow Byzantine disagreement."
+        }
+      }
+    },
+    {
+      "id": "tendermint_agreement_real_spin_smoke",
+      "name": "Tendermint Locking Agreement (Real SPIN Smoke)",
+      "protocol_family": "tendermint",
+      "property": "agreement",
+      "property_description": "All replicas that decide via 2t+1 precommit threshold reach the same value.",
+      "expected_verdict": "safe",
+      "assumptions": {
+        "fault_model": "byzantine",
+        "fault_bound": "n >= 3f+1",
+        "network": "partial_synchrony",
+        "message_loss": false
+      },
+      "tool_inputs": {
+        "tarsier": {
+          "file": "examples/library/tendermint_locking.trs",
+          "mode": "proof",
+          "depth": 8,
+          "k": 10,
+          "timeout_secs": 120
+        },
+        "spin": {
+          "file": "benchmarks/cross_tool_scenarios/external_models/tendermint_agreement.pml",
+          "command_template": "{binary} -run {model_file}",
+          "execution_mode": "real",
+          "notes": "Safe scenario: Tendermint locking with correct 2t+1 threshold."
+        }
+      }
     }
   ]
 }

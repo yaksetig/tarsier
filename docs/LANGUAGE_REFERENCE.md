@@ -586,6 +586,8 @@ Examples:
 - `[] a && b` parses as `([] a) && b`.
 - `a U (b R c)` keeps the parenthesized right side.
 
+**Temporal encoding details:** For the precise bounded unrolling rules, strong-next semantics, Büchi monitor construction, and leads-to desugaring used by the verification engine, see [SEMANTICS.md §5.3](SEMANTICS.md#53-temporal-encoding-details).
+
 ### Logical connectives in formulas
 
 | Connective | Syntax |

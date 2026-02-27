@@ -1,5 +1,8 @@
 # Tarsier
 
+[![CI](https://github.com/yaksetig/tarsier/actions/workflows/ci.yml/badge.svg)](https://github.com/yaksetig/tarsier/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Tarsier is a bounded model checker for BFT protocol models written in a threshold-automata DSL.
 It targets fast safety/liveness bug-finding and parameterized reasoning over `n`, `t`, `f`-style systems.
 

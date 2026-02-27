@@ -99,7 +99,7 @@ keywords, then offers relevant suggestions:
 The server generates quick-fix code actions for specific diagnostic codes:
 
 - **Unknown phase** (`tarsier::lower::unknown_phase`) -- offers to replace with
-  the closest known phase name.
+  the closest known phase name (Levenshtein distance <= 2).
 - **Unknown message** (`tarsier::lower::unknown_message`) -- offers to replace
   with the closest known message/object name, or to insert a new `message`
   declaration (for message-type diagnostics).
@@ -109,6 +109,12 @@ The server generates quick-fix code actions for specific diagnostic codes:
   with the closest declared enum name.
 - **Missing enum init** (`tarsier::lower::missing_enum_init`) -- offers to
   insert `= <first_enum_variant>` for enum variables without initializers.
+- **Unknown enum variant** (`tarsier::lower::unknown_enum_variant`) -- offers to
+  replace with the closest known variant of the target enum type.
+- **Unknown parameter** (`tarsier::lower::unknown_param`) -- offers to replace
+  with the closest declared parameter name.
+- **Out-of-range value** (`tarsier::lower::out_of_range`) -- offers to clamp the
+  init value to the nearest valid range boundary (min or max).
 
 ### Rename Refactoring
 
@@ -279,18 +285,29 @@ The LSP understands the full Tarsier DSL grammar, including:
 
 ## Known Limitations
 
-- **Import-graph scope, not full workspace index.** Cross-file navigation and
-  rename currently follow resolved `import` chains. Symbols in unrelated
-  workspace files that are not imported are not indexed.
-- **Range formatting uses document canonicalization.** `textDocument/rangeFormatting`
-  currently applies the same formatter as full-document formatting, returning a
-  whole-document edit for consistency.
-- **Deep lowering remains first-error.** Structural lowering checks are
-  multi-error, but non-structural lowering failures still come from a first
-  failing `lower_with_source` pass.
-- **Code actions are still selective.** Quick fixes currently target unknown
-  phase/message/enum names and missing init/enum-init diagnostics; they do not
-  yet cover all diagnostic codes.
+- **Workspace-global navigation with rename safety.** Go-to-definition, find
+  references, and rename now search across all `.trs` files in the workspace
+  (not just the import graph). Rename is rejected with a clear error if the
+  target symbol has definitions in multiple workspace files (ambiguous).
+  The workspace index is populated lazily and updated incrementally on
+  `didOpen`/`didChange`/`didClose`; open buffer content takes precedence over
+  on-disk files.
+- **Range formatting returns minimal edits.** `textDocument/rangeFormatting`
+  computes line-granularity diffs and returns only edits overlapping the
+  requested range, preserving cursor/fold state for unchanged regions.
+- **Deep lowering uses two-phase multi-error collection.** Static validation
+  (`validate_before_lowering`) collects all name-resolution style errors in a
+  single pass.  The full lowering pipeline is inherently sequential, so deeper
+  errors (identity/key invariant violations, etc.) are collected from a
+  subsequent `lower_with_source` call.  Duplicate errors are deduplicated
+  automatically.
+- **Code actions cover all feasible diagnostic codes.** Quick fixes are provided
+  for all name-resolution errors (unknown phase, message, enum, enum variant,
+  parameter), missing declarations (init phase, enum initializer), and
+  out-of-range values.  The remaining diagnostic codes -- `invalid_range`
+  (ambiguous user intent), `unsupported` (feature not yet implemented in the
+  engine), and `validation` (generic semantic errors) -- are not amenable to
+  automatic fixes.
 
 ## Workspace Links
 

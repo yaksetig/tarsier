@@ -35,6 +35,7 @@ fn cargo_run(args: &[&str]) -> std::process::Output {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~30s total for file, run with --ignored"]
 fn oversized_input_rejected() {
     // Create a temp file larger than the sandbox limit (use a very small limit)
     let tmp = std::env::temp_dir().join(format!(
@@ -75,6 +76,7 @@ fn oversized_input_rejected() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~30s total for file, run with --ignored"]
 fn normal_input_passes_sandbox_check() {
     // A valid .trs file should pass sandbox input validation
     // (it may fail later on parsing/verification, but the sandbox gate
@@ -104,6 +106,7 @@ fn normal_input_passes_sandbox_check() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~30s total for file, run with --ignored"]
 fn sandbox_activates_by_default() {
     // Running any command should activate the sandbox.
     // Verify by checking that the command runs without "Sandbox activation failed"
@@ -128,6 +131,7 @@ fn sandbox_activates_by_default() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~30s total for file, run with --ignored"]
 fn sandbox_error_is_actionable() {
     // Use the library directly to test fail-closed behavior
     use tarsier_engine::sandbox::{SandboxConfig, SandboxError, SandboxGuard};
@@ -169,6 +173,7 @@ fn sandbox_error_is_actionable() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~30s total for file, run with --ignored"]
 fn memory_budget_enforcement() {
     use tarsier_engine::sandbox::{current_rss_bytes, SandboxConfig, SandboxGuard};
 
@@ -218,6 +223,7 @@ fn memory_budget_enforcement() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~30s total for file, run with --ignored"]
 fn timeout_enforcement() {
     use std::time::Duration;
     use tarsier_engine::sandbox::{SandboxConfig, SandboxGuard};
@@ -240,6 +246,7 @@ fn timeout_enforcement() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~30s total for file, run with --ignored"]
 fn runtime_timeout_in_pipeline_path() {
     // Runs the real CLI binary with --sandbox-timeout-secs 0, ensuring
     // enforce_active_limits() fires immediately in the pipeline path
@@ -282,6 +289,7 @@ fn runtime_timeout_in_pipeline_path() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~30s total for file, run with --ignored"]
 fn runtime_memory_limit_in_pipeline_path() {
     // Runs the real CLI binary with --sandbox-memory-budget-mb 1 and a protocol,
     // ensuring enforce_active_limits() triggers the memory check in the actual

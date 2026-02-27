@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/proof-certificate-v2.json",
+  "title": "Tarsier Proof Certificate",
+  "description": "Schema for the certificate.json metadata file emitted by tarsier prove / prove-fair commands. Validated by tarsier-proof-kernel and tarsier-certcheck. Schema version 2.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "protocol_file",
+    "proof_engine",
+    "solver_used",
+    "soundness",
+    "committee_bounds",
+    "obligations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2,
+      "description": "Certificate metadata schema version. Must match CERTIFICATE_SCHEMA_VERSION in tarsier-proof-kernel."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["safety_proof", "fair_liveness_proof"],
+      "description": "Certificate kind: safety_proof for unbounded safety proofs, fair_liveness_proof for fair-liveness proofs."
+    },
+    "protocol_file": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to the source .trs protocol file that was verified."
+    },
+    "proof_engine": {
+      "type": "string",
+      "enum": ["kinduction", "pdr"],
+      "description": "Backend proof engine used to close the proof."
+    },
+    "induction_k": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Induction depth k for bounded/inductive proofs. Null when not applicable."
+    },
+    "solver_used": {
+      "type": "string",
+      "enum": ["z3", "cvc5"],
+      "description": "SMT solver used to generate the proof obligations."
+    },
+    "soundness": {
+      "type": "string",
+      "enum": ["strict", "permissive"],
+      "description": "Soundness mode under which the proof was generated."
+    },
+    "fairness": {
+      "type": ["string", "null"],
+      "enum": ["weak", "strong", null],
+      "description": "Fairness semantics for fair-liveness certificates. Null for pure safety proofs."
+    },
+    "committee_bounds": {
+      "type": "array",
+      "description": "Concrete committee bounds injected during proof generation. Each entry is a [param_name, b_max] pair.",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "string",
+            "description": "Committee bound parameter name."
+          },
+          {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Concrete maximum Byzantine count for this committee."
+          }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "bundle_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 integrity hash of the canonicalized metadata payload. Null before hash computation."
+    },
+    "obligations": {
+      "type": "array",
+      "minItems": 1,
+      "description": "SMT obligations and their expected solver outcomes.",
+      "items": {
+        "$ref": "#/$defs/obligation"
+      }
+    }
+  },
+  "$defs": {
+    "obligation": {
+      "type": "object",
+      "required": ["name", "expected", "file"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Logical obligation identifier (e.g. base_case, inductive_step)."
+        },
+        "expected": {
+          "type": "string",
+          "enum": ["unsat", "sat", "unknown"],
+          "description": "Expected solver result for this obligation."
+        },
+        "file": {
+          "type": "string",
+          "pattern": "\\.smt2$",
+          "description": "Relative path to the SMT-LIB obligation file within the bundle directory."
+        },
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 hash of the SMT-LIB file contents."
+        },
+        "proof_file": {
+          "type": "string",
+          "description": "Relative path to the solver proof object file within the bundle directory."
+        },
+        "proof_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 hash of the proof object file contents."
+        }
+      }
+    }
+  }
+}

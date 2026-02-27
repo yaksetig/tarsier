@@ -224,8 +224,10 @@ pub(crate) fn run_prove_command(
     cegar_iters: usize,
     cegar_report_out: Option<PathBuf>,
     portfolio: bool,
+    format: String,
     cli_network_mode: CliNetworkSemanticsMode,
 ) -> miette::Result<()> {
+    let output_format = parse_output_format(&format);
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
     let soundness_mode = parse_soundness_mode(&soundness);
@@ -253,6 +255,7 @@ pub(crate) fn run_prove_command(
             cegar_report_out,
             portfolio,
             timeout,
+            output_format,
         )?;
     } else if portfolio {
         run_prove_safety_portfolio(
@@ -264,6 +267,7 @@ pub(crate) fn run_prove_command(
             cegar_iters,
             cegar_report_out,
             timeout,
+            output_format,
         )?;
     } else {
         run_prove_safety_single(
@@ -273,6 +277,7 @@ pub(crate) fn run_prove_command(
             cert_out,
             cegar_iters,
             cegar_report_out,
+            output_format,
         )?;
     }
     Ok(())
@@ -291,11 +296,13 @@ pub(crate) fn run_prove_fair_command(
     cegar_iters: usize,
     cegar_report_out: Option<PathBuf>,
     portfolio: bool,
+    format: String,
     cli_network_mode: CliNetworkSemanticsMode,
 ) -> miette::Result<()> {
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
     let soundness_mode = parse_soundness_mode(&soundness);
+    let output_format = parse_output_format(&format);
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
 
     let options = PipelineOptions {
@@ -318,6 +325,7 @@ pub(crate) fn run_prove_fair_command(
             cegar_iters,
             cegar_report_out,
             timeout,
+            output_format,
         )?;
     } else {
         run_prove_fair_single(
@@ -328,6 +336,7 @@ pub(crate) fn run_prove_fair_command(
             cert_out,
             cegar_iters,
             cegar_report_out,
+            output_format,
         )?;
     }
     Ok(())
@@ -524,6 +533,7 @@ fn run_prove_fair_liveness_branch(
     cegar_report_out: Option<PathBuf>,
     portfolio: bool,
     timeout: u64,
+    output_format: OutputFormat,
 ) -> miette::Result<()> {
     if portfolio {
         let mut z3_options = options.clone();
@@ -584,12 +594,32 @@ fn run_prove_fair_liveness_branch(
             Err(_) => Err("thread panicked".into()),
         };
         let (result, details) = merge_portfolio_prove_fair_results(z3_result, cvc5_result);
-        println!("{result}");
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({"portfolio": details.clone()}))
-                .into_diagnostic()?
-        );
+        match output_format {
+            OutputFormat::Json => {
+                let artifact = json!({
+                    "schema_version": 1,
+                    "file": filename,
+                    "mode": "prove",
+                    "prove_target": "fair_liveness",
+                    "result": unbounded_fair_result_kind(&result),
+                    "details": unbounded_fair_result_details(&result),
+                    "output": format!("{result}"),
+                    "portfolio": details,
+                });
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&artifact).into_diagnostic()?
+                );
+            }
+            OutputFormat::Text => {
+                println!("{result}");
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({"portfolio": details.clone()}))
+                        .into_diagnostic()?
+                );
+            }
+        }
 
         if let Some(out) = cegar_report_out.clone() {
             let artifact = json!({
@@ -610,10 +640,12 @@ fn run_prove_fair_liveness_branch(
                 "portfolio": details,
             });
             write_json_artifact(&out, &artifact)?;
-            println!("CEGAR proof report written to {}", out.display());
+            if matches!(output_format, OutputFormat::Text) {
+                println!("CEGAR proof report written to {}", out.display());
+            }
         }
 
-        if cert_out.is_some() {
+        if cert_out.is_some() && matches!(output_format, OutputFormat::Text) {
             eprintln!(
                 "Skipping certificate generation in portfolio mode. Use `certify-fair-liveness` with an explicit solver."
             );
@@ -672,17 +704,34 @@ fn run_prove_fair_liveness_branch(
                 }
             }
         };
-        println!("{result}");
-        {
-            let prove_diag = tarsier_engine::pipeline::take_run_diagnostics();
-            if let Some(opt) = render_optimization_summary(&prove_diag) {
-                eprintln!("{opt}");
+        match output_format {
+            OutputFormat::Json => {
+                let artifact = json!({
+                    "schema_version": 1,
+                    "file": filename,
+                    "mode": "prove",
+                    "prove_target": "fair_liveness",
+                    "result": unbounded_fair_result_kind(&result),
+                    "details": unbounded_fair_result_details(&result),
+                    "output": format!("{result}"),
+                });
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&artifact).into_diagnostic()?
+                );
             }
-            if let Some(fb) = render_fallback_summary(&prove_diag) {
-                eprintln!("{fb}");
-            }
-            if let Some(pp) = render_phase_profile_summary(&prove_diag) {
-                eprintln!("{pp}");
+            OutputFormat::Text => {
+                println!("{result}");
+                let prove_diag = tarsier_engine::pipeline::take_run_diagnostics();
+                if let Some(opt) = render_optimization_summary(&prove_diag) {
+                    eprintln!("{opt}");
+                }
+                if let Some(fb) = render_fallback_summary(&prove_diag) {
+                    eprintln!("{fb}");
+                }
+                if let Some(pp) = render_phase_profile_summary(&prove_diag) {
+                    eprintln!("{pp}");
+                }
             }
         }
         if let Some(out) = cert_out {
@@ -702,9 +751,11 @@ fn run_prove_fair_liveness_branch(
                     write_certificate_bundle(&out, &bundle, false, false)?;
                 }
                 _ => {
-                    eprintln!(
-                        "Skipping certificate generation: fair-liveness proof did not conclude LIVE."
-                    );
+                    if matches!(output_format, OutputFormat::Text) {
+                        eprintln!(
+                            "Skipping certificate generation: fair-liveness proof did not conclude LIVE."
+                        );
+                    }
                 }
             }
         }
@@ -723,6 +774,7 @@ fn run_prove_safety_portfolio(
     cegar_iters: usize,
     cegar_report_out: Option<PathBuf>,
     timeout: u64,
+    output_format: OutputFormat,
 ) -> miette::Result<()> {
     let mut z3_options = options.clone();
     z3_options.solver = SolverChoice::Z3;
@@ -770,11 +822,32 @@ fn run_prove_safety_portfolio(
         Err(_) => Err("thread panicked".into()),
     };
     let (result, details) = merge_portfolio_prove_results(z3_result, cvc5_result);
-    println!("{result}");
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({"portfolio": details.clone()})).into_diagnostic()?
-    );
+    match output_format {
+        OutputFormat::Json => {
+            let artifact = json!({
+                "schema_version": 1,
+                "file": filename,
+                "mode": "prove",
+                "prove_target": "safety",
+                "result": unbounded_safety_result_kind(&result),
+                "details": unbounded_safety_result_details(&result),
+                "output": format!("{result}"),
+                "portfolio": details,
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&artifact).into_diagnostic()?
+            );
+        }
+        OutputFormat::Text => {
+            println!("{result}");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({"portfolio": details.clone()}))
+                    .into_diagnostic()?
+            );
+        }
+    }
 
     if let Some(out) = cegar_report_out.clone() {
         let artifact = json!({
@@ -795,10 +868,12 @@ fn run_prove_safety_portfolio(
             "portfolio": details,
         });
         write_json_artifact(&out, &artifact)?;
-        println!("CEGAR proof report written to {}", out.display());
+        if matches!(output_format, OutputFormat::Text) {
+            println!("CEGAR proof report written to {}", out.display());
+        }
     }
 
-    if cert_out.is_some() {
+    if cert_out.is_some() && matches!(output_format, OutputFormat::Text) {
         eprintln!(
             "Skipping certificate generation in portfolio mode. Use `certify-safety` with an explicit solver."
         );
@@ -814,6 +889,7 @@ fn run_prove_safety_single(
     cert_out: Option<PathBuf>,
     cegar_iters: usize,
     cegar_report_out: Option<PathBuf>,
+    output_format: OutputFormat,
 ) -> miette::Result<()> {
     let result = if let Some(report_path) = cegar_report_out.clone() {
         match tarsier_engine::pipeline::prove_safety_with_cegar_report(
@@ -864,17 +940,34 @@ fn run_prove_safety_single(
             }
         }
     };
-    println!("{result}");
-    {
-        let prove_diag = tarsier_engine::pipeline::take_run_diagnostics();
-        if let Some(opt) = render_optimization_summary(&prove_diag) {
-            eprintln!("{opt}");
+    match output_format {
+        OutputFormat::Json => {
+            let artifact = json!({
+                "schema_version": 1,
+                "file": filename,
+                "mode": "prove",
+                "prove_target": "safety",
+                "result": unbounded_safety_result_kind(&result),
+                "details": unbounded_safety_result_details(&result),
+                "output": format!("{result}"),
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&artifact).into_diagnostic()?
+            );
         }
-        if let Some(fb) = render_fallback_summary(&prove_diag) {
-            eprintln!("{fb}");
-        }
-        if let Some(pp) = render_phase_profile_summary(&prove_diag) {
-            eprintln!("{pp}");
+        OutputFormat::Text => {
+            println!("{result}");
+            let prove_diag = tarsier_engine::pipeline::take_run_diagnostics();
+            if let Some(opt) = render_optimization_summary(&prove_diag) {
+                eprintln!("{opt}");
+            }
+            if let Some(fb) = render_fallback_summary(&prove_diag) {
+                eprintln!("{fb}");
+            }
+            if let Some(pp) = render_phase_profile_summary(&prove_diag) {
+                eprintln!("{pp}");
+            }
         }
     }
     if let Some(out) = cert_out {
@@ -894,7 +987,9 @@ fn run_prove_safety_single(
                 write_certificate_bundle(&out, &bundle, false, false)?;
             }
             _ => {
-                eprintln!("Skipping certificate generation: proof did not conclude SAFE.");
+                if matches!(output_format, OutputFormat::Text) {
+                    eprintln!("Skipping certificate generation: proof did not conclude SAFE.");
+                }
             }
         }
     }
@@ -912,6 +1007,7 @@ fn run_prove_fair_portfolio(
     cegar_iters: usize,
     cegar_report_out: Option<PathBuf>,
     timeout: u64,
+    output_format: OutputFormat,
 ) -> miette::Result<()> {
     let mut z3_options = options.clone();
     z3_options.solver = SolverChoice::Z3;
@@ -971,11 +1067,31 @@ fn run_prove_fair_portfolio(
         Err(_) => Err("thread panicked".into()),
     };
     let (result, details) = merge_portfolio_prove_fair_results(z3_result, cvc5_result);
-    println!("{result}");
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({"portfolio": details.clone()})).into_diagnostic()?
-    );
+    match output_format {
+        OutputFormat::Json => {
+            let artifact = json!({
+                "schema_version": 1,
+                "file": filename,
+                "mode": "prove-fair",
+                "result": unbounded_fair_result_kind(&result),
+                "details": unbounded_fair_result_details(&result),
+                "output": format!("{result}"),
+                "portfolio": details,
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&artifact).into_diagnostic()?
+            );
+        }
+        OutputFormat::Text => {
+            println!("{result}");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({"portfolio": details.clone()}))
+                    .into_diagnostic()?
+            );
+        }
+    }
 
     if let Some(out) = cegar_report_out.clone() {
         let artifact = json!({
@@ -995,10 +1111,12 @@ fn run_prove_fair_portfolio(
             "portfolio": details,
         });
         write_json_artifact(&out, &artifact)?;
-        println!("CEGAR proof report written to {}", out.display());
+        if matches!(output_format, OutputFormat::Text) {
+            println!("CEGAR proof report written to {}", out.display());
+        }
     }
 
-    if cert_out.is_some() {
+    if cert_out.is_some() && matches!(output_format, OutputFormat::Text) {
         eprintln!(
             "Skipping certificate generation in portfolio mode. Use `certify-fair-liveness` with an explicit solver."
         );
@@ -1007,6 +1125,7 @@ fn run_prove_fair_portfolio(
 }
 
 /// Run `tarsier prove-fair` in single-solver mode.
+#[allow(clippy::too_many_arguments)]
 fn run_prove_fair_single(
     source: &str,
     filename: &str,
@@ -1015,6 +1134,7 @@ fn run_prove_fair_single(
     cert_out: Option<PathBuf>,
     cegar_iters: usize,
     cegar_report_out: Option<PathBuf>,
+    output_format: OutputFormat,
 ) -> miette::Result<()> {
     let result = if let Some(report_path) = cegar_report_out.clone() {
         match tarsier_engine::pipeline::prove_fair_liveness_with_cegar_report(
@@ -1068,17 +1188,33 @@ fn run_prove_fair_single(
             }
         }
     };
-    println!("{result}");
-    {
-        let prove_fair_diag = tarsier_engine::pipeline::take_run_diagnostics();
-        if let Some(opt) = render_optimization_summary(&prove_fair_diag) {
-            eprintln!("{opt}");
+    match output_format {
+        OutputFormat::Json => {
+            let artifact = json!({
+                "schema_version": 1,
+                "file": filename,
+                "mode": "prove-fair",
+                "result": unbounded_fair_result_kind(&result),
+                "details": unbounded_fair_result_details(&result),
+                "output": format!("{result}"),
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&artifact).into_diagnostic()?
+            );
         }
-        if let Some(fb) = render_fallback_summary(&prove_fair_diag) {
-            eprintln!("{fb}");
-        }
-        if let Some(pp) = render_phase_profile_summary(&prove_fair_diag) {
-            eprintln!("{pp}");
+        OutputFormat::Text => {
+            println!("{result}");
+            let prove_fair_diag = tarsier_engine::pipeline::take_run_diagnostics();
+            if let Some(opt) = render_optimization_summary(&prove_fair_diag) {
+                eprintln!("{opt}");
+            }
+            if let Some(fb) = render_fallback_summary(&prove_fair_diag) {
+                eprintln!("{fb}");
+            }
+            if let Some(pp) = render_phase_profile_summary(&prove_fair_diag) {
+                eprintln!("{pp}");
+            }
         }
     }
     if let Some(out) = cert_out {
@@ -1098,9 +1234,11 @@ fn run_prove_fair_single(
                 write_certificate_bundle(&out, &bundle, false, false)?;
             }
             _ => {
-                eprintln!(
-                    "Skipping certificate generation: fair-liveness proof did not conclude LIVE."
-                );
+                if matches!(output_format, OutputFormat::Text) {
+                    eprintln!(
+                        "Skipping certificate generation: fair-liveness proof did not conclude LIVE."
+                    );
+                }
             }
         }
     }

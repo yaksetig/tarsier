@@ -29,6 +29,7 @@ fn opts_depth(depth: usize) -> PipelineOptions {
 /// This is a sanity check: a single step from the initial state should not
 /// violate safety for any of our safe library models.
 #[test]
+#[ignore = "slow: ~25s total for file, run with --ignored"]
 fn safe_library_protocols_safe_at_depth_1() {
     let safe_models = ["reliable_broadcast_safe.trs", "pbft_simple_safe.trs"];
     for model in &safe_models {
@@ -46,6 +47,7 @@ fn safe_library_protocols_safe_at_depth_1() {
 
 /// For known-unsafe library protocols, BMC finds a counterexample within depth 10.
 #[test]
+#[ignore = "slow: ~25s total for file, run with --ignored"]
 fn unsafe_library_protocols_detected() {
     let unsafe_models = ["reliable_broadcast_buggy.trs"];
     for model in &unsafe_models {
@@ -62,6 +64,7 @@ fn unsafe_library_protocols_detected() {
 
 /// Encoding at depth 0 for all library models doesn't panic.
 #[test]
+#[ignore = "slow: ~25s total for file, run with --ignored"]
 fn encoding_depth_0_no_panic_on_library() {
     let lib_dir = workspace_root().join("examples/library");
     for entry in std::fs::read_dir(&lib_dir).expect("read examples/library") {

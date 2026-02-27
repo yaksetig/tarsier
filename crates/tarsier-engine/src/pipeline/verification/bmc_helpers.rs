@@ -363,12 +363,10 @@ pub(crate) fn safety_property_canonical(property: &SafetyProperty) -> String {
     }
 }
 
-pub(crate) fn encode_temporal_liveness_violation(
+pub(crate) fn encode_temporal_liveness_violation_with_bindings(
     ta: &ThresholdAutomaton,
     cs: &CounterSystem,
-    quantifier: ast::Quantifier,
-    quantified_var: &str,
-    role: &str,
+    quantifiers: &[ast::QuantifierBinding],
     formula: &ast::FormulaExpr,
     depth: usize,
     committee_bounds: &[(usize, u64)],
@@ -382,15 +380,8 @@ pub(crate) fn encode_temporal_liveness_violation(
     }
     let extra = committee_bound_assertions(committee_bounds);
     encoding.assertions.extend(extra.iter().cloned());
-    let satisfied = encode_quantified_temporal_formula_term(
-        ta,
-        quantifier,
-        quantified_var,
-        role,
-        formula,
-        0,
-        depth,
-    )?;
+    let satisfied =
+        encode_quantified_temporal_formula_term_with_bindings(ta, quantifiers, formula, 0, depth)?;
     encoding.assertions.push(SmtTerm::not(satisfied));
     Ok(encoding)
 }
@@ -453,17 +444,14 @@ pub(crate) fn run_liveness_spec_bmc(
             Ok(bmc_result_to_liveness_result(bmc_result, cs))
         }
         LivenessSpec::Temporal {
-            quantifier,
-            quantified_var,
-            role,
+            quantifiers,
             formula,
+            ..
         } => {
-            let encoding = encode_temporal_liveness_violation(
+            let encoding = encode_temporal_liveness_violation_with_bindings(
                 ta,
                 cs,
-                *quantifier,
-                quantified_var,
-                role,
+                quantifiers,
                 formula,
                 options.max_depth,
                 committee_bounds,

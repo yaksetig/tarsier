@@ -1,3 +1,5 @@
+// The miette `Diagnostic` derive expands to impls with field-destructuring
+// patterns that trigger unused_assignments warnings in the generated code.
 #![allow(unused_assignments)]
 
 use miette::Diagnostic;

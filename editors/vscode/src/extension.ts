@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import * as cp from "child_process";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -7,7 +6,7 @@ import {
   State,
 } from "vscode-languageclient/node";
 
-let client: LanguageClient;
+let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
 
@@ -25,15 +24,16 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarItem);
 
   const config = vscode.workspace.getConfiguration("tarsier");
-  const lspPath = config.get<string>("lsp.path", "tarsier-lsp");
+  const serverPath = config.get<string>("serverPath", "tarsier");
 
   const serverOptions: ServerOptions = {
-    run: { command: lspPath, args: [] },
-    debug: { command: lspPath, args: [] },
+    run: { command: serverPath, args: ["lsp"] },
+    debug: { command: serverPath, args: ["lsp"] },
   };
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "tarsier" }],
+    outputChannel,
   };
 
   client = new LanguageClient(
@@ -54,69 +54,6 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   client.start();
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("tarsier.verify", () =>
-      runTarsierCommand("verify")
-    )
-  );
-  context.subscriptions.push(
-    vscode.commands.registerCommand("tarsier.checkLiveness", () =>
-      runTarsierCommand("check-liveness")
-    )
-  );
-}
-
-function runTarsierCommand(subcommand: string) {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.document.languageId !== "tarsier") {
-    vscode.window.showWarningMessage("Open a .trs file first.");
-    return;
-  }
-
-  const filePath = editor.document.fileName;
-  const config = vscode.workspace.getConfiguration("tarsier");
-  const cliPath = config.get<string>("cli.path", "tarsier");
-
-  outputChannel.clear();
-  outputChannel.show(true);
-  outputChannel.appendLine(`> ${cliPath} ${subcommand} ${filePath}\n`);
-
-  statusBarItem.text = "$(sync~spin) Tarsier";
-  statusBarItem.tooltip = `Running: tarsier ${subcommand}`;
-
-  const proc = cp.spawn(cliPath, [subcommand, filePath]);
-
-  proc.stdout.on("data", (data: string) => {
-    outputChannel.append(data.toString());
-  });
-
-  proc.stderr.on("data", (data: string) => {
-    outputChannel.append(data.toString());
-  });
-
-  proc.on("close", (code: number | null) => {
-    if (code === 0) {
-      statusBarItem.text = "$(check) Tarsier";
-      statusBarItem.tooltip = `Last ${subcommand}: passed`;
-      vscode.window.showInformationMessage(`Tarsier ${subcommand}: success`);
-    } else {
-      statusBarItem.text = "$(warning) Tarsier";
-      statusBarItem.tooltip = `Last ${subcommand}: failed (exit ${code})`;
-      vscode.window.showErrorMessage(
-        `Tarsier ${subcommand} failed (exit code ${code})`
-      );
-    }
-  });
-
-  proc.on("error", (err: Error) => {
-    outputChannel.appendLine(`\nError: ${err.message}`);
-    statusBarItem.text = "$(error) Tarsier";
-    statusBarItem.tooltip = `Error running tarsier ${subcommand}`;
-    vscode.window.showErrorMessage(
-      `Failed to run tarsier: ${err.message}`
-    );
-  });
 }
 
 export function deactivate(): Thenable<void> | undefined {

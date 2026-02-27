@@ -1,11 +1,6 @@
 //! Diagnostic collection, profiling aggregation, and phase-level tracing helpers.
 
-#![allow(unused_imports)]
-
-use sha2::{Digest, Sha256};
-
-use tarsier_dsl::ast;
-use tarsier_smt::bmc::SmtRunProfile;
+use sha2::Digest; // trait needed for Sha256::new()/update()/finalize()
 
 use super::*;
 

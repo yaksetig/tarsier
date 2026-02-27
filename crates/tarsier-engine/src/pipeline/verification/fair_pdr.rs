@@ -327,11 +327,9 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
     let temporal_atom_terms_step0 = if let Some(automaton) = temporal_automaton {
         let mut terms = Vec::with_capacity(automaton.atoms.len());
         for atom in &automaton.atoms {
-            terms.push(build_quantified_state_predicate_term(
+            terms.push(build_quantified_state_predicate_term_with_bindings(
                 ta,
-                automaton.quantifier,
-                &automaton.quantified_var,
-                &automaton.role,
+                &automaton.quantifiers,
                 atom,
                 0,
             )?);

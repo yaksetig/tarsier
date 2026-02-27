@@ -85,10 +85,8 @@ pub fn analyze_committee(spec: &CommitteeSpec) -> Result<CommitteeAnalysis, Comm
 
     // Convert tail probability to f64 for display (this is just for reporting)
     let tail_f64 = {
-        let numer_s = tail_prob.numer().to_string();
-        let denom_s = tail_prob.denom().to_string();
-        let n: f64 = numer_s.parse().unwrap_or(0.0);
-        let d: f64 = denom_s.parse().unwrap_or(1.0);
+        let n = hypergeometric::bigint_to_f64(tail_prob.numer())?;
+        let d = hypergeometric::bigint_to_f64(tail_prob.denom())?;
         if d == 0.0 {
             0.0
         } else {
@@ -167,6 +165,116 @@ mod tests {
         let analysis = analyze_committee(&spec).unwrap();
         assert_eq!(analysis.b_max, 0);
         assert_eq!(analysis.honest_majority, 10);
+    }
+
+    // ---------------------------------------------------------------
+    // Degenerate / boundary edge-case tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn degenerate_single_node_committee() {
+        // N=1, K=1, S=1: single Byzantine node is the entire committee.
+        let spec = CommitteeSpec {
+            name: "solo".into(),
+            population: 1,
+            byzantine: 1,
+            committee_size: 1,
+            epsilon: 1e-9,
+        };
+        let analysis = analyze_committee(&spec).unwrap();
+        assert_eq!(analysis.b_max, 1);
+        assert_eq!(analysis.honest_majority, 0);
+    }
+
+    #[test]
+    fn degenerate_nk_equals_s() {
+        // N=K=S: entire population sampled and all Byzantine.
+        let spec = CommitteeSpec {
+            name: "all_byz".into(),
+            population: 5,
+            byzantine: 5,
+            committee_size: 5,
+            epsilon: 1e-9,
+        };
+        let analysis = analyze_committee(&spec).unwrap();
+        assert_eq!(analysis.b_max, 5);
+        assert_eq!(analysis.honest_majority, 0);
+    }
+
+    #[test]
+    fn epsilon_near_one_committee() {
+        // Very relaxed epsilon.
+        let spec = CommitteeSpec {
+            name: "lax".into(),
+            population: 100,
+            byzantine: 33,
+            committee_size: 20,
+            epsilon: 0.99,
+        };
+        let analysis = analyze_committee(&spec).unwrap();
+        // With epsilon near 1, b_max should be very small (near 0 or at expected value)
+        assert!(
+            analysis.b_max <= 10,
+            "b_max={} should be small with very relaxed epsilon",
+            analysis.b_max
+        );
+        assert!(analysis.tail_probability <= 0.99);
+    }
+
+    #[test]
+    fn full_population_sampled() {
+        // S=N: drawing entire population.
+        let spec = CommitteeSpec {
+            name: "full".into(),
+            population: 50,
+            byzantine: 15,
+            committee_size: 50,
+            epsilon: 1e-9,
+        };
+        let analysis = analyze_committee(&spec).unwrap();
+        // Must get exactly K=15 Byzantine
+        assert_eq!(analysis.b_max, 15);
+        assert_eq!(analysis.honest_majority, 35);
+    }
+
+    #[test]
+    fn larger_population_committee() {
+        // Larger-scale test (N=2000).
+        // (N=10000+ exceeds f64 precision for bigint_to_f64 on binomial coefficients)
+        let spec = CommitteeSpec {
+            name: "large".into(),
+            population: 2000,
+            byzantine: 666,
+            committee_size: 200,
+            epsilon: 1e-6,
+        };
+        let analysis = analyze_committee(&spec).unwrap();
+        assert!(analysis.b_max > 66, "b_max={}", analysis.b_max);
+        assert!(analysis.b_max < 200, "b_max={}", analysis.b_max);
+        assert!(analysis.tail_probability <= 1e-6);
+    }
+
+    #[test]
+    fn invalid_params_committee() {
+        // K > N
+        let spec = CommitteeSpec {
+            name: "bad".into(),
+            population: 10,
+            byzantine: 20,
+            committee_size: 5,
+            epsilon: 1e-6,
+        };
+        assert!(analyze_committee(&spec).is_err());
+
+        // S > N
+        let spec2 = CommitteeSpec {
+            name: "bad2".into(),
+            population: 10,
+            byzantine: 3,
+            committee_size: 20,
+            epsilon: 1e-6,
+        };
+        assert!(analyze_committee(&spec2).is_err());
     }
 
     // ---------------------------------------------------------------

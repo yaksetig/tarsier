@@ -1,8 +1,29 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use tarsier_engine::pipeline::{PipelineOptions, ProofEngine, SolverChoice, SoundnessMode};
+use tarsier_engine::pipeline::{
+    FairnessMode, PipelineOptions, ProofEngine, SolverChoice, SoundnessMode,
+};
 
 const TRIVIAL_LIVE: &str = include_str!("../../../examples/library/trivial_live.trs");
 const PBFT_CORE: &str = include_str!("../../../examples/library/pbft_core.trs");
+const TEMPORAL_LIVENESS: &str = include_str!("../../../examples/temporal_liveness.trs");
+
+const MULTI_QUANT_TEMPORAL: &str = r#"
+protocol MultiQuantBench {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    role R {
+        var done: bool = true;
+        init s;
+        phase s {}
+    }
+
+    property progress: liveness {
+        forall p: R. exists q: R. [] (p.done == q.done)
+    }
+}
+"#;
 
 fn bench_options(depth: usize) -> PipelineOptions {
     PipelineOptions {
@@ -89,6 +110,54 @@ fn bench_verify_pbft_depth5(c: &mut Criterion) {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Temporal encoding: liveness and fair-liveness pipelines
+// ---------------------------------------------------------------------------
+
+fn bench_check_liveness_temporal(c: &mut Criterion) {
+    let options = bench_options(3);
+    c.bench_function("engine_check_liveness_temporal_depth3", |b| {
+        b.iter(|| {
+            tarsier_engine::pipeline::check_liveness(
+                black_box(TEMPORAL_LIVENESS),
+                "temporal_liveness.trs",
+                black_box(&options),
+            )
+            .unwrap()
+        })
+    });
+}
+
+fn bench_fair_liveness_multi_quant_depth3(c: &mut Criterion) {
+    let options = bench_options(3);
+    c.bench_function("engine_fair_liveness_multi_quant_depth3", |b| {
+        b.iter(|| {
+            tarsier_engine::pipeline::check_fair_liveness_with_mode(
+                black_box(MULTI_QUANT_TEMPORAL),
+                "multi_quant_bench.trs",
+                black_box(&options),
+                FairnessMode::Weak,
+            )
+            .unwrap()
+        })
+    });
+}
+
+fn bench_fair_liveness_multi_quant_depth5(c: &mut Criterion) {
+    let options = bench_options(5);
+    c.bench_function("engine_fair_liveness_multi_quant_depth5", |b| {
+        b.iter(|| {
+            tarsier_engine::pipeline::check_fair_liveness_with_mode(
+                black_box(MULTI_QUANT_TEMPORAL),
+                "multi_quant_bench.trs",
+                black_box(&options),
+                FairnessMode::Weak,
+            )
+            .unwrap()
+        })
+    });
+}
+
 criterion_group!(
     benches,
     bench_lower_and_encode_trivial,
@@ -96,5 +165,8 @@ criterion_group!(
     bench_verify_trivial_depth3,
     bench_verify_pbft_depth3,
     bench_verify_pbft_depth5,
+    bench_check_liveness_temporal,
+    bench_fair_liveness_multi_quant_depth3,
+    bench_fair_liveness_multi_quant_depth5,
 );
 criterion_main!(benches);

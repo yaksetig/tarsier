@@ -1,27 +1,7 @@
 //! Committee analysis, quantitative analysis functions, round erasure abstraction.
 
-#![allow(unused_imports)]
+use sha2::Digest; // trait needed for Sha256::new()/update()/finalize()
 
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-
-use sha2::{Digest, Sha256};
-use tracing::info;
-
-use tarsier_dsl::ast;
-use tarsier_ir::threshold_automaton::{
-    AuthenticationMode, EquivocationMode, FaultModel, GuardAtom, LocalValue, ParamOrConst,
-    SharedVarKind, ThresholdAutomaton,
-};
-use tarsier_prob::committee::CommitteeSpec;
-
-use crate::result::{
-    AssumptionNote, BoundAnnotation, BoundEvidenceClass, BoundKind, CommComplexityReport,
-    CommitteeAnalysisSummary, ModelAssumptions, ModelMetadata, ProbabilisticConfidenceInterval,
-    QuantitativeAnalysisEnvironment, QuantitativeAnalysisOptions, SensitivityPoint,
-    QUANTITATIVE_SCHEMA_VERSION,
-};
-
-use super::diagnostics::push_phase_profile;
 use super::property::resolve_param_or_const;
 use super::verification::lower_with_active_controls;
 use super::*;

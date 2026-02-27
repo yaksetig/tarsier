@@ -4,10 +4,12 @@
 //! specified in a custom `.ta` text format. This module converts Tarsier's
 //! internal representation into that format for cross-tool comparison.
 
+use std::collections::{BTreeMap, HashMap};
+
 use tarsier_dsl::ast;
 use tarsier_ir::properties::{extract_agreement_property, SafetyProperty};
 use tarsier_ir::threshold_automaton::{
-    CmpOp, GuardAtom, LinearCombination, ThresholdAutomaton, UpdateKind,
+    CmpOp, GuardAtom, LinearCombination, LocalValue, ThresholdAutomaton, UpdateKind,
 };
 
 /// Convert a `ThresholdAutomaton` into ByMC `.ta` format text.
@@ -22,18 +24,42 @@ pub fn export_ta(ta: &ThresholdAutomaton) -> String {
 /// Convert a `ThresholdAutomaton` into ByMC `.ta` format text, selecting
 /// the export property from the original program declarations.
 ///
-/// Selection policy is delegated to `pipeline::select_property_for_ta_export`:
+/// Selection policy is delegated to `pipeline::property::select_ta_export_property`:
 /// - safety property if declared;
-/// - otherwise non-temporal liveness-as-termination when representable;
+/// - otherwise liveness (temporal and non-temporal) when representable;
 /// - otherwise fallback to structural agreement.
 pub fn export_ta_for_program(ta: &ThresholdAutomaton, program: &ast::Program) -> String {
-    let prop = crate::pipeline::select_property_for_ta_export(ta, program);
-    export_ta_with_property(ta, Some(&prop))
+    match crate::pipeline::property::select_ta_export_property(ta, program) {
+        crate::pipeline::property::TaExportProperty::Safety(prop) => {
+            export_ta_with_property(ta, Some(&prop))
+        }
+        crate::pipeline::property::TaExportProperty::Temporal {
+            quantifiers,
+            formula,
+        } => match export_ta_with_temporal_liveness(ta, &quantifiers, &formula) {
+            Ok(output) => output,
+            Err(err) => {
+                tracing::warn!(
+                    "failed to format temporal liveness property for TA export ({err}); \
+                     falling back to agreement"
+                );
+                let prop = extract_agreement_property(ta);
+                export_ta_with_property(ta, Some(&prop))
+            }
+        },
+    }
 }
 
 /// Convert a `ThresholdAutomaton` into ByMC `.ta` format text with an
 /// explicit safety property for the specifications section.
 pub fn export_ta_with_property(ta: &ThresholdAutomaton, prop: Option<&SafetyProperty>) -> String {
+    export_ta_with_spec_block(ta, |out, ta| emit_specifications(out, prop, ta))
+}
+
+fn export_ta_with_spec_block<F>(ta: &ThresholdAutomaton, mut emit_specs: F) -> String
+where
+    F: FnMut(&mut String, &ThresholdAutomaton),
+{
     let mut out = String::new();
 
     // Skeleton header — use first role name or "Proc"
@@ -167,11 +193,23 @@ pub fn export_ta_with_property(ta: &ThresholdAutomaton, prop: Option<&SafetyProp
     }
     out.push_str("  }\n");
 
-    // Specifications — encode the safety property
-    emit_specifications(&mut out, prop, ta);
+    emit_specs(&mut out, ta);
 
     out.push_str("}\n");
     out
+}
+
+fn export_ta_with_temporal_liveness(
+    ta: &ThresholdAutomaton,
+    quantifiers: &[ast::QuantifierBinding],
+    formula: &ast::FormulaExpr,
+) -> Result<String, String> {
+    let rendered = format_quantified_temporal_formula_bymc(ta, quantifiers, formula)?;
+    Ok(export_ta_with_spec_block(ta, |out, _| {
+        out.push_str("  specifications (1) {\n");
+        out.push_str(&format!("    liveness: {rendered};\n"));
+        out.push_str("  }\n");
+    }))
 }
 
 /// Emit the `specifications` block for the `.ta` output.
@@ -260,14 +298,370 @@ fn emit_specifications(out: &mut String, prop: Option<&SafetyProperty>, ta: &Thr
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FormulaValue {
+    Bool(bool),
+    Int(i64),
+    Enum(String),
+}
+
+fn formula_contains_temporal(expr: &ast::FormulaExpr) -> bool {
+    match expr {
+        ast::FormulaExpr::Comparison { .. } => false,
+        ast::FormulaExpr::Not(inner) => formula_contains_temporal(inner),
+        ast::FormulaExpr::Next(_)
+        | ast::FormulaExpr::Always(_)
+        | ast::FormulaExpr::Eventually(_)
+        | ast::FormulaExpr::Until(_, _)
+        | ast::FormulaExpr::WeakUntil(_, _)
+        | ast::FormulaExpr::Release(_, _)
+        | ast::FormulaExpr::LeadsTo(_, _) => true,
+        ast::FormulaExpr::And(lhs, rhs)
+        | ast::FormulaExpr::Or(lhs, rhs)
+        | ast::FormulaExpr::Implies(lhs, rhs)
+        | ast::FormulaExpr::Iff(lhs, rhs) => {
+            formula_contains_temporal(lhs) || formula_contains_temporal(rhs)
+        }
+    }
+}
+
+fn formula_value_from_local(value: &LocalValue) -> FormulaValue {
+    match value {
+        LocalValue::Bool(b) => FormulaValue::Bool(*b),
+        LocalValue::Int(i) => FormulaValue::Int(*i),
+        LocalValue::Enum(v) => FormulaValue::Enum(v.clone()),
+    }
+}
+
+fn eval_formula_atom_for_assignment(
+    ta: &ThresholdAutomaton,
+    atom: &ast::FormulaAtom,
+    assignment: &BTreeMap<String, usize>,
+    default_quantified_var: &str,
+) -> Result<FormulaValue, String> {
+    match atom {
+        ast::FormulaAtom::IntLit(i) => Ok(FormulaValue::Int(*i)),
+        ast::FormulaAtom::BoolLit(b) => Ok(FormulaValue::Bool(*b)),
+        ast::FormulaAtom::Var(name) => {
+            if let Some(loc_id) = assignment.get(default_quantified_var) {
+                let loc = ta.locations.get(*loc_id).ok_or_else(|| {
+                    format!("invalid location id {loc_id} while evaluating liveness formula")
+                })?;
+                if let Some(value) = loc.local_vars.get(name) {
+                    return Ok(formula_value_from_local(value));
+                }
+            }
+            // Unresolved identifiers are treated as enum literals.
+            Ok(FormulaValue::Enum(name.clone()))
+        }
+        ast::FormulaAtom::QualifiedVar { object, field } => {
+            let loc_id = assignment
+                .get(object)
+                .ok_or_else(|| format!("unsupported quantified variable '{object}'"))?;
+            let loc = ta.locations.get(*loc_id).ok_or_else(|| {
+                format!("invalid location id {loc_id} while evaluating liveness formula")
+            })?;
+            let value = loc
+                .local_vars
+                .get(field)
+                .ok_or_else(|| format!("unknown local variable '{field}' in liveness formula"))?;
+            Ok(formula_value_from_local(value))
+        }
+    }
+}
+
+fn eval_formula_comparison(
+    op: ast::CmpOp,
+    lhs: FormulaValue,
+    rhs: FormulaValue,
+) -> Result<bool, String> {
+    use ast::CmpOp;
+
+    match (lhs, rhs) {
+        (FormulaValue::Bool(l), FormulaValue::Bool(r)) => match op {
+            CmpOp::Eq => Ok(l == r),
+            CmpOp::Ne => Ok(l != r),
+            _ => Err("boolean comparisons only support == and !=".into()),
+        },
+        (FormulaValue::Int(l), FormulaValue::Int(r)) => match op {
+            CmpOp::Eq => Ok(l == r),
+            CmpOp::Ne => Ok(l != r),
+            CmpOp::Ge => Ok(l >= r),
+            CmpOp::Gt => Ok(l > r),
+            CmpOp::Le => Ok(l <= r),
+            CmpOp::Lt => Ok(l < r),
+        },
+        (FormulaValue::Enum(l), FormulaValue::Enum(r)) => match op {
+            CmpOp::Eq => Ok(l == r),
+            CmpOp::Ne => Ok(l != r),
+            _ => Err("enum comparisons only support == and !=".into()),
+        },
+        _ => Err("type mismatch in liveness formula comparison".into()),
+    }
+}
+
+fn eval_formula_expr_for_assignment(
+    ta: &ThresholdAutomaton,
+    expr: &ast::FormulaExpr,
+    assignment: &BTreeMap<String, usize>,
+    default_quantified_var: &str,
+) -> Result<bool, String> {
+    match expr {
+        ast::FormulaExpr::Comparison { lhs, op, rhs } => {
+            let left =
+                eval_formula_atom_for_assignment(ta, lhs, assignment, default_quantified_var)?;
+            let right =
+                eval_formula_atom_for_assignment(ta, rhs, assignment, default_quantified_var)?;
+            eval_formula_comparison(*op, left, right)
+        }
+        ast::FormulaExpr::Not(inner) => Ok(!eval_formula_expr_for_assignment(
+            ta,
+            inner,
+            assignment,
+            default_quantified_var,
+        )?),
+        ast::FormulaExpr::And(lhs, rhs) => {
+            Ok(
+                eval_formula_expr_for_assignment(ta, lhs, assignment, default_quantified_var)?
+                    && eval_formula_expr_for_assignment(
+                        ta,
+                        rhs,
+                        assignment,
+                        default_quantified_var,
+                    )?,
+            )
+        }
+        ast::FormulaExpr::Or(lhs, rhs) => {
+            Ok(
+                eval_formula_expr_for_assignment(ta, lhs, assignment, default_quantified_var)?
+                    || eval_formula_expr_for_assignment(
+                        ta,
+                        rhs,
+                        assignment,
+                        default_quantified_var,
+                    )?,
+            )
+        }
+        ast::FormulaExpr::Implies(lhs, rhs) => {
+            Ok(
+                !eval_formula_expr_for_assignment(ta, lhs, assignment, default_quantified_var)?
+                    || eval_formula_expr_for_assignment(
+                        ta,
+                        rhs,
+                        assignment,
+                        default_quantified_var,
+                    )?,
+            )
+        }
+        ast::FormulaExpr::Iff(lhs, rhs) => {
+            let left =
+                eval_formula_expr_for_assignment(ta, lhs, assignment, default_quantified_var)?;
+            let right =
+                eval_formula_expr_for_assignment(ta, rhs, assignment, default_quantified_var)?;
+            Ok(left == right)
+        }
+        ast::FormulaExpr::Next(_)
+        | ast::FormulaExpr::Always(_)
+        | ast::FormulaExpr::Eventually(_)
+        | ast::FormulaExpr::Until(_, _)
+        | ast::FormulaExpr::WeakUntil(_, _)
+        | ast::FormulaExpr::Release(_, _)
+        | ast::FormulaExpr::LeadsTo(_, _) => {
+            Err("temporal operators are not valid inside single-state predicate evaluation".into())
+        }
+    }
+}
+
+fn join_logic(op: &str, terms: Vec<String>, empty: &str) -> String {
+    if terms.is_empty() {
+        return empty.to_string();
+    }
+    if terms.len() == 1 {
+        return terms
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| empty.to_string());
+    }
+    format!("({})", terms.join(&format!(" {op} ")))
+}
+
+fn format_quantified_state_predicate_bymc(
+    ta: &ThresholdAutomaton,
+    quantifiers: &[ast::QuantifierBinding],
+    state_expr: &ast::FormulaExpr,
+) -> Result<String, String> {
+    if quantifiers.is_empty() {
+        return Err("temporal liveness export requires at least one quantifier".into());
+    }
+
+    let default_quantified_var = quantifiers[0].var.as_str();
+    let mut role_locations: HashMap<String, Vec<usize>> = HashMap::new();
+    for (id, loc) in ta.locations.iter().enumerate() {
+        role_locations.entry(loc.role.clone()).or_default().push(id);
+    }
+
+    fn encode_nested_quantifiers(
+        ta: &ThresholdAutomaton,
+        quantifiers: &[ast::QuantifierBinding],
+        role_locations: &HashMap<String, Vec<usize>>,
+        state_expr: &ast::FormulaExpr,
+        default_quantified_var: &str,
+        idx: usize,
+        assignment: &mut BTreeMap<String, usize>,
+    ) -> Result<String, String> {
+        if idx == quantifiers.len() {
+            let holds = eval_formula_expr_for_assignment(
+                ta,
+                state_expr,
+                assignment,
+                default_quantified_var,
+            )?;
+            return Ok(if holds { "true" } else { "false" }.to_string());
+        }
+
+        let binding = &quantifiers[idx];
+        let locations = role_locations
+            .get(&binding.domain)
+            .map(|ids| ids.as_slice())
+            .unwrap_or(&[]);
+
+        match binding.quantifier {
+            ast::Quantifier::ForAll => {
+                if locations.is_empty() {
+                    return Ok("true".to_string());
+                }
+                let mut clauses = Vec::with_capacity(locations.len());
+                for loc_id in locations {
+                    assignment.insert(binding.var.clone(), *loc_id);
+                    let nested = encode_nested_quantifiers(
+                        ta,
+                        quantifiers,
+                        role_locations,
+                        state_expr,
+                        default_quantified_var,
+                        idx + 1,
+                        assignment,
+                    )?;
+                    assignment.remove(&binding.var);
+                    clauses.push(format!("(!(loc{loc_id} > 0) || ({nested}))"));
+                }
+                Ok(join_logic("&&", clauses, "true"))
+            }
+            ast::Quantifier::Exists => {
+                if locations.is_empty() {
+                    return Ok("false".to_string());
+                }
+                let mut disjuncts = Vec::with_capacity(locations.len());
+                for loc_id in locations {
+                    assignment.insert(binding.var.clone(), *loc_id);
+                    let nested = encode_nested_quantifiers(
+                        ta,
+                        quantifiers,
+                        role_locations,
+                        state_expr,
+                        default_quantified_var,
+                        idx + 1,
+                        assignment,
+                    )?;
+                    assignment.remove(&binding.var);
+                    disjuncts.push(format!("((loc{loc_id} > 0) && ({nested}))"));
+                }
+                Ok(join_logic("||", disjuncts, "false"))
+            }
+        }
+    }
+
+    let mut assignment = BTreeMap::new();
+    encode_nested_quantifiers(
+        ta,
+        quantifiers,
+        &role_locations,
+        state_expr,
+        default_quantified_var,
+        0,
+        &mut assignment,
+    )
+}
+
+fn format_quantified_temporal_formula_bymc(
+    ta: &ThresholdAutomaton,
+    quantifiers: &[ast::QuantifierBinding],
+    formula: &ast::FormulaExpr,
+) -> Result<String, String> {
+    if !formula_contains_temporal(formula) {
+        return format_quantified_state_predicate_bymc(ta, quantifiers, formula);
+    }
+
+    match formula {
+        ast::FormulaExpr::Comparison { .. } => {
+            format_quantified_state_predicate_bymc(ta, quantifiers, formula)
+        }
+        ast::FormulaExpr::Not(inner) => Ok(format!(
+            "!({})",
+            format_quantified_temporal_formula_bymc(ta, quantifiers, inner)?
+        )),
+        ast::FormulaExpr::And(lhs, rhs) => Ok(format!(
+            "({}) && ({})",
+            format_quantified_temporal_formula_bymc(ta, quantifiers, lhs)?,
+            format_quantified_temporal_formula_bymc(ta, quantifiers, rhs)?,
+        )),
+        ast::FormulaExpr::Or(lhs, rhs) => Ok(format!(
+            "({}) || ({})",
+            format_quantified_temporal_formula_bymc(ta, quantifiers, lhs)?,
+            format_quantified_temporal_formula_bymc(ta, quantifiers, rhs)?,
+        )),
+        ast::FormulaExpr::Implies(lhs, rhs) => {
+            let left = format_quantified_temporal_formula_bymc(ta, quantifiers, lhs)?;
+            let right = format_quantified_temporal_formula_bymc(ta, quantifiers, rhs)?;
+            Ok(format!("((!({left})) || ({right}))"))
+        }
+        ast::FormulaExpr::Iff(lhs, rhs) => {
+            let left = format_quantified_temporal_formula_bymc(ta, quantifiers, lhs)?;
+            let right = format_quantified_temporal_formula_bymc(ta, quantifiers, rhs)?;
+            Ok(format!(
+                "((({left}) && ({right})) || ((!({left})) && (!({right}))))"
+            ))
+        }
+        ast::FormulaExpr::Next(inner) => Ok(format!(
+            "X({})",
+            format_quantified_temporal_formula_bymc(ta, quantifiers, inner)?
+        )),
+        ast::FormulaExpr::Always(inner) => Ok(format!(
+            "[]({})",
+            format_quantified_temporal_formula_bymc(ta, quantifiers, inner)?
+        )),
+        ast::FormulaExpr::Eventually(inner) => Ok(format!(
+            "<>({})",
+            format_quantified_temporal_formula_bymc(ta, quantifiers, inner)?
+        )),
+        ast::FormulaExpr::Until(lhs, rhs) => Ok(format!(
+            "(({}) U ({}))",
+            format_quantified_temporal_formula_bymc(ta, quantifiers, lhs)?,
+            format_quantified_temporal_formula_bymc(ta, quantifiers, rhs)?,
+        )),
+        ast::FormulaExpr::WeakUntil(lhs, rhs) => {
+            let left = format_quantified_temporal_formula_bymc(ta, quantifiers, lhs)?;
+            let right = format_quantified_temporal_formula_bymc(ta, quantifiers, rhs)?;
+            Ok(format!("((({left}) U ({right})) || []({left}))"))
+        }
+        ast::FormulaExpr::Release(lhs, rhs) => {
+            let left = format_quantified_temporal_formula_bymc(ta, quantifiers, lhs)?;
+            let right = format_quantified_temporal_formula_bymc(ta, quantifiers, rhs)?;
+            Ok(format!("!((!({left})) U (!({right})))"))
+        }
+        ast::FormulaExpr::LeadsTo(lhs, rhs) => {
+            let left = format_quantified_temporal_formula_bymc(ta, quantifiers, lhs)?;
+            let right = format_quantified_temporal_formula_bymc(ta, quantifiers, rhs)?;
+            Ok(format!("[]((!({left})) || <>({right}))"))
+        }
+    }
+}
+
 /// Sanitize a Tarsier shared-var name for ByMC (replace @ and [] with _).
-#[allow(clippy::collapsible_str_replace)]
 fn sanitize_name(name: &str) -> String {
     name.replace('@', "_at_")
-        .replace('[', "_")
-        .replace(']', "_")
+        .replace(['[', ']', ','], "_")
         .replace('=', "_eq_")
-        .replace(',', "_")
         .replace(' ', "")
 }
 
@@ -613,7 +1007,7 @@ protocol ExportTerminationOnly {
     }
 
     #[test]
-    fn export_ta_for_program_temporal_liveness_falls_back_to_agreement_spec() {
+    fn export_ta_for_program_includes_temporal_liveness_spec_when_declared() {
         let source = r#"
 protocol ExportTemporalLiveness {
     params n, t;
@@ -640,12 +1034,148 @@ protocol ExportTemporalLiveness {
         let output = export_ta_for_program(&ta, &program);
 
         assert!(
-            output.contains("agreement:"),
-            "temporal-liveness export should fall back to agreement spec:\n{output}"
+            output.contains("liveness:"),
+            "temporal-liveness export should emit liveness label:\n{output}"
         );
         assert!(
-            !output.contains("termination:"),
-            "temporal-liveness fallback should not emit termination label:\n{output}"
+            output.contains("<>"),
+            "temporal-liveness export should emit eventuality operator:\n{output}"
+        );
+        assert!(
+            !output.contains("agreement:"),
+            "temporal-liveness export should not fall back to agreement:\n{output}"
+        );
+    }
+
+    #[test]
+    fn export_ta_for_program_temporal_liveness_with_unknown_field_falls_back_to_agreement() {
+        let source = r#"
+protocol ExportTemporalLivenessUnknownField {
+    params n, t;
+    resilience: n > 3*t;
+    message Ping;
+    role Replica {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Ping => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property eventual_missing: liveness {
+        forall p: Replica. <> (p.not_a_real_field == true)
+    }
+}
+"#;
+        let program =
+            tarsier_dsl::parse(source, "export_temporal_unknown_field.trs").expect("parse");
+        let ta = tarsier_ir::lowering::lower(&program).expect("lower");
+        let output = export_ta_for_program(&ta, &program);
+
+        assert!(
+            output.contains("agreement:"),
+            "invalid temporal liveness should fall back to agreement:\n{output}"
+        );
+        assert!(
+            !output.contains("liveness:"),
+            "invalid temporal liveness should not emit temporal spec:\n{output}"
+        );
+    }
+
+    #[test]
+    fn export_ta_for_program_temporal_liveness_supports_mixed_quantifier_roles() {
+        let source = r#"
+protocol ExportTemporalMixedQuantifiers {
+    params n, t;
+    resilience: n > 3*t;
+    message Ping;
+    role A {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Ping => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    role B {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Ping => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property eventual_pair: liveness {
+        forall p: A. exists q: B. <> ((p.decided == true) && (q.decided == true))
+    }
+}
+"#;
+        let program =
+            tarsier_dsl::parse(source, "export_temporal_mixed_quantifiers.trs").expect("parse");
+        let ta = tarsier_ir::lowering::lower(&program).expect("lower");
+        let output = export_ta_for_program(&ta, &program);
+
+        assert!(
+            output.contains("liveness:"),
+            "mixed-quantifier temporal export should emit liveness label:\n{output}"
+        );
+        assert!(
+            output.contains("<>"),
+            "mixed-quantifier temporal export should keep eventual operator:\n{output}"
+        );
+        assert!(
+            !output.contains("agreement:"),
+            "mixed-quantifier temporal export should not fall back:\n{output}"
+        );
+    }
+
+    #[test]
+    fn export_ta_for_program_temporal_leads_to_is_desugared_in_bymc_spec() {
+        let source = r#"
+protocol ExportTemporalLeadsTo {
+    params n, t;
+    resilience: n > 3*t;
+    message Ping;
+    role Replica {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Ping => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property progress: liveness {
+        forall p: Replica. (p.decided == false) ~> (p.decided == true)
+    }
+}
+"#;
+        let program = tarsier_dsl::parse(source, "export_temporal_leads_to.trs").expect("parse");
+        let ta = tarsier_ir::lowering::lower(&program).expect("lower");
+        let output = export_ta_for_program(&ta, &program);
+
+        assert!(
+            output.contains("liveness:"),
+            "leads-to export should emit liveness label:\n{output}"
+        );
+        assert!(
+            output.contains("[]"),
+            "leads-to export should desugar to global always form:\n{output}"
+        );
+        assert!(
+            output.contains("<>"),
+            "leads-to export should include eventuality in desugared body:\n{output}"
         );
     }
 }

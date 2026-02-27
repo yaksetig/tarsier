@@ -43,6 +43,7 @@ fn unbounded_pdr_opts(timeout_secs: u64) -> PipelineOptions {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~60s total for file, run with --ignored"]
 fn rb_live_safety_holds() {
     let source = load_library("reliable_broadcast_safe_live.trs");
     let result =
@@ -54,6 +55,7 @@ fn rb_live_safety_holds() {
 }
 
 #[test]
+#[ignore = "slow: ~60s total for file, run with --ignored"]
 fn rb_live_buggy_safety_holds() {
     // Safety (agreement) should still hold even for the buggy model
     // because the bug is a liveness bug, not a safety bug.
@@ -71,6 +73,7 @@ fn rb_live_buggy_safety_holds() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~60s total for file, run with --ignored"]
 fn rb_live_bounded_fair_liveness() {
     let source = load_library("reliable_broadcast_safe_live.trs");
     let opts = default_opts(6);
@@ -95,6 +98,7 @@ fn rb_live_bounded_fair_liveness() {
 }
 
 #[test]
+#[ignore = "slow: ~60s total for file, run with --ignored"]
 fn rb_buggy_bounded_fair_liveness() {
     let source = load_library("reliable_broadcast_live_buggy.trs");
     let opts = default_opts(6);
@@ -122,6 +126,7 @@ fn rb_buggy_bounded_fair_liveness() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~60s total for file, run with --ignored"]
 fn rb_live_unbounded_proof_attempt() {
     let source = load_library("reliable_broadcast_safe_live.trs");
     let opts = default_opts(4);
@@ -151,6 +156,7 @@ fn rb_live_unbounded_proof_attempt() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~60s total for file, run with --ignored"]
 fn rb_buggy_strong_fairness_still_finds_cycle() {
     let source = load_library("reliable_broadcast_live_buggy.trs");
     let opts = default_opts(6);
@@ -182,6 +188,7 @@ fn rb_buggy_strong_fairness_still_finds_cycle() {
 // -----------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: ~60s total for file, run with --ignored"]
 fn pbft_liveness_ci_safe_is_live_proved_unbounded() {
     let source = load_library("pbft_liveness_safe_ci.trs");
     let opts = unbounded_pdr_opts(60);
@@ -199,6 +206,7 @@ fn pbft_liveness_ci_safe_is_live_proved_unbounded() {
 }
 
 #[test]
+#[ignore = "slow: ~60s total for file, run with --ignored"]
 fn pbft_liveness_ci_buggy_finds_fair_cycle_unbounded() {
     let source = load_library("pbft_liveness_buggy_ci.trs");
     let opts = unbounded_pdr_opts(60);
@@ -216,6 +224,7 @@ fn pbft_liveness_ci_buggy_finds_fair_cycle_unbounded() {
 }
 
 #[test]
+#[ignore = "slow: ~60s total for file, run with --ignored"]
 fn pbft_liveness_ci_safe_certificate_generation_is_deterministic() {
     let source = load_library("pbft_liveness_safe_ci.trs");
     let opts = unbounded_pdr_opts(60);

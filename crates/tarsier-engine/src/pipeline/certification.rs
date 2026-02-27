@@ -1,33 +1,14 @@
 //! Certificate generation, proof bundle management.
 
-#![allow(unused_imports)]
-
-use std::collections::HashSet;
-use std::time::Instant;
-
-use tarsier_dsl::ast;
-use tarsier_ir::counter_system::CounterSystem;
-use tarsier_ir::properties::SafetyProperty;
-use tarsier_ir::threshold_automaton::ThresholdAutomaton;
-use tarsier_smt::backends::z3_backend::Z3Solver;
-use tarsier_smt::bmc::{
-    run_k_induction_with_deadline, run_pdr_with_certificate_with_deadline, KInductionResult,
-    PdrInvariantCertificate,
-};
-use tarsier_smt::encoder::encode_bmc;
-use tarsier_smt::solver::SmtSolver;
-use tarsier_smt::sorts::SmtSort;
-use tarsier_smt::terms::SmtTerm;
-
 use super::analysis::{analyze_and_constrain_committees, ensure_n_parameter};
-use super::diagnostics::{push_phase_profile, push_reduction_note};
+use super::diagnostics::push_reduction_note;
 use super::property::{
     extract_liveness_spec, extract_property, fair_liveness_target_from_spec, LivenessSpec,
 };
 use super::verification::{
-    build_fair_lasso_encoding, committee_bound_assertions, deadline_from_timeout_secs,
-    lower_with_active_controls, preflight_validate, run_bmc_with_committee_bounds,
-    run_unbounded_fair_pdr_with_certificate, FairPdrInvariantCertificate, PipelineCommand,
+    committee_bound_assertions, deadline_from_timeout_secs, lower_with_active_controls,
+    preflight_validate, run_unbounded_fair_pdr_with_certificate, FairPdrInvariantCertificate,
+    PipelineCommand,
 };
 use super::*;
 

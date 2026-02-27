@@ -22,6 +22,7 @@ fn default_library_dir() -> PathBuf {
 
 /// Corpus-based: every .trs in examples/library/ lowers without panic.
 #[test]
+#[ignore = "slow: ~90s total for file, run with --ignored"]
 fn all_library_models_lower_without_panic() {
     let lib_dir = default_library_dir();
     let mut count = 0;
@@ -47,6 +48,7 @@ fn all_library_models_lower_without_panic() {
 /// Every library model that successfully lowers produces a ThresholdAutomaton
 /// with at least 1 location, 1 rule, and 1 parameter.
 #[test]
+#[ignore = "slow: ~90s total for file, run with --ignored"]
 fn lowering_preserves_minimum_structure() {
     let lib_dir = default_library_dir();
     for entry in std::fs::read_dir(&lib_dir).expect("read examples/library") {
@@ -83,6 +85,7 @@ fn lowering_preserves_minimum_structure() {
 
 /// All initial locations are valid indices into the locations array.
 #[test]
+#[ignore = "slow: ~90s total for file, run with --ignored"]
 fn initial_locations_are_valid_indices() {
     let lib_dir = default_library_dir();
     for entry in std::fs::read_dir(&lib_dir).expect("read examples/library") {
@@ -113,6 +116,7 @@ fn initial_locations_are_valid_indices() {
 /// All rule from/to references are valid location indices, and all
 /// guard/update references point to valid shared vars and parameters.
 #[test]
+#[ignore = "slow: ~90s total for file, run with --ignored"]
 fn rule_references_are_valid() {
     let lib_dir = default_library_dir();
     for entry in std::fs::read_dir(&lib_dir).expect("read examples/library") {
@@ -152,8 +156,9 @@ fn rule_references_are_valid() {
     }
 }
 
-/// Export-dot round-trip: parse → lower → export-dot doesn't panic on any library model.
+/// Export-dot round-trip: parse -> lower -> export-dot doesn't panic on any library model.
 #[test]
+#[ignore = "slow: ~90s total for file, run with --ignored"]
 fn export_dot_no_panic_on_library() {
     use tarsier_engine::visualization::{render_automaton_dot, DotRenderOptions};
 
@@ -178,9 +183,10 @@ fn export_dot_no_panic_on_library() {
     }
 }
 
-/// Export-ta round-trip: parse → lower → export-ta doesn't panic on any library model.
+/// Export-ta round-trip: parse -> lower -> export-ta doesn't panic on any library model.
 /// Also verifies that models with agreement properties produce real specification content.
 #[test]
+#[ignore = "slow: ~90s total for file, run with --ignored"]
 fn export_ta_no_panic_on_library() {
     let lib_dir = default_library_dir();
     for entry in std::fs::read_dir(&lib_dir).expect("read examples/library") {

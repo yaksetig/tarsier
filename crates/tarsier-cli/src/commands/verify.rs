@@ -366,6 +366,42 @@ pub(crate) fn fair_liveness_result_kind(result: &FairLivenessResult) -> &'static
     }
 }
 
+pub(crate) fn liveness_result_details(result: &LivenessResult) -> Value {
+    match result {
+        LivenessResult::Live { depth_checked } => {
+            json!({"depth_checked": depth_checked})
+        }
+        LivenessResult::NotLive { trace } => json!({
+            "trace_len": trace.steps.len(),
+            "trace": trace_json(trace),
+        }),
+        LivenessResult::Unknown { reason } => {
+            json!({"reason": reason})
+        }
+    }
+}
+
+pub(crate) fn fair_liveness_result_details(result: &FairLivenessResult) -> Value {
+    match result {
+        FairLivenessResult::NoFairCycleUpTo { depth_checked } => {
+            json!({"depth_checked": depth_checked})
+        }
+        FairLivenessResult::FairCycleFound {
+            depth,
+            loop_start,
+            trace,
+        } => json!({
+            "depth": depth,
+            "loop_start": loop_start,
+            "trace_len": trace.steps.len(),
+            "trace": trace_json(trace),
+        }),
+        FairLivenessResult::Unknown { reason } => {
+            json!({"reason": reason})
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions — round-sweep support
 // ---------------------------------------------------------------------------
@@ -1662,8 +1698,10 @@ pub(crate) fn run_verify_command(
     cegar_iters: usize,
     cegar_report_out: Option<PathBuf>,
     portfolio: bool,
+    format: String,
     cli_network_mode: CliNetworkSemanticsMode,
 ) -> miette::Result<()> {
+    let output_format = parse_output_format(&format);
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
     let soundness_mode = parse_soundness_mode(&soundness);
@@ -1731,17 +1769,40 @@ pub(crate) fn run_verify_command(
 
         let (final_result, portfolio_details) =
             merge_portfolio_verify_reports(z3_result, cvc5_result);
-        println!("{final_result}");
-        for (label, solver_diag) in [("z3", &z3_diag), ("cvc5", &cvc5_diag)] {
-            if let Some(d) = solver_diag {
-                if let Some(opt) = render_optimization_summary(d) {
-                    eprintln!("[{label}] {opt}");
-                }
-                if let Some(fb) = render_fallback_summary(d) {
-                    eprintln!("[{label}] {fb}");
-                }
-                if let Some(pp) = render_phase_profile_summary(d) {
-                    eprintln!("[{label}] {pp}");
+        match output_format {
+            OutputFormat::Json => {
+                let artifact = json!({
+                    "schema_version": 1,
+                    "file": filename,
+                    "result": verification_result_kind(&final_result),
+                    "details": verification_result_details(&final_result),
+                    "output": format!("{final_result}"),
+                    "portfolio": portfolio_details,
+                    "network_faithfulness": network_faithfulness,
+                    "abstractions": {
+                        "z3": z3_diag.as_ref().map(run_diagnostics_details),
+                        "cvc5": cvc5_diag.as_ref().map(run_diagnostics_details),
+                    },
+                });
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&artifact).into_diagnostic()?
+                );
+            }
+            OutputFormat::Text => {
+                println!("{final_result}");
+                for (label, solver_diag) in [("z3", &z3_diag), ("cvc5", &cvc5_diag)] {
+                    if let Some(d) = solver_diag {
+                        if let Some(opt) = render_optimization_summary(d) {
+                            eprintln!("[{label}] {opt}");
+                        }
+                        if let Some(fb) = render_fallback_summary(d) {
+                            eprintln!("[{label}] {fb}");
+                        }
+                        if let Some(pp) = render_phase_profile_summary(d) {
+                            eprintln!("[{label}] {pp}");
+                        }
+                    }
                 }
             }
         }
@@ -1759,7 +1820,9 @@ pub(crate) fn run_verify_command(
                 },
             });
             write_json_artifact(&out, &artifact)?;
-            println!("Portfolio CEGAR report written to {}", out.display());
+            if matches!(output_format, OutputFormat::Text) {
+                println!("Portfolio CEGAR report written to {}", out.display());
+            }
         }
     } else {
         match tarsier_engine::pipeline::verify_with_cegar_report(
@@ -1770,15 +1833,35 @@ pub(crate) fn run_verify_command(
         ) {
             Ok(report) => {
                 let diagnostics = take_run_diagnostics();
-                println!("{}", report.final_result);
-                if let Some(opt) = render_optimization_summary(&diagnostics) {
-                    eprintln!("{opt}");
-                }
-                if let Some(fb) = render_fallback_summary(&diagnostics) {
-                    eprintln!("{fb}");
-                }
-                if let Some(pp) = render_phase_profile_summary(&diagnostics) {
-                    eprintln!("{pp}");
+                match output_format {
+                    OutputFormat::Json => {
+                        let artifact = json!({
+                            "schema_version": 1,
+                            "file": filename,
+                            "result": verification_result_kind(&report.final_result),
+                            "details": verification_result_details(&report.final_result),
+                            "output": format!("{}", report.final_result),
+                            "cegar": cegar_report_details(&report),
+                            "network_faithfulness": network_faithfulness,
+                            "abstractions": run_diagnostics_details(&diagnostics),
+                        });
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&artifact).into_diagnostic()?
+                        );
+                    }
+                    OutputFormat::Text => {
+                        println!("{}", report.final_result);
+                        if let Some(opt) = render_optimization_summary(&diagnostics) {
+                            eprintln!("{opt}");
+                        }
+                        if let Some(fb) = render_fallback_summary(&diagnostics) {
+                            eprintln!("{fb}");
+                        }
+                        if let Some(pp) = render_phase_profile_summary(&diagnostics) {
+                            eprintln!("{pp}");
+                        }
+                    }
                 }
                 if let Some(out) = cegar_report_out {
                     let artifact = json!({
@@ -1791,11 +1874,21 @@ pub(crate) fn run_verify_command(
                         "abstractions": run_diagnostics_details(&diagnostics),
                     });
                     write_json_artifact(&out, &artifact)?;
-                    println!("CEGAR report written to {}", out.display());
+                    if matches!(output_format, OutputFormat::Text) {
+                        println!("CEGAR report written to {}", out.display());
+                    }
                 }
             }
             Err(e) => {
-                eprintln!("Error: {e}");
+                match output_format {
+                    OutputFormat::Json => {
+                        let err = json!({"error": e.to_string()});
+                        println!("{}", serde_json::to_string_pretty(&err).into_diagnostic()?);
+                    }
+                    OutputFormat::Text => {
+                        eprintln!("Error: {e}");
+                    }
+                }
                 std::process::exit(1);
             }
         }
@@ -1924,6 +2017,7 @@ pub(crate) fn run_round_sweep_command(
 ///
 /// Checks bounded liveness: whether all processes satisfy the liveness target
 /// by the given depth.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_liveness_command(
     file: PathBuf,
     solver: String,
@@ -1931,11 +2025,13 @@ pub(crate) fn run_liveness_command(
     timeout: u64,
     soundness: String,
     dump_smt: Option<String>,
+    format: String,
     cli_network_mode: CliNetworkSemanticsMode,
 ) -> miette::Result<()> {
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
     let soundness_mode = parse_soundness_mode(&soundness);
+    let output_format = parse_output_format(&format);
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
 
     let options = PipelineOptions {
@@ -1948,11 +2044,34 @@ pub(crate) fn run_liveness_command(
     };
 
     match tarsier_engine::pipeline::check_liveness(&source, &filename, &options) {
-        Ok(result) => {
-            println!("{result}");
-        }
+        Ok(result) => match output_format {
+            OutputFormat::Json => {
+                let artifact = json!({
+                    "schema_version": 1,
+                    "file": filename,
+                    "result": liveness_result_kind(&result),
+                    "details": liveness_result_details(&result),
+                    "output": format!("{result}"),
+                });
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&artifact).into_diagnostic()?
+                );
+            }
+            OutputFormat::Text => {
+                println!("{result}");
+            }
+        },
         Err(e) => {
-            eprintln!("Error: {e}");
+            match output_format {
+                OutputFormat::Json => {
+                    let err = json!({"error": e.to_string()});
+                    println!("{}", serde_json::to_string_pretty(&err).into_diagnostic()?);
+                }
+                OutputFormat::Text => {
+                    eprintln!("Error: {e}");
+                }
+            }
             std::process::exit(1);
         }
     }
@@ -1973,11 +2092,13 @@ pub(crate) fn run_fair_liveness_command(
     soundness: String,
     fairness: String,
     portfolio: bool,
+    format: String,
     cli_network_mode: CliNetworkSemanticsMode,
 ) -> miette::Result<()> {
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
     let soundness_mode = parse_soundness_mode(&soundness);
+    let output_format = parse_output_format(&format);
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
 
     let options = make_options(parse_solver_choice(&solver), depth, timeout, soundness_mode);
@@ -2021,20 +2142,62 @@ pub(crate) fn run_fair_liveness_command(
             Err(_) => Err("thread panicked".into()),
         };
         let (result, details) = merge_portfolio_fair_liveness_results(z3_result, cvc5_result);
-        println!("{result}");
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({"portfolio": details})).into_diagnostic()?
-        );
+        match output_format {
+            OutputFormat::Json => {
+                let artifact = json!({
+                    "schema_version": 1,
+                    "file": filename,
+                    "result": fair_liveness_result_kind(&result),
+                    "details": fair_liveness_result_details(&result),
+                    "output": format!("{result}"),
+                    "portfolio": details,
+                });
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&artifact).into_diagnostic()?
+                );
+            }
+            OutputFormat::Text => {
+                println!("{result}");
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({"portfolio": details}))
+                        .into_diagnostic()?
+                );
+            }
+        }
     } else {
         match tarsier_engine::pipeline::check_fair_liveness_with_mode(
             &source, &filename, &options, fairness,
         ) {
-            Ok(result) => {
-                println!("{result}");
-            }
+            Ok(result) => match output_format {
+                OutputFormat::Json => {
+                    let artifact = json!({
+                        "schema_version": 1,
+                        "file": filename,
+                        "result": fair_liveness_result_kind(&result),
+                        "details": fair_liveness_result_details(&result),
+                        "output": format!("{result}"),
+                    });
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&artifact).into_diagnostic()?
+                    );
+                }
+                OutputFormat::Text => {
+                    println!("{result}");
+                }
+            },
             Err(e) => {
-                eprintln!("Error: {e}");
+                match output_format {
+                    OutputFormat::Json => {
+                        let err = json!({"error": e.to_string()});
+                        println!("{}", serde_json::to_string_pretty(&err).into_diagnostic()?);
+                    }
+                    OutputFormat::Text => {
+                        eprintln!("Error: {e}");
+                    }
+                }
                 std::process::exit(1);
             }
         }

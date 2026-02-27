@@ -224,6 +224,10 @@ enum Commands {
         /// Run Z3 and cvc5 in parallel and combine results conservatively
         #[arg(long, default_value_t = false)]
         portfolio: bool,
+
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Sweep round/view upper bounds and report verdict convergence (advanced)
@@ -318,6 +322,10 @@ enum Commands {
         /// Run Z3 and cvc5 in parallel and combine proof outcomes conservatively
         #[arg(long, default_value_t = false)]
         portfolio: bool,
+
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Prove safety via round-erasure over-approximation (advanced)
@@ -400,6 +408,10 @@ enum Commands {
         /// Run Z3 and cvc5 in parallel and combine outcomes conservatively
         #[arg(long, default_value_t = false)]
         portfolio: bool,
+
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Prove fair-liveness via round-erasure over-approximation (advanced)
@@ -528,6 +540,10 @@ enum Commands {
         /// Dump SMT encoding to file
         #[arg(long)]
         dump_smt: Option<String>,
+
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Search for bounded fair non-termination lassos
@@ -558,6 +574,10 @@ enum Commands {
         /// Run Z3 and cvc5 in parallel and combine outcomes conservatively
         #[arg(long, default_value_t = false)]
         portfolio: bool,
+
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Visualize counterexample traces from a failing analysis run
@@ -989,6 +1009,45 @@ enum Commands {
         /// Shell to generate completions for (bash, zsh, fish, elvish, powershell)
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+    },
+
+    /// Watch a .trs file and re-run verification on changes
+    #[command(display_order = 5)]
+    Watch {
+        /// Path to the .trs protocol file
+        file: PathBuf,
+
+        /// Solver backend to use
+        #[arg(long, default_value = "z3")]
+        solver: String,
+
+        /// Maximum induction depth k to try
+        #[arg(long, default_value_t = 10)]
+        k: usize,
+
+        /// Timeout in seconds
+        #[arg(long, default_value_t = 300)]
+        timeout: u64,
+
+        /// Soundness profile: strict (recommended) or permissive (prototype mode)
+        #[arg(long, default_value = "strict")]
+        soundness: String,
+
+        /// Unbounded proof engine: kinduction or pdr (IC3/PDR)
+        #[arg(long, default_value = "kinduction")]
+        engine: String,
+
+        /// Fairness mode used when auto-dispatching to liveness proof: weak | strong
+        #[arg(long, default_value = "weak")]
+        fairness: String,
+
+        /// Run Z3 and cvc5 in parallel and combine proof outcomes conservatively
+        #[arg(long, default_value_t = false)]
+        portfolio: bool,
+
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 
     /// Generate a machine-readable trust report with trust-boundary sections
@@ -1451,6 +1510,7 @@ fn main() -> miette::Result<()> {
             cegar_iters,
             cegar_report_out,
             portfolio,
+            format,
         } => {
             commands::verify::run_verify_command(
                 file,
@@ -1462,6 +1522,7 @@ fn main() -> miette::Result<()> {
                 cegar_iters,
                 cegar_report_out,
                 portfolio,
+                format,
                 cli_network_mode,
             )?;
         }
@@ -1508,6 +1569,7 @@ fn main() -> miette::Result<()> {
             cegar_iters,
             cegar_report_out,
             portfolio,
+            format,
         } => {
             commands::prove::run_prove_command(
                 file,
@@ -1521,6 +1583,7 @@ fn main() -> miette::Result<()> {
                 cegar_iters,
                 cegar_report_out,
                 portfolio,
+                format,
                 cli_network_mode,
             )?;
         }
@@ -1583,6 +1646,7 @@ fn main() -> miette::Result<()> {
             cegar_iters,
             cegar_report_out,
             portfolio,
+            format,
         } => {
             commands::prove::run_prove_fair_command(
                 file,
@@ -1595,6 +1659,7 @@ fn main() -> miette::Result<()> {
                 cegar_iters,
                 cegar_report_out,
                 portfolio,
+                format,
                 cli_network_mode,
             )?;
         }
@@ -1627,6 +1692,7 @@ fn main() -> miette::Result<()> {
             timeout,
             soundness,
             dump_smt,
+            format,
         } => {
             commands::verify::run_liveness_command(
                 file,
@@ -1635,6 +1701,7 @@ fn main() -> miette::Result<()> {
                 timeout,
                 soundness,
                 dump_smt,
+                format,
                 cli_network_mode,
             )?;
         }
@@ -1646,6 +1713,7 @@ fn main() -> miette::Result<()> {
             soundness,
             fairness,
             portfolio,
+            format,
         } => {
             commands::verify::run_fair_liveness_command(
                 file,
@@ -1655,6 +1723,7 @@ fn main() -> miette::Result<()> {
                 soundness,
                 fairness,
                 portfolio,
+                format,
                 cli_network_mode,
             )?;
         }
@@ -1709,6 +1778,30 @@ fn main() -> miette::Result<()> {
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             clap_complete::generate(shell, &mut cmd, "tarsier", &mut std::io::stdout());
+        }
+        Commands::Watch {
+            file,
+            solver,
+            k,
+            timeout,
+            soundness,
+            engine,
+            fairness,
+            portfolio,
+            format,
+        } => {
+            commands::watch::run_watch_command(
+                file,
+                solver,
+                k,
+                timeout,
+                soundness,
+                engine,
+                fairness,
+                portfolio,
+                format,
+                cli_network_mode,
+            )?;
         }
         #[cfg(feature = "governance")]
         Commands::CertSuite {

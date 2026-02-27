@@ -1,0 +1,81 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: bench-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            bench-${{ runner.os }}-cargo-
+
+      # Run all four criterion benchmark suites with bencher-compatible output.
+      # Each suite writes its output to a separate file, then we concatenate
+      # them into a single results file that github-action-benchmark can parse.
+      - name: Run benchmarks
+        run: |
+          mkdir -p target/criterion-results
+          cargo bench --bench parser_bench   -- --output-format bencher | tee target/criterion-results/parser.txt
+          cargo bench --bench lowering_bench  -- --output-format bencher | tee target/criterion-results/lowering.txt
+          cargo bench --bench encoder_bench   -- --output-format bencher | tee target/criterion-results/encoder.txt
+          cargo bench --bench engine_bench    -- --output-format bencher | tee target/criterion-results/engine.txt
+          cat target/criterion-results/*.txt > target/criterion-results/all.txt
+
+      # Upload raw benchmark output as an artifact for manual inspection.
+      - name: Upload benchmark results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-results
+          path: target/criterion-results/
+          retention-days: 90
+
+      # Use github-action-benchmark to track results over time.
+      # On pushes to main: commit the results to gh-pages (establishing baselines).
+      # On PRs: compare against the baseline and comment if regressions exceed 10%.
+      - name: Store and compare benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Tarsier Criterion Benchmarks
+          tool: cargo
+          output-file-path: target/criterion-results/all.txt
+          # On main pushes, persist results to gh-pages for tracking.
+          auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # On PRs, post a comment when performance regresses.
+          comment-on-alert: ${{ github.event_name == 'pull_request' }}
+          # Fail the workflow if any benchmark regresses by more than 15%.
+          alert-threshold: "115%"
+          fail-on-alert: true
+          # Comment threshold: post a PR comment for regressions above 10%.
+          comment-always: false
+          alert-comment-cc-users: ""
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench

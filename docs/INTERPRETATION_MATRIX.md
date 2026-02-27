@@ -158,18 +158,21 @@ when received distinct >= 2*t+1 Prepare => { goto committed; }
 ## Cross-Tool Comparison
 
 Tarsier's `export-ta` command exports threshold automata in ByMC `.ta` format,
-including real specification sections derived from the protocol's safety property:
+including real specification sections derived from protocol properties:
 
 - **Agreement (single decision value):** Stability spec — `[](loc_d > 0 -> [](loc_d >= 0))`.
 - **Agreement (multiple decision values):** Mutual exclusion — `[]((loc_a > 0 && loc_b > 0) -> false)` for each conflicting pair.
 - **Invariant:** Bad-set mutual exclusion — `[]((loc_i > 0 && loc_j > 0 && ...) -> false)`.
 - **Termination (non-temporal liveness target):** Eventual all-goal occupancy —
   `<>((loc_goal_1 + ... + loc_goal_k) == N)`.
+- **Temporal liveness:** LTL formula exported as a `liveness:` specification with
+  quantified state predicates concretized to location-occupancy formulas.
 
 For `export-ta`, property selection is program-aware:
 - If a safety/invariant/agreement property is declared, export that property.
 - Else if a liveness property is a non-temporal state target (`forall p: Role. predicate(p)`), export termination.
-- Else (full temporal liveness), fall back to structural agreement because ByMC `.ta` export currently models safety-style specs plus termination goal reachability.
+- Else if a liveness property is temporal, export temporal `liveness:` specs.
+- If temporal liveness cannot be concretized (for example due to invalid field references), the exporter falls back to structural agreement with a warning.
 
 The cross-tool benchmark runner (`benchmarks/cross_tool_runner.py`) executes
 normalized scenarios across Tarsier, ByMC, and SPIN, producing an

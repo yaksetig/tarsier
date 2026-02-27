@@ -78,6 +78,8 @@ pub enum SandboxError {
     InputTooLarge { size: u64, limit: u64 },
     #[error("sandbox already activated")]
     AlreadyActive,
+    #[error("sandbox activation timestamp not set")]
+    NotActivated,
     #[error("sandbox memory budget exceeded: RSS {rss_mb} MiB > limit {limit_mb} MiB")]
     MemoryBudgetExceeded { rss_mb: u64, limit_mb: u64 },
     #[error("sandbox timeout exceeded after {elapsed_secs}s (limit: {limit_secs}s)")]
@@ -127,7 +129,7 @@ impl SandboxGuard {
         SANDBOX_ACTIVE.store(true, Ordering::Release);
         let _ = ACTIVE_CONFIG.set(config.clone());
         let _ = ACTIVATED_AT.set(Instant::now());
-        let activated_at = *ACTIVATED_AT.get().unwrap();
+        let activated_at = *ACTIVATED_AT.get().ok_or(SandboxError::NotActivated)?;
 
         Ok(Self {
             config,

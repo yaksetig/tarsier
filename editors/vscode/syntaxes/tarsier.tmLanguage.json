@@ -5,14 +5,24 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
-    { "include": "#keywords" },
+    { "include": "#phase-declaration" },
+    { "include": "#role-declaration" },
+    { "include": "#message-declaration" },
+    { "include": "#enum-declaration" },
+    { "include": "#protocol-declaration" },
     { "include": "#property-keywords" },
+    { "include": "#control-keywords" },
+    { "include": "#declaration-keywords" },
+    { "include": "#action-keywords" },
+    { "include": "#guard-keywords" },
     { "include": "#temporal-operators" },
     { "include": "#logical-operators" },
     { "include": "#comparison-operators" },
-    { "include": "#numbers" },
+    { "include": "#types" },
     { "include": "#booleans" },
-    { "include": "#types" }
+    { "include": "#numbers" },
+    { "include": "#parameter-references" },
+    { "include": "#qualified-identifiers" }
   ],
   "repository": {
     "comments": {
@@ -24,7 +34,10 @@
         {
           "name": "comment.block.tarsier",
           "begin": "/\\*",
-          "end": "\\*/"
+          "end": "\\*/",
+          "captures": {
+            "0": { "name": "punctuation.definition.comment.tarsier" }
+          }
         }
       ]
     },
@@ -33,15 +46,80 @@
         {
           "name": "string.quoted.double.tarsier",
           "begin": "\"",
-          "end": "\""
+          "end": "\"",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.tarsier" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.tarsier" }
+          }
         }
       ]
     },
-    "keywords": {
+    "protocol-declaration": {
+      "match": "\\b(protocol)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.other.protocol.tarsier" },
+        "2": { "name": "entity.name.type.protocol.tarsier" }
+      }
+    },
+    "phase-declaration": {
+      "match": "\\b(phase)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.other.phase.tarsier" },
+        "2": { "name": "entity.name.function.phase.tarsier" }
+      }
+    },
+    "role-declaration": {
+      "match": "\\b(role)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.other.role.tarsier" },
+        "2": { "name": "entity.name.type.role.tarsier" }
+      }
+    },
+    "message-declaration": {
+      "match": "\\b(message)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.other.message.tarsier" },
+        "2": { "name": "entity.name.type.message.tarsier" }
+      }
+    },
+    "enum-declaration": {
+      "match": "\\b(enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.other.enum.tarsier" },
+        "2": { "name": "entity.name.type.enum.tarsier" }
+      }
+    },
+    "control-keywords": {
       "patterns": [
         {
           "name": "keyword.control.tarsier",
-          "match": "\\b(protocol|parameters|params|resilience|adversary|pacemaker|identity|channel|equivocation|committee|message|role|phase|when|received|send|goto|decide|init|var|enum|certificate|threshold_signature|form|lock|justify|has|import|module|interface|assumes|guarantees|from|to|signer|conflicts|distinct)\\b"
+          "match": "\\b(goto|on|when|init|received|decide)\\b"
+        }
+      ]
+    },
+    "declaration-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.other.tarsier",
+          "match": "\\b(protocol|parameters|params|resilience|adversary|pacemaker|identity|channel|equivocation|committee|message|role|phase|var|enum|module|import|interface|assumes|guarantees|from|to|signer|conflicts|certificate|threshold_signature|network)\\b"
+        }
+      ]
+    },
+    "action-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.action.tarsier",
+          "match": "\\b(send|goto|set|form|lock|justify)\\b"
+        }
+      ]
+    },
+    "guard-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.guard.tarsier",
+          "match": "\\b(threshold|has|timeout|distinct)\\b"
         }
       ]
     },
@@ -49,7 +127,7 @@
       "patterns": [
         {
           "name": "keyword.other.property.tarsier",
-          "match": "\\b(property|agreement|validity|safety|invariant|liveness|forall|exists)\\b"
+          "match": "\\b(property|safety|liveness|agreement|validity|invariant|forall|exists)\\b"
         }
       ]
     },
@@ -73,7 +151,7 @@
       "patterns": [
         {
           "name": "keyword.operator.logical.tarsier",
-          "match": "(&&|\\|\\||==>|<=>|!)"
+          "match": "(&&|\\|\\||==>|<=>|!(?!=))"
         }
       ]
     },
@@ -81,7 +159,27 @@
       "patterns": [
         {
           "name": "keyword.operator.comparison.tarsier",
-          "match": "(>=|<=|==|!=|>|<|=>)"
+          "match": "(>=|<=|==|!=|=>|>|<)"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.tarsier",
+          "match": "\\b(int|nat|bool|shared)\\b"
+        },
+        {
+          "name": "support.type.adversary.tarsier",
+          "match": "\\b(byzantine|crash|omission|authenticated|unauthenticated|signed|unsigned|weak|strong|partial_synchrony|asynchronous|full|none|exclusive|allow)\\b"
+        }
+      ]
+    },
+    "booleans": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.tarsier",
+          "match": "\\b(true|false)\\b"
         }
       ]
     },
@@ -97,21 +195,17 @@
         }
       ]
     },
-    "booleans": {
-      "patterns": [
-        {
-          "name": "constant.language.boolean.tarsier",
-          "match": "\\b(true|false)\\b"
-        }
-      ]
+    "parameter-references": {
+      "comment": "Parameter names used in threshold expressions like 2*t+1 or n > 3*t",
+      "match": "\\b(n|t|f|b)\\b(?=\\s*[;,><=!*+\\-\\)\\}]|\\s*$)",
+      "name": "variable.parameter.tarsier"
     },
-    "types": {
-      "patterns": [
-        {
-          "name": "support.type.tarsier",
-          "match": "\\b(nat|int|bool|byzantine|crash|omission|authenticated|unauthenticated|signed|unsigned|weak|strong|partial_synchrony|asynchronous|full|none|exclusive|allow)\\b"
-        }
-      ]
+    "qualified-identifiers": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "variable.other.object.tarsier" },
+        "2": { "name": "variable.other.property.tarsier" }
+      }
     }
   }
 }

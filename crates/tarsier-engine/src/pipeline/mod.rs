@@ -1,8 +1,10 @@
 #![allow(clippy::result_large_err)]
+// Submodules use `use super::*` to access these imports; the unused_imports lint
+// fires because the items are not referenced directly in this file.
 #![allow(unused_imports)]
 
 use serde::Serialize;
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::{Mutex, OnceLock};
@@ -1511,15 +1513,15 @@ protocol PorDominance {
     }
 
     #[test]
-    fn fragment_rejects_liveness_wrong_quantifier_count() {
+    fn fragment_allows_liveness_with_unused_universal_extra_quantifier() {
         let prop = make_property_decl(
-            "bad_live_q",
+            "live_unused_q",
             ast::PropertyKind::Liveness,
             vec![forall_binding("p", "R"), forall_binding("q", "R")],
             ast::FormulaExpr::Eventually(Box::new(eq_comparison("p", "decided", true))),
         );
-        let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(err.message.contains("exactly 1 quantifier"));
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
     }
 
     #[test]
@@ -1803,15 +1805,229 @@ protocol Frag {
     }
 
     #[test]
-    fn ltl_failfast_multiple_quantifiers_in_liveness() {
+    fn ltl_allows_multiple_quantifiers_when_only_one_is_referenced() {
         let prop = make_property_decl(
-            "bad_multi_q_live",
+            "multi_q_live",
             ast::PropertyKind::Liveness,
             vec![forall_binding("p", "R"), forall_binding("q", "R")],
             ast::FormulaExpr::Eventually(Box::new(eq_comparison("p", "x", true))),
         );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_multiple_referenced_quantified_variables_with_temporal_operators() {
+        let prop = make_property_decl(
+            "multi_ref_live",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), forall_binding("q", "R")],
+            ast::FormulaExpr::Eventually(Box::new(ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ))),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_multi_referenced_quantifiers_for_propositional_liveness() {
+        let prop = make_property_decl(
+            "multi_ref_prop_live",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), forall_binding("q", "R")],
+            ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_multi_referenced_quantifiers_with_mixed_quantifier_kinds() {
+        let prop = make_property_decl(
+            "mixed_quantifier_multi_ref",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), exists_binding("q", "R")],
+            ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_temporal_multi_ref_with_mixed_quantifier_kinds() {
+        let prop = make_property_decl(
+            "mixed_quantifier_temporal_multi_ref",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), exists_binding("q", "R")],
+            ast::FormulaExpr::Eventually(Box::new(ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ))),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_temporal_multi_ref_with_exists_first_as_existential_fragment() {
+        let prop = make_property_decl(
+            "mixed_quantifier_temporal_exists_first",
+            ast::PropertyKind::Liveness,
+            vec![exists_binding("p", "R"), forall_binding("q", "R")],
+            ast::FormulaExpr::Eventually(Box::new(ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ))),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::ExistentialTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_multi_referenced_quantifiers_over_different_roles() {
+        let prop = make_property_decl(
+            "mixed_role_multi_ref",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), forall_binding("q", "S")],
+            ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_temporal_multi_ref_with_different_roles() {
+        let prop = make_property_decl(
+            "mixed_role_temporal_multi_ref",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), forall_binding("q", "S")],
+            ast::FormulaExpr::Eventually(Box::new(ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ))),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_forall_multi_referenced_disjunction() {
+        let prop = make_property_decl(
+            "forall_multi_ref_or",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), forall_binding("q", "R")],
+            ast::FormulaExpr::Or(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_exists_multi_referenced_conjunction() {
+        let prop = make_property_decl(
+            "exists_multi_ref_and",
+            ast::PropertyKind::Liveness,
+            vec![exists_binding("p", "R"), exists_binding("q", "R")],
+            ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::ExistentialTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_exists_multi_referenced_disjunction() {
+        let prop = make_property_decl(
+            "exists_multi_ref_or",
+            ast::PropertyKind::Liveness,
+            vec![exists_binding("p", "R"), exists_binding("q", "R")],
+            ast::FormulaExpr::Or(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ),
+        );
+        let frag = classify_property_fragment(&prop).unwrap();
+        assert_eq!(frag, QuantifiedFragment::ExistentialTemporal);
+    }
+
+    #[test]
+    fn ltl_allows_multi_referenced_not_implies_iff_shapes() {
+        let not_prop = make_property_decl(
+            "multi_ref_not",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), forall_binding("q", "R")],
+            ast::FormulaExpr::Not(Box::new(ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ))),
+        );
+        assert_eq!(
+            classify_property_fragment(&not_prop).unwrap(),
+            QuantifiedFragment::UniversalTemporal
+        );
+
+        let implies_prop = make_property_decl(
+            "multi_ref_implies",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), forall_binding("q", "R")],
+            ast::FormulaExpr::Implies(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ),
+        );
+        assert_eq!(
+            classify_property_fragment(&implies_prop).unwrap(),
+            QuantifiedFragment::UniversalTemporal
+        );
+
+        let iff_prop = make_property_decl(
+            "multi_ref_iff",
+            ast::PropertyKind::Liveness,
+            vec![forall_binding("p", "R"), forall_binding("q", "R")],
+            ast::FormulaExpr::Iff(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ),
+        );
+        assert_eq!(
+            classify_property_fragment(&iff_prop).unwrap(),
+            QuantifiedFragment::UniversalTemporal
+        );
+    }
+
+    #[test]
+    fn ltl_rejects_multi_referenced_quantifiers_with_unreferenced_existential_extra() {
+        let prop = make_property_decl(
+            "multi_ref_with_extra_exists",
+            ast::PropertyKind::Liveness,
+            vec![
+                forall_binding("p", "R"),
+                forall_binding("q", "R"),
+                exists_binding("z", "R"),
+            ],
+            ast::FormulaExpr::And(
+                Box::new(eq_comparison("p", "x", true)),
+                Box::new(eq_comparison("q", "x", true)),
+            ),
+        );
         let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(err.message.contains("exactly 1 quantifier"));
+        assert!(err.message.contains("unsupported existential extras"));
     }
 
     #[test]
@@ -1823,7 +2039,7 @@ protocol Frag {
             eq_comparison("p", "x", true),
         );
         let err = classify_property_fragment(&prop).unwrap_err();
-        assert!(err.message.contains("exactly 1 quantifier"));
+        assert!(err.message.contains("at least 1 quantifier"));
     }
 
     #[test]
