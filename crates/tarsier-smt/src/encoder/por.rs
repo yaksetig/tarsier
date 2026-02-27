@@ -66,7 +66,10 @@ pub(super) fn normalized_lc_terms(lc: &LinearCombination) -> Vec<(i64, usize)> {
     terms
 }
 
-pub(super) fn comparable_lc_constants(lhs: &LinearCombination, rhs: &LinearCombination) -> Option<(i64, i64)> {
+pub(super) fn comparable_lc_constants(
+    lhs: &LinearCombination,
+    rhs: &LinearCombination,
+) -> Option<(i64, i64)> {
     let lhs_terms = normalized_lc_terms(lhs);
     let rhs_terms = normalized_lc_terms(rhs);
     if lhs_terms == rhs_terms {
@@ -76,7 +79,12 @@ pub(super) fn comparable_lc_constants(lhs: &LinearCombination, rhs: &LinearCombi
     }
 }
 
-pub(super) fn threshold_op_entails(lhs_op: CmpOp, lhs_const: i64, rhs_op: CmpOp, rhs_const: i64) -> bool {
+pub(super) fn threshold_op_entails(
+    lhs_op: CmpOp,
+    lhs_const: i64,
+    rhs_op: CmpOp,
+    rhs_const: i64,
+) -> bool {
     match (lhs_op, rhs_op) {
         (CmpOp::Eq, CmpOp::Eq) => lhs_const == rhs_const,
         (CmpOp::Eq, CmpOp::Ge) => lhs_const >= rhs_const,
@@ -271,7 +279,10 @@ pub(super) fn compute_por_rule_pruning(ta: &ThresholdAutomaton) -> PorRulePrunin
 
 const DEFAULT_PROCESS_ID_VAR: &str = "pid";
 
-pub(super) fn role_process_identity_var<'a>(ta: &'a ThresholdAutomaton, role: &str) -> Option<&'a str> {
+pub(super) fn role_process_identity_var<'a>(
+    ta: &'a ThresholdAutomaton,
+    role: &str,
+) -> Option<&'a str> {
     ta.role_identities
         .get(role)
         .and_then(|cfg| {
@@ -291,7 +302,9 @@ pub(super) fn location_has_valid_process_identity(ta: &ThresholdAutomaton, loc: 
     matches!(loc.local_vars.get(pid_var), Some(LocalValue::Int(pid)) if *pid >= 0)
 }
 
-pub(super) fn process_identity_buckets(ta: &ThresholdAutomaton) -> HashMap<(String, i64), Vec<usize>> {
+pub(super) fn process_identity_buckets(
+    ta: &ThresholdAutomaton,
+) -> HashMap<(String, i64), Vec<usize>> {
     let mut buckets: HashMap<(String, i64), Vec<usize>> = HashMap::new();
     for (loc_id, loc) in ta.locations.iter().enumerate() {
         let Some(pid_var) = role_process_identity_var(ta, &loc.role) else {
@@ -325,7 +338,9 @@ pub(super) fn assert_process_identity_uniqueness(
     }
 }
 
-pub(super) fn message_family_and_recipient_from_counter_name(name: &str) -> Option<(String, Option<String>)> {
+pub(super) fn message_family_and_recipient_from_counter_name(
+    name: &str,
+) -> Option<(String, Option<String>)> {
     let stripped = name.strip_prefix("cnt_")?;
     let (family_part, recipient) = match stripped.split_once('@') {
         Some((family, tail)) => {
@@ -347,7 +362,9 @@ pub(super) fn message_family_and_recipient_from_counter_name(name: &str) -> Opti
     Some((family, recipient))
 }
 
-pub(super) fn message_family_and_sender_from_counter_name(name: &str) -> Option<(String, Option<String>)> {
+pub(super) fn message_family_and_sender_from_counter_name(
+    name: &str,
+) -> Option<(String, Option<String>)> {
     let stripped = name.strip_prefix("cnt_")?;
     let (family_part, sender) = match stripped.split_once('@') {
         Some((family, tail)) => {
@@ -374,7 +391,10 @@ pub(super) fn sender_channel_role(sender_channel: &str) -> &str {
         .unwrap_or(sender_channel)
 }
 
-pub(super) fn sender_channel_key_compromised(ta: &ThresholdAutomaton, sender_channel: &str) -> bool {
+pub(super) fn sender_channel_key_compromised(
+    ta: &ThresholdAutomaton,
+    sender_channel: &str,
+) -> bool {
     let role = sender_channel_role(sender_channel);
     ta.role_identities
         .get(role)

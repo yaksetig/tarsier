@@ -1160,7 +1160,6 @@ pub fn encode_bmc(cs: &CounterSystem, property: &SafetyProperty, max_depth: usiz
     enc
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

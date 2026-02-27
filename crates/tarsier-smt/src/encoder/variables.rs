@@ -3,8 +3,7 @@
 use std::collections::HashMap;
 
 pub(crate) type MessageVariantGroups = (Vec<Vec<usize>>, Vec<String>, HashMap<String, Vec<usize>>);
-pub(crate) type CryptoVariantBuckets =
-    HashMap<(String, String), Vec<(String, Vec<usize>)>>;
+pub(crate) type CryptoVariantBuckets = HashMap<(String, String), Vec<(String, Vec<usize>)>>;
 
 /// Variable naming conventions:
 /// - `p_i` — parameter i
