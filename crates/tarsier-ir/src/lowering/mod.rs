@@ -295,7 +295,9 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             }
         }
     }
-    if ta.semantics.timing_model == TimingModel::PartialSynchrony && ta.semantics.gst_param.is_none() {
+    if ta.semantics.timing_model == TimingModel::PartialSynchrony
+        && ta.semantics.gst_param.is_none()
+    {
         return Err(LoweringError::Unsupported(
             "timing: partial_synchrony requires `adversary { gst: <param>; }`".into(),
         ));
@@ -309,7 +311,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                 .into(),
         ));
     }
-    ta.security.role_identities = build_role_identity_configs(proto, ta.semantics.network_semantics)?;
+    ta.security.role_identities =
+        build_role_identity_configs(proto, ta.semantics.network_semantics)?;
     ta.security.key_ownership = build_key_ownership(&ta.security.role_identities)?;
     validate_compromised_keys(&compromised_keys_from_adversary, &ta.security.key_ownership)?;
     ta.security.compromised_keys = compromised_keys_from_adversary;
@@ -399,7 +402,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
     }
 
     // 3. Add shared variables for each message type (expanded by field values)
-    let mut message_infos = build_message_infos(&proto.messages, &enum_defs, ta.semantics.value_abstraction)?;
+    let mut message_infos =
+        build_message_infos(&proto.messages, &enum_defs, ta.semantics.value_abstraction)?;
     let mut crypto_objects: IndexMap<String, CryptoObjectInfo> = IndexMap::new();
     for object in &proto.crypto_objects {
         let source_info = message_infos
@@ -456,7 +460,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             },
         );
         // Crypto objects are authenticated by default unless explicitly overridden.
-        ta.security.message_policies
+        ta.security
+            .message_policies
             .entry(object.name.clone())
             .or_insert(MessagePolicy {
                 auth: MessageAuthPolicy::Authenticated,
@@ -471,10 +476,13 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         );
     }
     let role_names: Vec<String> = proto.roles.iter().map(|r| r.node.name.clone()).collect();
-    let use_cohort_selective_channels = ta.semantics.network_semantics == NetworkSemantics::CohortSelective;
-    let use_process_selective_channels = ta.semantics.network_semantics == NetworkSemantics::ProcessSelective;
+    let use_cohort_selective_channels =
+        ta.semantics.network_semantics == NetworkSemantics::CohortSelective;
+    let use_process_selective_channels =
+        ta.semantics.network_semantics == NetworkSemantics::ProcessSelective;
     let role_process_identity_var: IndexMap<String, String> = ta
-        .security.role_identities
+        .security
+        .role_identities
         .iter()
         .filter_map(|(role, cfg)| {
             if cfg.scope == RoleIdentityScope::Process {
@@ -581,7 +589,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
     for role in &proto.roles {
         let role_decl = &role.node;
         let process_identity_var = ta
-            .security.role_identities
+            .security
+            .role_identities
             .get(&role_decl.name)
             .and_then(|cfg| {
                 if cfg.scope == RoleIdentityScope::Process {
@@ -1075,6 +1084,15 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                         let mut set_sent_flags: HashSet<String> = HashSet::new();
                         let mut set_lock_flags: HashSet<String> = HashSet::new();
                         let mut set_justify_flags: HashSet<String> = HashSet::new();
+                        let counter_ctx = MessageCounterContext {
+                            role_names: &role_names,
+                            role_channels: &role_channels,
+                            message_infos: &message_infos,
+                            msg_var_ids: &msg_var_ids,
+                            locals: &from_loc.local_vars,
+                            local_var_types: &local_var_types,
+                            enum_defs: &enum_defs,
+                        };
 
                         for action in &pending_actions {
                             match action {
@@ -1083,21 +1101,16 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     args,
                                     recipient_role,
                                 } => {
-                                    let var_ids = resolve_message_counter_from_send(
-                                        message_type,
-                                        recipient_role.as_deref(),
-                                        None,
-                                        sender_channel_opt,
-                                        None,
-                                        &role_names,
-                                        &role_channels,
+                                    let query = SendCounterLookup {
+                                        msg_name: message_type,
+                                        recipient_role: recipient_role.as_deref(),
+                                        exact_recipient_channel: None,
+                                        sender_channel: sender_channel_opt,
+                                        sender_role_filter: None,
                                         args,
-                                        &message_infos,
-                                        &msg_var_ids,
-                                        &from_loc.local_vars,
-                                        &local_var_types,
-                                        &enum_defs,
-                                    )?;
+                                    };
+                                    let var_ids =
+                                        resolve_message_counter_from_send(&query, &counter_ctx)?;
                                     for var_id in var_ids {
                                         if let Some(flag) = sent_flag_by_var.get(&var_id) {
                                             if from_loc.local_vars.get(flag)
@@ -1125,20 +1138,19 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                             "Unknown crypto object '{object_name}' in form action"
                                         ))
                                         })?;
-                                    let source_vars = resolve_message_counter_from_send(
-                                        &object.source_message,
-                                        None,
-                                        Some(current_recipient_channel.as_str()),
-                                        None,
-                                        object.signer_role.as_deref(),
-                                        &role_names,
-                                        &role_channels,
+                                    let source_query = SendCounterLookup {
+                                        msg_name: &object.source_message,
+                                        recipient_role: None,
+                                        exact_recipient_channel: Some(
+                                            current_recipient_channel.as_str(),
+                                        ),
+                                        sender_channel: None,
+                                        sender_role_filter: object.signer_role.as_deref(),
                                         args,
-                                        &message_infos,
-                                        &msg_var_ids,
-                                        &from_loc.local_vars,
-                                        &local_var_types,
-                                        &enum_defs,
+                                    };
+                                    let source_vars = resolve_message_counter_from_send(
+                                        &source_query,
+                                        &counter_ctx,
                                     )?;
                                     if source_vars.is_empty() {
                                         return Err(LoweringError::Unsupported(format!(
@@ -1153,20 +1165,17 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                         distinct: true,
                                     });
 
-                                    let var_ids = resolve_message_counter_from_send(
-                                        object_name,
-                                        recipient_role.as_deref(),
-                                        None,
-                                        sender_channel_opt,
-                                        None,
-                                        &role_names,
-                                        &role_channels,
+                                    let object_query = SendCounterLookup {
+                                        msg_name: object_name,
+                                        recipient_role: recipient_role.as_deref(),
+                                        exact_recipient_channel: None,
+                                        sender_channel: sender_channel_opt,
+                                        sender_role_filter: None,
                                         args,
-                                        &message_infos,
-                                        &msg_var_ids,
-                                        &from_loc.local_vars,
-                                        &local_var_types,
-                                        &enum_defs,
+                                    };
+                                    let var_ids = resolve_message_counter_from_send(
+                                        &object_query,
+                                        &counter_ctx,
                                     )?;
                                     for var_id in &var_ids {
                                         if let Some(flag) = sent_flag_by_var.get(var_id) {
@@ -1207,20 +1216,19 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                                 "Unknown crypto object '{object_name}' in lock action"
                                             ))
                                         })?;
-                                    let object_vars = resolve_message_counter_from_send(
-                                        object_name,
-                                        None,
-                                        Some(current_recipient_channel.as_str()),
-                                        None,
-                                        None,
-                                        &role_names,
-                                        &role_channels,
+                                    let lock_query = SendCounterLookup {
+                                        msg_name: object_name,
+                                        recipient_role: None,
+                                        exact_recipient_channel: Some(
+                                            current_recipient_channel.as_str(),
+                                        ),
+                                        sender_channel: None,
+                                        sender_role_filter: None,
                                         args,
-                                        &message_infos,
-                                        &msg_var_ids,
-                                        &from_loc.local_vars,
-                                        &local_var_types,
-                                        &enum_defs,
+                                    };
+                                    let object_vars = resolve_message_counter_from_send(
+                                        &lock_query,
+                                        &counter_ctx,
                                     )?;
                                     if object_vars.is_empty() {
                                         return Err(LoweringError::Unsupported(format!(
@@ -1260,20 +1268,19 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                                 "Unknown crypto object '{object_name}' in justify action"
                                             ))
                                         })?;
-                                    let object_vars = resolve_message_counter_from_send(
-                                        object_name,
-                                        None,
-                                        Some(current_recipient_channel.as_str()),
-                                        None,
-                                        None,
-                                        &role_names,
-                                        &role_channels,
+                                    let justify_query = SendCounterLookup {
+                                        msg_name: object_name,
+                                        recipient_role: None,
+                                        exact_recipient_channel: Some(
+                                            current_recipient_channel.as_str(),
+                                        ),
+                                        sender_channel: None,
+                                        sender_role_filter: None,
                                         args,
-                                        &message_infos,
-                                        &msg_var_ids,
-                                        &from_loc.local_vars,
-                                        &local_var_types,
-                                        &enum_defs,
+                                    };
+                                    let object_vars = resolve_message_counter_from_send(
+                                        &justify_query,
+                                        &counter_ctx,
                                     )?;
                                     if object_vars.is_empty() {
                                         return Err(LoweringError::Unsupported(format!(
@@ -1316,7 +1323,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                 )));
                             }
                             if ta
-                                .security.role_identities
+                                .security
+                                .role_identities
                                 .get(&role_decl.name)
                                 .map(|cfg| cfg.scope == RoleIdentityScope::Process)
                                 .unwrap_or(false)

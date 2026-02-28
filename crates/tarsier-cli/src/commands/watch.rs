@@ -15,39 +15,41 @@ use crate::CliNetworkSemanticsMode;
 /// Debounce window: ignore rapid successive events within this duration.
 const DEBOUNCE_MS: u64 = 500;
 
+#[derive(Clone)]
+pub(crate) struct WatchCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) solver: String,
+    pub(crate) k: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) engine: String,
+    pub(crate) fairness: String,
+    pub(crate) portfolio: bool,
+    pub(crate) format: String,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
 /// Run verification once and print the result with colored status.
 ///
 /// Returns `Ok(true)` when verification completed (regardless of verdict),
 /// `Ok(false)` should not normally occur, and `Err` on hard failures that
 /// we still want to display rather than crash the watcher.
-#[allow(clippy::too_many_arguments)]
-fn run_once(
-    file: &std::path::Path,
-    solver: &str,
-    k: usize,
-    timeout: u64,
-    soundness: &str,
-    engine: &str,
-    fairness: &str,
-    portfolio: bool,
-    format: &str,
-    cli_network_mode: CliNetworkSemanticsMode,
-) {
-    let result = super::prove::run_prove_command(
-        file.to_path_buf(),
-        solver.to_string(),
-        k,
-        timeout,
-        soundness.to_string(),
-        engine.to_string(),
-        fairness.to_string(),
-        None, // cert_out — not applicable in watch mode
-        0,    // cegar_iters — keep it simple
-        None, // cegar_report_out
-        portfolio,
-        format.to_string(),
-        cli_network_mode,
-    );
+fn run_once(args: &WatchCommandArgs) {
+    let result = super::prove::run_prove_command(super::prove::ProveCommandArgs {
+        file: args.file.clone(),
+        solver: args.solver.clone(),
+        k: args.k,
+        timeout: args.timeout,
+        soundness: args.soundness.clone(),
+        engine: args.engine.clone(),
+        fairness: args.fairness.clone(),
+        cert_out: None,
+        cegar_iters: 0,
+        cegar_report_out: None,
+        portfolio: args.portfolio,
+        format: args.format.clone(),
+        cli_network_mode: args.cli_network_mode,
+    });
 
     match result {
         Ok(()) => {
@@ -86,47 +88,29 @@ fn chrono_free_timestamp() -> String {
 }
 
 /// Entry point for `tarsier watch`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_watch_command(
-    file: PathBuf,
-    solver: String,
-    k: usize,
-    timeout: u64,
-    soundness: String,
-    engine: String,
-    fairness: String,
-    portfolio: bool,
-    format: String,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
+pub(crate) fn run_watch_command(args: WatchCommandArgs) -> miette::Result<()> {
     // Resolve the watched path to an absolute canonical form so the watcher
     // picks up renames / atomic-save patterns that editors use.
-    let canonical = file.canonicalize().into_diagnostic()?;
+    let canonical = args.file.canonicalize().into_diagnostic()?;
     let watch_dir = canonical
         .parent()
-        .ok_or_else(|| miette::miette!("Cannot determine parent directory of {}", file.display()))?
+        .ok_or_else(|| {
+            miette::miette!(
+                "Cannot determine parent directory of {}",
+                args.file.display()
+            )
+        })?
         .to_path_buf();
 
     eprintln!(
         "\x1b[1;36m[watch] Watching {} for changes (Ctrl+C to stop)\x1b[0m",
-        file.display()
+        args.file.display()
     );
     eprintln!();
 
     // ---------- initial run ----------
     print_run_header();
-    run_once(
-        &file,
-        &solver,
-        k,
-        timeout,
-        &soundness,
-        &engine,
-        &fairness,
-        portfolio,
-        &format,
-        cli_network_mode,
-    );
+    run_once(&args);
 
     // ---------- set up file watcher ----------
     let (tx, rx) = mpsc::channel();
@@ -181,18 +165,7 @@ pub(crate) fn run_watch_command(
         // Clear screen (ANSI escape) and re-run.
         eprint!("\x1b[2J\x1b[H");
         print_run_header();
-        run_once(
-            &file,
-            &solver,
-            k,
-            timeout,
-            &soundness,
-            &engine,
-            &fairness,
-            portfolio,
-            &format,
-            cli_network_mode,
-        );
+        run_once(&args);
     }
 
     Ok(())

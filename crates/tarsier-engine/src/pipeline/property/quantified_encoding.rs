@@ -1,8 +1,8 @@
 //! `build_quantified_state_predicate_term*` functions.
 
 use super::super::verification::pdr_kappa_var;
-use crate::pipeline::*;
 use crate::pipeline::property::*;
+use crate::pipeline::*;
 
 /// Encode a quantified state predicate at one time-step.
 pub(crate) fn build_quantified_state_predicate_term_with_bindings(
@@ -72,143 +72,110 @@ pub(crate) fn build_quantified_state_predicate_term_with_bindings(
         role_locations.entry(loc.role.clone()).or_default().push(id);
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn encode_nested_quantifiers(
-        ta: &ThresholdAutomaton,
-        quantifiers: &[ast::QuantifierBinding],
-        role_locations: &HashMap<String, Vec<usize>>,
-        state_expr: &ast::FormulaExpr,
+    struct NestedQuantifierEncoder<'a> {
+        ta: &'a ThresholdAutomaton,
+        quantifiers: &'a [ast::QuantifierBinding],
+        role_locations: &'a HashMap<String, Vec<usize>>,
+        state_expr: &'a ast::FormulaExpr,
         step: usize,
-        default_quantified_var: &str,
-        referenced_quantified_vars: &HashSet<String>,
-        idx: usize,
-        assignment: &mut BTreeMap<String, usize>,
-    ) -> Result<SmtTerm, PipelineError> {
-        if idx == quantifiers.len() {
-            let holds = eval_formula_expr_for_assignment(
-                ta,
-                state_expr,
-                assignment,
-                default_quantified_var,
-            )?;
-            return Ok(SmtTerm::bool(holds));
-        }
+        default_quantified_var: &'a str,
+        referenced_quantified_vars: &'a HashSet<String>,
+    }
 
-        let binding = &quantifiers[idx];
-        let locations = role_locations
-            .get(&binding.domain)
-            .map(|ids| ids.as_slice())
-            .unwrap_or(&[]);
-        let binding_is_referenced = referenced_quantified_vars.contains(binding.var.as_str());
-
-        match binding.quantifier {
-            ast::Quantifier::ForAll => {
-                if locations.is_empty() {
-                    return Ok(SmtTerm::bool(true));
-                }
-                let mut clauses = Vec::with_capacity(locations.len());
-                if binding_is_referenced {
-                    for loc_id in locations {
-                        assignment.insert(binding.var.clone(), *loc_id);
-                        let nested = encode_nested_quantifiers(
-                            ta,
-                            quantifiers,
-                            role_locations,
-                            state_expr,
-                            step,
-                            default_quantified_var,
-                            referenced_quantified_vars,
-                            idx + 1,
-                            assignment,
-                        )?;
-                        assignment.remove(&binding.var);
-                        let occupied =
-                            SmtTerm::var(pdr_kappa_var(step, *loc_id)).gt(SmtTerm::int(0));
-                        clauses.push(SmtTerm::or(vec![SmtTerm::not(occupied), nested]));
-                    }
-                } else {
-                    // If the bound variable is not referenced in the predicate, the
-                    // nested subterm is identical for every location and can be shared.
-                    let nested = encode_nested_quantifiers(
-                        ta,
-                        quantifiers,
-                        role_locations,
-                        state_expr,
-                        step,
-                        default_quantified_var,
-                        referenced_quantified_vars,
-                        idx + 1,
-                        assignment,
-                    )?;
-                    for loc_id in locations {
-                        let occupied =
-                            SmtTerm::var(pdr_kappa_var(step, *loc_id)).gt(SmtTerm::int(0));
-                        clauses.push(SmtTerm::or(vec![SmtTerm::not(occupied), nested.clone()]));
-                    }
-                }
-                Ok(SmtTerm::and(clauses))
+    impl NestedQuantifierEncoder<'_> {
+        fn encode(
+            &self,
+            idx: usize,
+            assignment: &mut BTreeMap<String, usize>,
+        ) -> Result<SmtTerm, PipelineError> {
+            if idx == self.quantifiers.len() {
+                let holds = eval_formula_expr_for_assignment(
+                    self.ta,
+                    self.state_expr,
+                    assignment,
+                    self.default_quantified_var,
+                )?;
+                return Ok(SmtTerm::bool(holds));
             }
-            ast::Quantifier::Exists => {
-                if locations.is_empty() {
-                    return Ok(SmtTerm::bool(false));
-                }
-                let mut disjuncts = Vec::with_capacity(locations.len());
-                if binding_is_referenced {
-                    for loc_id in locations {
-                        assignment.insert(binding.var.clone(), *loc_id);
-                        let nested = encode_nested_quantifiers(
-                            ta,
-                            quantifiers,
-                            role_locations,
-                            state_expr,
-                            step,
-                            default_quantified_var,
-                            referenced_quantified_vars,
-                            idx + 1,
-                            assignment,
-                        )?;
-                        assignment.remove(&binding.var);
-                        let occupied =
-                            SmtTerm::var(pdr_kappa_var(step, *loc_id)).gt(SmtTerm::int(0));
-                        disjuncts.push(SmtTerm::and(vec![occupied, nested]));
+
+            let binding = &self.quantifiers[idx];
+            let locations = self
+                .role_locations
+                .get(&binding.domain)
+                .map(|ids| ids.as_slice())
+                .unwrap_or(&[]);
+            let binding_is_referenced = self
+                .referenced_quantified_vars
+                .contains(binding.var.as_str());
+
+            match binding.quantifier {
+                ast::Quantifier::ForAll => {
+                    if locations.is_empty() {
+                        return Ok(SmtTerm::bool(true));
                     }
-                } else {
-                    // If the bound variable is not referenced in the predicate, the
-                    // nested subterm is identical for every location and can be shared.
-                    let nested = encode_nested_quantifiers(
-                        ta,
-                        quantifiers,
-                        role_locations,
-                        state_expr,
-                        step,
-                        default_quantified_var,
-                        referenced_quantified_vars,
-                        idx + 1,
-                        assignment,
-                    )?;
-                    for loc_id in locations {
-                        let occupied =
-                            SmtTerm::var(pdr_kappa_var(step, *loc_id)).gt(SmtTerm::int(0));
-                        disjuncts.push(SmtTerm::and(vec![occupied, nested.clone()]));
+                    let mut clauses = Vec::with_capacity(locations.len());
+                    if binding_is_referenced {
+                        for loc_id in locations {
+                            assignment.insert(binding.var.clone(), *loc_id);
+                            let nested = self.encode(idx + 1, assignment)?;
+                            assignment.remove(&binding.var);
+                            let occupied =
+                                SmtTerm::var(pdr_kappa_var(self.step, *loc_id)).gt(SmtTerm::int(0));
+                            clauses.push(SmtTerm::or(vec![SmtTerm::not(occupied), nested]));
+                        }
+                    } else {
+                        // If the bound variable is not referenced in the predicate, the
+                        // nested subterm is identical for every location and can be shared.
+                        let nested = self.encode(idx + 1, assignment)?;
+                        for loc_id in locations {
+                            let occupied =
+                                SmtTerm::var(pdr_kappa_var(self.step, *loc_id)).gt(SmtTerm::int(0));
+                            clauses.push(SmtTerm::or(vec![SmtTerm::not(occupied), nested.clone()]));
+                        }
                     }
+                    Ok(SmtTerm::and(clauses))
                 }
-                Ok(SmtTerm::or(disjuncts))
+                ast::Quantifier::Exists => {
+                    if locations.is_empty() {
+                        return Ok(SmtTerm::bool(false));
+                    }
+                    let mut disjuncts = Vec::with_capacity(locations.len());
+                    if binding_is_referenced {
+                        for loc_id in locations {
+                            assignment.insert(binding.var.clone(), *loc_id);
+                            let nested = self.encode(idx + 1, assignment)?;
+                            assignment.remove(&binding.var);
+                            let occupied =
+                                SmtTerm::var(pdr_kappa_var(self.step, *loc_id)).gt(SmtTerm::int(0));
+                            disjuncts.push(SmtTerm::and(vec![occupied, nested]));
+                        }
+                    } else {
+                        // If the bound variable is not referenced in the predicate, the
+                        // nested subterm is identical for every location and can be shared.
+                        let nested = self.encode(idx + 1, assignment)?;
+                        for loc_id in locations {
+                            let occupied =
+                                SmtTerm::var(pdr_kappa_var(self.step, *loc_id)).gt(SmtTerm::int(0));
+                            disjuncts.push(SmtTerm::and(vec![occupied, nested.clone()]));
+                        }
+                    }
+                    Ok(SmtTerm::or(disjuncts))
+                }
             }
         }
     }
 
     let mut assignment = BTreeMap::new();
-    encode_nested_quantifiers(
+    let encoder = NestedQuantifierEncoder {
         ta,
         quantifiers,
-        &role_locations,
+        role_locations: &role_locations,
         state_expr,
         step,
         default_quantified_var,
-        &referenced_quantified_vars,
-        0,
-        &mut assignment,
-    )
+        referenced_quantified_vars: &referenced_quantified_vars,
+    };
+    encoder.encode(0, &mut assignment)
 }
 
 /// Encode a quantified state predicate at one time-step.

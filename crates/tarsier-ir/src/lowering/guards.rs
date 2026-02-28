@@ -6,14 +6,15 @@ use std::collections::HashSet;
 use crate::threshold_automaton::*;
 use tarsier_dsl::ast;
 
-use super::counters::resolve_message_counter_from_guard;
+use super::counters::{
+    resolve_message_counter_from_guard, GuardCounterLookup, MessageCounterContext,
+};
 use super::helpers::{
     enum_variant_index, eval_bool_expr, eval_enum_expr, eval_int_expr, expr_enum_type,
     is_bool_expr, lower_cmp_op, lower_linear_expr_to_lc,
 };
 use super::{LocalVarType, LoweringError, MessageInfo};
 
-#[allow(clippy::too_many_arguments)]
 /// Context for lowering guards, grouping the many parameters needed during
 /// guard translation into a single struct for readability.
 pub(super) struct GuardLoweringContext<'a> {
@@ -39,18 +40,22 @@ pub(super) fn lower_guard(
             } else {
                 None
             };
-            let var_ids = resolve_message_counter_from_guard(
-                &tg.message_type,
-                ctx.recipient_channel,
-                &tg.message_args,
+            let counter_ctx = MessageCounterContext {
+                role_names: &[],
+                role_channels: ctx.role_channels,
+                message_infos: ctx.message_infos,
+                msg_var_ids: ctx.msg_vars,
+                locals: ctx.locals,
+                local_var_types: ctx.local_var_types,
+                enum_defs: ctx.enum_defs,
+            };
+            let query = GuardCounterLookup {
+                msg_name: &tg.message_type,
+                recipient_role: ctx.recipient_channel,
+                args: &tg.message_args,
                 sender_role,
-                ctx.role_channels,
-                ctx.message_infos,
-                ctx.msg_vars,
-                ctx.locals,
-                ctx.local_var_types,
-                ctx.enum_defs,
-            )?;
+            };
+            let var_ids = resolve_message_counter_from_guard(&query, &counter_ctx)?;
             let bound = lower_linear_expr_to_lc(&tg.threshold, ctx.params)?;
             let op = lower_cmp_op(tg.op);
             Ok(Guard::single(GuardAtom::Threshold {
@@ -64,18 +69,22 @@ pub(super) fn lower_guard(
             object_name,
             object_args,
         } => {
-            let var_ids = resolve_message_counter_from_guard(
-                object_name,
-                ctx.recipient_channel,
-                object_args,
-                None,
-                ctx.role_channels,
-                ctx.message_infos,
-                ctx.msg_vars,
-                ctx.locals,
-                ctx.local_var_types,
-                ctx.enum_defs,
-            )?;
+            let counter_ctx = MessageCounterContext {
+                role_names: &[],
+                role_channels: ctx.role_channels,
+                message_infos: ctx.message_infos,
+                msg_var_ids: ctx.msg_vars,
+                locals: ctx.locals,
+                local_var_types: ctx.local_var_types,
+                enum_defs: ctx.enum_defs,
+            };
+            let query = GuardCounterLookup {
+                msg_name: object_name,
+                recipient_role: ctx.recipient_channel,
+                args: object_args,
+                sender_role: None,
+            };
+            let var_ids = resolve_message_counter_from_guard(&query, &counter_ctx)?;
             Ok(Guard::single(GuardAtom::Threshold {
                 vars: var_ids,
                 op: CmpOp::Ge,

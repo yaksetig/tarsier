@@ -12,14 +12,17 @@ use super::{LocalVarType, LoweringError, MessageInfo, INTERNAL_DELIVERY_LANE_VAR
 
 pub(super) fn message_effective_authenticated(ta: &ThresholdAutomaton, message_type: &str) -> bool {
     match ta
-        .security.message_policies
+        .security
+        .message_policies
         .get(message_type)
         .map(|p| p.auth)
         .unwrap_or(MessageAuthPolicy::Inherit)
     {
         MessageAuthPolicy::Authenticated => true,
         MessageAuthPolicy::Unauthenticated => false,
-        MessageAuthPolicy::Inherit => ta.semantics.authentication_mode == AuthenticationMode::Signed,
+        MessageAuthPolicy::Inherit => {
+            ta.semantics.authentication_mode == AuthenticationMode::Signed
+        }
     }
 }
 
@@ -154,22 +157,38 @@ pub(super) fn recipient_channel_for_location(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(super) struct MessageCounterContext<'a> {
+    pub(super) role_names: &'a [String],
+    pub(super) role_channels: &'a IndexMap<String, Vec<String>>,
+    pub(super) message_infos: &'a IndexMap<String, MessageInfo>,
+    pub(super) msg_var_ids: &'a IndexMap<String, SharedVarId>,
+    pub(super) locals: &'a IndexMap<String, LocalValue>,
+    pub(super) local_var_types: &'a IndexMap<String, LocalVarType>,
+    pub(super) enum_defs: &'a IndexMap<String, Vec<String>>,
+}
+
+pub(super) struct SendCounterLookup<'a> {
+    pub(super) msg_name: &'a str,
+    pub(super) recipient_role: Option<&'a str>,
+    pub(super) exact_recipient_channel: Option<&'a str>,
+    pub(super) sender_channel: Option<&'a str>,
+    pub(super) sender_role_filter: Option<&'a str>,
+    pub(super) args: &'a [ast::SendArg],
+}
+
 pub(super) fn resolve_message_counter_from_send(
-    msg_name: &str,
-    recipient_role: Option<&str>,
-    exact_recipient_channel: Option<&str>,
-    sender_channel: Option<&str>,
-    sender_role_filter: Option<&str>,
-    role_names: &[String],
-    role_channels: &IndexMap<String, Vec<String>>,
-    args: &[ast::SendArg],
-    message_infos: &IndexMap<String, MessageInfo>,
-    msg_var_ids: &IndexMap<String, SharedVarId>,
-    locals: &IndexMap<String, LocalValue>,
-    local_var_types: &IndexMap<String, LocalVarType>,
-    enum_defs: &IndexMap<String, Vec<String>>,
+    query: &SendCounterLookup<'_>,
+    ctx: &MessageCounterContext<'_>,
 ) -> Result<Vec<SharedVarId>, LoweringError> {
+    let msg_name = query.msg_name;
+    let args = query.args;
+    let role_names = ctx.role_names;
+    let role_channels = ctx.role_channels;
+    let message_infos = ctx.message_infos;
+    let msg_var_ids = ctx.msg_var_ids;
+    let locals = ctx.locals;
+    let local_var_types = ctx.local_var_types;
+    let enum_defs = ctx.enum_defs;
     let msg_info = message_infos
         .get(msg_name)
         .ok_or_else(|| LoweringError::UnknownMessageType(msg_name.to_string()))?;
@@ -241,10 +260,10 @@ pub(super) fn resolve_message_counter_from_send(
         values.push(v);
     }
 
-    let recipients: Vec<String> = if let Some(channel) = exact_recipient_channel {
+    let recipients: Vec<String> = if let Some(channel) = query.exact_recipient_channel {
         vec![channel.to_string()]
     } else {
-        let recipient_roles: Vec<&str> = if let Some(role) = recipient_role {
+        let recipient_roles: Vec<&str> = if let Some(role) = query.recipient_role {
             if !role_names.iter().any(|r| r == role) {
                 return Err(LoweringError::Unsupported(format!(
                     "Unknown recipient role '{role}' in send action"
@@ -265,9 +284,9 @@ pub(super) fn resolve_message_counter_from_send(
         channels
     };
 
-    let sender_candidates: Vec<Option<&str>> = if let Some(sender_channel) = sender_channel {
+    let sender_candidates: Vec<Option<&str>> = if let Some(sender_channel) = query.sender_channel {
         vec![Some(sender_channel)]
-    } else if let Some(sender_role) = sender_role_filter {
+    } else if let Some(sender_role) = query.sender_role_filter {
         let mut candidates: Vec<Option<&str>> = role_channels
             .get(sender_role)
             .map(|channels| channels.iter().map(|s| Some(s.as_str())).collect())
@@ -300,19 +319,27 @@ pub(super) fn resolve_message_counter_from_send(
     Ok(resolved)
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(super) struct GuardCounterLookup<'a> {
+    pub(super) msg_name: &'a str,
+    pub(super) recipient_role: &'a str,
+    pub(super) args: &'a [(String, ast::Expr)],
+    pub(super) sender_role: Option<&'a str>,
+}
+
 pub(super) fn resolve_message_counter_from_guard(
-    msg_name: &str,
-    recipient_role: &str,
-    args: &[(String, ast::Expr)],
-    sender_role: Option<&str>,
-    role_channels: &IndexMap<String, Vec<String>>,
-    message_infos: &IndexMap<String, MessageInfo>,
-    msg_var_ids: &IndexMap<String, SharedVarId>,
-    locals: &IndexMap<String, LocalValue>,
-    local_var_types: &IndexMap<String, LocalVarType>,
-    enum_defs: &IndexMap<String, Vec<String>>,
+    query: &GuardCounterLookup<'_>,
+    ctx: &MessageCounterContext<'_>,
 ) -> Result<Vec<SharedVarId>, LoweringError> {
+    let msg_name = query.msg_name;
+    let recipient_role = query.recipient_role;
+    let args = query.args;
+    let sender_role = query.sender_role;
+    let role_channels = ctx.role_channels;
+    let message_infos = ctx.message_infos;
+    let msg_var_ids = ctx.msg_var_ids;
+    let locals = ctx.locals;
+    let local_var_types = ctx.local_var_types;
+    let enum_defs = ctx.enum_defs;
     let msg_info = message_infos
         .get(msg_name)
         .ok_or_else(|| LoweringError::UnknownMessageType(msg_name.to_string()))?;

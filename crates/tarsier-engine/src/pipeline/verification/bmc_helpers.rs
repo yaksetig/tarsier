@@ -1,7 +1,7 @@
 //! BMC execution, committee bounds, k-induction, and CTI analysis helpers.
 
-use crate::pipeline::*;
 use crate::pipeline::verification::*;
+use crate::pipeline::*;
 use tarsier_ir::threshold_automaton::LocationId;
 
 pub(crate) fn with_smt_profile<T, F>(context: &str, run: F) -> Result<T, PipelineError>
@@ -703,42 +703,56 @@ pub(crate) fn run_k_induction_with_location_invariants<S: SmtSolver>(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(crate) struct UnboundedEngineRunConfig<'a> {
+    pub(crate) cs: &'a CounterSystem,
+    pub(crate) property: &'a SafetyProperty,
+    pub(crate) max_k: usize,
+    pub(crate) committee_bounds: &'a [(usize, u64)],
+    pub(crate) engine: ProofEngine,
+    pub(crate) invariant_zero_locs: &'a [usize],
+    pub(crate) overall_timeout: Option<Duration>,
+}
+
 pub(crate) fn run_unbounded_with_engine_and_location_invariants<S: SmtSolver>(
     solver: &mut S,
-    cs: &CounterSystem,
-    property: &SafetyProperty,
-    max_k: usize,
-    committee_bounds: &[(usize, u64)],
-    engine: ProofEngine,
-    invariant_zero_locs: &[usize],
-    overall_timeout: Option<Duration>,
+    config: &UnboundedEngineRunConfig<'_>,
 ) -> Result<KInductionResult, PipelineError> {
+    let cs = config.cs;
+    let property = config.property;
     push_reduction_note("encoder.structural_hashing=on");
-    if engine == ProofEngine::Pdr {
+    if config.engine == ProofEngine::Pdr {
         push_reduction_note("pdr.symmetry_generalization=on");
         push_reduction_note("pdr.incremental_query_reuse=on");
         push_reduction_note("por.stutter_time_signature_collapse=on");
     }
-    let deadline = overall_timeout.and_then(|t| Instant::now().checked_add(t));
-    let mut extra_assertions = committee_bound_assertions(committee_bounds);
-    match engine {
+    let deadline = config
+        .overall_timeout
+        .and_then(|timeout| Instant::now().checked_add(timeout));
+    let mut extra_assertions = committee_bound_assertions(config.committee_bounds);
+    match config.engine {
         ProofEngine::KInduction => run_k_induction_with_location_invariants(
             solver,
             cs,
             property,
-            max_k,
+            config.max_k,
             &extra_assertions,
-            invariant_zero_locs,
+            config.invariant_zero_locs,
             deadline,
         )
         .map_err(|e| PipelineError::Solver(e.to_string())),
         ProofEngine::Pdr => {
             extra_assertions.extend(location_zero_assertions_for_step_relation(
-                invariant_zero_locs,
+                config.invariant_zero_locs,
             ));
-            run_pdr_with_deadline(solver, cs, property, max_k, &extra_assertions, deadline)
-                .map_err(|e| PipelineError::Solver(e.to_string()))
+            run_pdr_with_deadline(
+                solver,
+                cs,
+                property,
+                config.max_k,
+                &extra_assertions,
+                deadline,
+            )
+            .map_err(|e| PipelineError::Solver(e.to_string()))
         }
     }
 }
@@ -965,17 +979,17 @@ pub(crate) fn build_induction_cti_summary(
     // no violation is reachable up to depth `bmc_depth_checked`, then the
     // CTI's hypothesis state (at step k-1) is NOT in the set of
     // BMC-reachable states — making it likely spurious.
-    let (classification, classification_evidence) = classify_cti(
+    let (classification, classification_evidence) = classify_cti(&CtiClassificationInput {
         cs,
         witness,
-        k,
+        cti_k: k,
         bmc_depth_checked,
-        &hypothesis_locations,
-        &params,
+        hypothesis_locations: &hypothesis_locations,
+        params: &params,
         ta,
         committee_bounds,
         options,
-    );
+    });
 
     let rationale = build_cti_rationale(&classification, k, bmc_depth_checked, &violated_condition);
 
@@ -1083,18 +1097,24 @@ pub(crate) fn check_cti_hypothesis_reachability(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn classify_cti(
-    cs: &CounterSystem,
-    witness: &KInductionCti,
-    cti_k: usize,
-    bmc_depth_checked: usize,
-    hypothesis_locations: &[(String, i64)],
-    params: &[(String, i64)],
-    ta: &ThresholdAutomaton,
-    committee_bounds: &[(usize, u64)],
-    options: &PipelineOptions,
-) -> (CtiClassification, Vec<String>) {
+pub(crate) struct CtiClassificationInput<'a> {
+    pub(crate) cs: &'a CounterSystem,
+    pub(crate) witness: &'a KInductionCti,
+    pub(crate) cti_k: usize,
+    pub(crate) bmc_depth_checked: usize,
+    pub(crate) hypothesis_locations: &'a [(String, i64)],
+    pub(crate) params: &'a [(String, i64)],
+    pub(crate) ta: &'a ThresholdAutomaton,
+    pub(crate) committee_bounds: &'a [(usize, u64)],
+    pub(crate) options: &'a PipelineOptions,
+}
+
+pub(crate) fn classify_cti(input: &CtiClassificationInput<'_>) -> (CtiClassification, Vec<String>) {
+    let cti_k = input.cti_k;
+    let bmc_depth_checked = input.bmc_depth_checked;
+    let hypothesis_locations = input.hypothesis_locations;
+    let params = input.params;
+    let ta = input.ta;
     let mut evidence = Vec::new();
     let mut structural_impossibility = false;
 
@@ -1145,7 +1165,11 @@ pub(crate) fn classify_cti(
     let init_location_names: Vec<&str> = ta
         .initial_locations
         .iter()
-        .filter_map(|&loc_id| ta.locations.get(loc_id.as_usize()).map(|loc| loc.name.as_str()))
+        .filter_map(|&loc_id| {
+            ta.locations
+                .get(loc_id.as_usize())
+                .map(|loc| loc.name.as_str())
+        })
         .collect();
     if !init_location_names.is_empty() {
         let hyp_names: std::collections::HashMap<&str, i64> = hypothesis_locations
@@ -1165,7 +1189,12 @@ pub(crate) fn classify_cti(
         }
     }
 
-    let reachability = check_cti_hypothesis_reachability(cs, witness, committee_bounds, options);
+    let reachability = check_cti_hypothesis_reachability(
+        input.cs,
+        input.witness,
+        input.committee_bounds,
+        input.options,
+    );
     let classification = if structural_impossibility {
         evidence.push(
             "Structural impossibility evidence takes precedence; classify as likely-spurious."
@@ -1358,8 +1387,8 @@ pub(crate) fn summarize_property_violation(
 
 #[cfg(test)]
 mod tests {
+    use crate::pipeline::verification::*;
     use crate::pipeline::*;
-use crate::pipeline::verification::*;
 
     #[test]
     fn solver_choice_name_z3() {

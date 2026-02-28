@@ -160,7 +160,7 @@ fn run() -> miette::Result<()> {
             portfolio,
             format,
         } => {
-            commands::verify::run_verify_command(
+            commands::verify::run_verify_command(commands::verify::VerifyCommandArgs {
                 file,
                 solver,
                 depth,
@@ -172,7 +172,7 @@ fn run() -> miette::Result<()> {
                 portfolio,
                 format,
                 cli_network_mode,
-            )?;
+            })?;
         }
         Commands::RoundSweep {
             file,
@@ -187,7 +187,7 @@ fn run() -> miette::Result<()> {
             format,
             out,
         } => {
-            commands::verify::run_round_sweep_command(
+            commands::verify::run_round_sweep_command(commands::verify::RoundSweepCommandArgs {
                 file,
                 solver,
                 depth,
@@ -200,7 +200,7 @@ fn run() -> miette::Result<()> {
                 format,
                 out,
                 cli_network_mode,
-            )?;
+            })?;
         }
         Commands::Parse { file } => {
             commands::visualize::run_parse_command(file)?;
@@ -219,7 +219,7 @@ fn run() -> miette::Result<()> {
             portfolio,
             format,
         } => {
-            commands::prove::run_prove_command(
+            commands::prove::run_prove_command(commands::prove::ProveCommandArgs {
                 file,
                 solver,
                 k,
@@ -233,7 +233,7 @@ fn run() -> miette::Result<()> {
                 portfolio,
                 format,
                 cli_network_mode,
-            )?;
+            })?;
         }
         Commands::ProveRound {
             file,
@@ -246,7 +246,7 @@ fn run() -> miette::Result<()> {
             format,
             out,
         } => {
-            commands::prove::run_prove_round_command(
+            commands::prove::run_prove_round_command(commands::prove::ProveRoundCommandArgs {
                 file,
                 solver,
                 k,
@@ -257,7 +257,7 @@ fn run() -> miette::Result<()> {
                 format,
                 out,
                 cli_network_mode,
-            )?;
+            })?;
         }
         Commands::ProveFairRound {
             file,
@@ -271,16 +271,18 @@ fn run() -> miette::Result<()> {
             out,
         } => {
             commands::prove::run_prove_fair_round_command(
-                file,
-                solver,
-                k,
-                timeout,
-                soundness,
-                fairness,
-                round_vars,
-                format,
-                out,
-                cli_network_mode,
+                commands::prove::ProveFairRoundCommandArgs {
+                    file,
+                    solver,
+                    k,
+                    timeout,
+                    soundness,
+                    fairness,
+                    round_vars,
+                    format,
+                    out,
+                    cli_network_mode,
+                },
             )?;
         }
         Commands::ProveFair {
@@ -296,7 +298,7 @@ fn run() -> miette::Result<()> {
             portfolio,
             format,
         } => {
-            commands::prove::run_prove_fair_command(
+            commands::prove::run_prove_fair_command(commands::prove::ProveFairCommandArgs {
                 file,
                 solver,
                 k,
@@ -309,7 +311,7 @@ fn run() -> miette::Result<()> {
                 portfolio,
                 format,
                 cli_network_mode,
-            )?;
+            })?;
         }
         Commands::ShowTa { file } => {
             commands::visualize::run_show_ta_command(file, cli_network_mode)?;
@@ -342,7 +344,7 @@ fn run() -> miette::Result<()> {
             dump_smt,
             format,
         } => {
-            commands::verify::run_liveness_command(
+            commands::verify::run_liveness_command(commands::verify::LivenessCommandArgs {
                 file,
                 solver,
                 depth,
@@ -351,7 +353,7 @@ fn run() -> miette::Result<()> {
                 dump_smt,
                 format,
                 cli_network_mode,
-            )?;
+            })?;
         }
         Commands::FairLiveness {
             file,
@@ -364,15 +366,17 @@ fn run() -> miette::Result<()> {
             format,
         } => {
             commands::verify::run_fair_liveness_command(
-                file,
-                solver,
-                depth,
-                timeout,
-                soundness,
-                fairness,
-                portfolio,
-                format,
-                cli_network_mode,
+                commands::verify::FairLivenessCommandArgs {
+                    file,
+                    solver,
+                    depth,
+                    timeout,
+                    soundness,
+                    fairness,
+                    portfolio,
+                    format,
+                    cli_network_mode,
+                },
             )?;
         }
         Commands::Visualize {
@@ -390,19 +394,21 @@ fn run() -> miette::Result<()> {
             bundle,
         } => {
             commands::visualize::run_visualize_command(
-                file,
-                check,
-                solver,
-                depth,
-                k,
-                timeout,
-                soundness,
-                fairness,
-                engine,
-                format,
-                out,
-                bundle,
-                cli_network_mode,
+                commands::visualize::VisualizeCommandArgs {
+                    file,
+                    check,
+                    solver,
+                    depth,
+                    k,
+                    timeout,
+                    soundness,
+                    fairness,
+                    engine,
+                    format,
+                    out,
+                    bundle,
+                    cli_network_mode,
+                },
             )?;
         }
         Commands::Explore {
@@ -438,7 +444,7 @@ fn run() -> miette::Result<()> {
             portfolio,
             format,
         } => {
-            commands::watch::run_watch_command(
+            commands::watch::run_watch_command(commands::watch::WatchCommandArgs {
                 file,
                 solver,
                 k,
@@ -449,7 +455,7 @@ fn run() -> miette::Result<()> {
                 portfolio,
                 format,
                 cli_network_mode,
-            )?;
+            })?;
         }
         #[cfg(feature = "governance")]
         Commands::CertSuite {
@@ -505,7 +511,7 @@ fn run() -> miette::Result<()> {
             filter_variant,
             filter_auth,
         } => {
-            commands::visualize::run_debug_cex_command(
+            commands::visualize::run_debug_cex_command(commands::visualize::DebugCexCommandArgs {
                 file,
                 check,
                 solver,
@@ -522,7 +528,7 @@ fn run() -> miette::Result<()> {
                 filter_variant,
                 filter_auth,
                 cli_network_mode,
-            )?;
+            })?;
         }
         Commands::Assist {
             kind,
@@ -749,19 +755,21 @@ fn run() -> miette::Result<()> {
             out,
         } => {
             commands::governance::run_governance_pipeline_command(
-                file,
-                cert_manifest,
-                conformance_manifest,
-                benchmark_report,
-                solver,
-                depth,
-                k,
-                timeout,
-                soundness,
-                format,
-                out,
-                cli_network_mode,
-                &cli.por_mode,
+                commands::governance::GovernancePipelineCommandArgs {
+                    file,
+                    cert_manifest,
+                    conformance_manifest,
+                    benchmark_report,
+                    solver,
+                    depth,
+                    k,
+                    timeout,
+                    soundness,
+                    format,
+                    out,
+                    cli_network_mode,
+                    por_mode: cli.por_mode.clone(),
+                },
             )?;
         }
         #[cfg(feature = "governance")]

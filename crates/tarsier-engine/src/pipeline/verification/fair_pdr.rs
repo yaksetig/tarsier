@@ -1,7 +1,7 @@
 //! Unbounded fair PDR engine (IC3-style).
 
-use crate::pipeline::*;
 use crate::pipeline::verification::*;
+use crate::pipeline::*;
 
 pub(crate) fn run_fair_lasso_search<S: SmtSolver>(
     solver: &mut S,
@@ -515,11 +515,9 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
     let post_gst_now = if ta.semantics.timing_model
         == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
     {
-        ta.semantics.gst_param
-            .map(|gst_pid| {
-                SmtTerm::var(pdr_param_var(gst_pid.as_usize()))
-                    .le(SmtTerm::var(pdr_time_var(0)))
-            })
+        ta.semantics.gst_param.map(|gst_pid| {
+            SmtTerm::var(pdr_param_var(gst_pid.as_usize())).le(SmtTerm::var(pdr_time_var(0)))
+        })
     } else {
         None
     };
@@ -1131,19 +1129,22 @@ pub(crate) fn fair_pdr_literal_drop_order(
     entries.into_iter().map(|(idx, _)| idx).collect()
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(crate) struct FairLiteralDropContext<'a> {
+    pub(crate) artifacts: &'a FairPdrArtifacts,
+    pub(crate) frames: &'a [FairPdrFrame],
+    pub(crate) level: usize,
+    pub(crate) extra_assertions: &'a [SmtTerm],
+    pub(crate) deadline: Option<Instant>,
+}
+
 pub(crate) fn fair_try_drop_single_literal<S: SmtSolver>(
     solver: &mut S,
-    artifacts: &FairPdrArtifacts,
-    frames: &[FairPdrFrame],
-    level: usize,
+    context: &FairLiteralDropContext<'_>,
     cube: &FairPdrCube,
-    extra_assertions: &[SmtTerm],
-    deadline: Option<Instant>,
     query_budget: &mut usize,
 ) -> Result<(Option<FairPdrCube>, Option<String>), PipelineError> {
-    for idx in fair_pdr_literal_drop_order(cube, &artifacts.state_vars_post) {
-        if deadline_exceeded(deadline) {
+    for idx in fair_pdr_literal_drop_order(cube, &context.artifacts.state_vars_post) {
+        if deadline_exceeded(context.deadline) {
             return Ok((None, Some("Fair PDR: overall timeout exceeded.".into())));
         }
         if *query_budget == 0 {
@@ -1154,11 +1155,11 @@ pub(crate) fn fair_try_drop_single_literal<S: SmtSolver>(
         candidate.lits.remove(idx);
         let (sat, _) = fair_predecessor_query(
             solver,
-            artifacts,
-            frames,
-            level,
+            context.artifacts,
+            context.frames,
+            context.level,
             &candidate,
-            extra_assertions,
+            context.extra_assertions,
             false,
         )?;
         match sat {
@@ -1170,21 +1171,16 @@ pub(crate) fn fair_try_drop_single_literal<S: SmtSolver>(
     Ok((None, None))
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn fair_try_drop_literal_pair<S: SmtSolver>(
     solver: &mut S,
-    artifacts: &FairPdrArtifacts,
-    frames: &[FairPdrFrame],
-    level: usize,
+    context: &FairLiteralDropContext<'_>,
     cube: &FairPdrCube,
-    extra_assertions: &[SmtTerm],
-    deadline: Option<Instant>,
     pair_budget: &mut usize,
 ) -> Result<(Option<FairPdrCube>, Option<String>), PipelineError> {
-    let order = fair_pdr_literal_drop_order(cube, &artifacts.state_vars_post);
+    let order = fair_pdr_literal_drop_order(cube, &context.artifacts.state_vars_post);
     for i in 0..order.len() {
         for j in (i + 1)..order.len() {
-            if deadline_exceeded(deadline) {
+            if deadline_exceeded(context.deadline) {
                 return Ok((None, Some("Fair PDR: overall timeout exceeded.".into())));
             }
             if *pair_budget == 0 {
@@ -1203,11 +1199,11 @@ pub(crate) fn fair_try_drop_literal_pair<S: SmtSolver>(
             }
             let (sat, _) = fair_predecessor_query(
                 solver,
-                artifacts,
-                frames,
-                level,
+                context.artifacts,
+                context.frames,
+                context.level,
                 &candidate,
-                extra_assertions,
+                context.extra_assertions,
                 false,
             )?;
             match sat {
@@ -1251,18 +1247,17 @@ pub(crate) fn fair_try_generalize_cube<S: SmtSolver>(
 
     let mut single_budget = fair_pdr_single_literal_query_budget(current.lits.len());
     let mut pair_budget = fair_pdr_pair_literal_query_budget(current.lits.len());
+    let drop_context = FairLiteralDropContext {
+        artifacts,
+        frames,
+        level,
+        extra_assertions,
+        deadline,
+    };
 
     loop {
-        let (candidate, reason) = fair_try_drop_single_literal(
-            solver,
-            artifacts,
-            frames,
-            level,
-            &current,
-            extra_assertions,
-            deadline,
-            &mut single_budget,
-        )?;
+        let (candidate, reason) =
+            fair_try_drop_single_literal(solver, &drop_context, &current, &mut single_budget)?;
         if let Some(reason) = reason {
             return Ok((None, Some(reason)));
         }
@@ -1276,16 +1271,8 @@ pub(crate) fn fair_try_generalize_cube<S: SmtSolver>(
     }
 
     while current.lits.len() > 2 {
-        let (pair_candidate, reason) = fair_try_drop_literal_pair(
-            solver,
-            artifacts,
-            frames,
-            level,
-            &current,
-            extra_assertions,
-            deadline,
-            &mut pair_budget,
-        )?;
+        let (pair_candidate, reason) =
+            fair_try_drop_literal_pair(solver, &drop_context, &current, &mut pair_budget)?;
         if let Some(reason) = reason {
             return Ok((None, Some(reason)));
         }
@@ -1294,16 +1281,8 @@ pub(crate) fn fair_try_generalize_cube<S: SmtSolver>(
         };
         current = pair_candidate;
         loop {
-            let (single_candidate, reason) = fair_try_drop_single_literal(
-                solver,
-                artifacts,
-                frames,
-                level,
-                &current,
-                extra_assertions,
-                deadline,
-                &mut single_budget,
-            )?;
+            let (single_candidate, reason) =
+                fair_try_drop_single_literal(solver, &drop_context, &current, &mut single_budget)?;
             if let Some(reason) = reason {
                 return Ok((None, Some(reason)));
             }

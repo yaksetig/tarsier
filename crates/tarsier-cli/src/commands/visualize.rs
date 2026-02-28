@@ -49,6 +49,43 @@ pub(crate) struct DebugFilter {
     pub(crate) auth: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct VisualizeCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) check: String,
+    pub(crate) solver: String,
+    pub(crate) depth: usize,
+    pub(crate) k: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) fairness: String,
+    pub(crate) engine: String,
+    pub(crate) format: String,
+    pub(crate) out: Option<PathBuf>,
+    pub(crate) bundle: Option<PathBuf>,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DebugCexCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) check: String,
+    pub(crate) solver: String,
+    pub(crate) depth: usize,
+    pub(crate) k: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) fairness: String,
+    pub(crate) engine: String,
+    pub(crate) filter_sender: Option<String>,
+    pub(crate) filter_recipient: Option<String>,
+    pub(crate) filter_message: Option<String>,
+    pub(crate) filter_kind: Option<String>,
+    pub(crate) filter_variant: Option<String>,
+    pub(crate) filter_auth: Option<String>,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
 impl DebugFilter {
     pub(crate) fn matches(&self, d: &tarsier_ir::counter_system::MessageDeliveryEvent) -> bool {
         if let Some(ref role) = self.sender_role {
@@ -819,22 +856,22 @@ pub(crate) fn run_export_ta_command(file: PathBuf, out: Option<PathBuf>) -> miet
 /// Runs the requested analysis, extracts a counterexample trace, and renders
 /// it in the requested format (timeline, mermaid, markdown, or JSON).
 /// Optionally writes a multi-format bundle directory.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_visualize_command(
-    file: PathBuf,
-    check: String,
-    solver: String,
-    depth: usize,
-    k: usize,
-    timeout: u64,
-    soundness: String,
-    fairness: String,
-    engine: String,
-    format: String,
-    out: Option<PathBuf>,
-    bundle: Option<PathBuf>,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
+pub(crate) fn run_visualize_command(args: VisualizeCommandArgs) -> miette::Result<()> {
+    let VisualizeCommandArgs {
+        file,
+        check,
+        solver,
+        depth,
+        k,
+        timeout,
+        soundness,
+        fairness,
+        engine,
+        format,
+        out,
+        bundle,
+        cli_network_mode,
+    } = args;
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
 
@@ -984,25 +1021,25 @@ pub(crate) fn run_explore_command(
 ///
 /// Runs the requested analysis, extracts a counterexample, and enters the
 /// interactive trace debugger with optional pre-set delivery filters.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_debug_cex_command(
-    file: PathBuf,
-    check: String,
-    solver: String,
-    depth: usize,
-    k: usize,
-    timeout: u64,
-    soundness: String,
-    fairness: String,
-    engine: String,
-    filter_sender: Option<String>,
-    filter_recipient: Option<String>,
-    filter_message: Option<String>,
-    filter_kind: Option<String>,
-    filter_variant: Option<String>,
-    filter_auth: Option<String>,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
+pub(crate) fn run_debug_cex_command(args: DebugCexCommandArgs) -> miette::Result<()> {
+    let DebugCexCommandArgs {
+        file,
+        check,
+        solver,
+        depth,
+        k,
+        timeout,
+        soundness,
+        fairness,
+        engine,
+        filter_sender,
+        filter_recipient,
+        filter_message,
+        filter_kind,
+        filter_variant,
+        filter_auth,
+        cli_network_mode,
+    } = args;
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
     let check = parse_visualize_check(&check)?;

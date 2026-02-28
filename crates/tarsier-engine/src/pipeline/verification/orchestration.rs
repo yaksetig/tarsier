@@ -1,7 +1,7 @@
 //! Top-level verification entry points and CEGAR loop drivers.
 
-use crate::pipeline::*;
 use crate::pipeline::verification::*;
+use crate::pipeline::*;
 
 pub fn verify(
     source: &str,
@@ -55,7 +55,8 @@ pub fn verify_all_properties(
     let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
     let has_committees = !committee_summaries.is_empty();
     let committee_bounds: Vec<(usize, u64)> = ta
-        .constraints.committees
+        .constraints
+        .committees
         .iter()
         .zip(committee_summaries.iter())
         .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
@@ -304,7 +305,8 @@ pub(crate) fn verify_program(
 
     // Collect per-committee (param_id, b_max) bounds for SMT injection.
     let committee_bounds: Vec<(usize, u64)> = ta
-        .constraints.committees
+        .constraints
+        .committees
         .iter()
         .zip(committee_summaries.iter())
         .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
@@ -822,7 +824,8 @@ pub(crate) fn prove_safety_for_ta(
     let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
     let has_committees = !committee_summaries.is_empty();
     let committee_bounds: Vec<(usize, u64)> = ta
-        .constraints.committees
+        .constraints
+        .committees
         .iter()
         .zip(committee_summaries.iter())
         .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
@@ -1105,10 +1108,13 @@ pub fn prove_safety_with_cegar(
         let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
         let has_committees = !committee_summaries.is_empty();
         let committee_bounds: Vec<(usize, u64)> = ta
-            .constraints.committees
+            .constraints
+            .committees
             .iter()
             .zip(committee_summaries.iter())
-            .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
+            .filter_map(|(spec, summary)| {
+                spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max))
+            })
             .collect();
 
         if has_committees && committee_bounds.is_empty() {
@@ -1167,31 +1173,31 @@ pub fn prove_safety_with_cegar(
             match stage_options.solver {
                 SolverChoice::Z3 => {
                     let mut solver = Z3Solver::with_timeout_secs(stage_options.timeout_secs);
-                    run_unbounded_with_engine_and_location_invariants(
-                        &mut solver,
-                        &cs,
-                        &property,
-                        stage_options.max_depth,
-                        &committee_bounds,
+                    let run_config = UnboundedEngineRunConfig {
+                        cs: &cs,
+                        property: &property,
+                        max_k: stage_options.max_depth,
+                        committee_bounds: &committee_bounds,
                         engine,
-                        &synthesized_locs,
-                        overall_timeout_duration(stage_options.timeout_secs),
-                    )
+                        invariant_zero_locs: &synthesized_locs,
+                        overall_timeout: overall_timeout_duration(stage_options.timeout_secs),
+                    };
+                    run_unbounded_with_engine_and_location_invariants(&mut solver, &run_config)
                 }
                 SolverChoice::Cvc5 => {
                     use tarsier_smt::backends::cvc5_backend::Cvc5Solver;
                     let mut solver = Cvc5Solver::with_timeout_secs(stage_options.timeout_secs)
                         .map_err(|e| PipelineError::Solver(e.to_string()))?;
-                    run_unbounded_with_engine_and_location_invariants(
-                        &mut solver,
-                        &cs,
-                        &property,
-                        stage_options.max_depth,
-                        &committee_bounds,
+                    let run_config = UnboundedEngineRunConfig {
+                        cs: &cs,
+                        property: &property,
+                        max_k: stage_options.max_depth,
+                        committee_bounds: &committee_bounds,
                         engine,
-                        &synthesized_locs,
-                        overall_timeout_duration(stage_options.timeout_secs),
-                    )
+                        invariant_zero_locs: &synthesized_locs,
+                        overall_timeout: overall_timeout_duration(stage_options.timeout_secs),
+                    };
+                    run_unbounded_with_engine_and_location_invariants(&mut solver, &run_config)
                 }
             }
         };
@@ -1747,10 +1753,13 @@ pub fn check_liveness(
 
         // Collect per-committee (param_id, b_max) bounds for SMT injection
         let committee_bounds: Vec<(usize, u64)> = ta
-            .constraints.committees
+            .constraints
+            .committees
             .iter()
             .zip(committee_summaries.iter())
-            .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
+            .filter_map(|(spec, summary)| {
+                spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max))
+            })
             .collect();
 
         if has_committees && committee_bounds.is_empty() {
@@ -2491,7 +2500,8 @@ pub(crate) fn prove_fair_liveness_for_ta(
     let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
     let has_committees = !committee_summaries.is_empty();
     let committee_bounds: Vec<(usize, u64)> = ta
-        .constraints.committees
+        .constraints
+        .committees
         .iter()
         .zip(committee_summaries.iter())
         .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
@@ -2618,10 +2628,13 @@ pub fn check_fair_liveness_with_mode(
         let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
         let has_committees = !committee_summaries.is_empty();
         let committee_bounds: Vec<(usize, u64)> = ta
-            .constraints.committees
+            .constraints
+            .committees
             .iter()
             .zip(committee_summaries.iter())
-            .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
+            .filter_map(|(spec, summary)| {
+                spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max))
+            })
             .collect();
 
         if has_committees && committee_bounds.is_empty() {

@@ -24,6 +24,23 @@ use super::{
     verify_governance_bundle, CertSuiteDefaults, GovernanceGateResult, GovernancePipelineReport,
 };
 
+#[derive(Debug, Clone)]
+pub(crate) struct GovernancePipelineCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) cert_manifest: PathBuf,
+    pub(crate) conformance_manifest: PathBuf,
+    pub(crate) benchmark_report: Option<PathBuf>,
+    pub(crate) solver: String,
+    pub(crate) depth: usize,
+    pub(crate) k: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) format: String,
+    pub(crate) out: Option<PathBuf>,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+    pub(crate) por_mode: String,
+}
+
 /// Handler for `Commands::CertSuite`.
 pub(crate) fn run_cert_suite_command(
     manifest: PathBuf,
@@ -586,22 +603,24 @@ pub(crate) fn run_generate_trust_report_command(
 }
 
 /// Handler for `Commands::GovernancePipeline`.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_governance_pipeline_command(
-    file: PathBuf,
-    cert_manifest: PathBuf,
-    conformance_manifest: PathBuf,
-    benchmark_report: Option<PathBuf>,
-    solver: String,
-    depth: usize,
-    k: usize,
-    timeout: u64,
-    soundness: String,
-    format: String,
-    out: Option<PathBuf>,
-    cli_network_mode: CliNetworkSemanticsMode,
-    por_mode: &str,
+    args: GovernancePipelineCommandArgs,
 ) -> miette::Result<()> {
+    let GovernancePipelineCommandArgs {
+        file,
+        cert_manifest,
+        conformance_manifest,
+        benchmark_report,
+        solver,
+        depth,
+        k,
+        timeout,
+        soundness,
+        format,
+        out,
+        cli_network_mode,
+        por_mode,
+    } = args;
     let pipeline_start = std::time::Instant::now();
     let output_format = parse_output_format(&format)?;
     let mut gates: Vec<GovernanceGateResult> = Vec::new();
@@ -630,7 +649,7 @@ pub(crate) fn run_governance_pipeline_command(
             cfg,
             cli_network_mode,
             None,
-            por_mode,
+            &por_mode,
         );
         let status = if report.overall == "pass" {
             "pass"

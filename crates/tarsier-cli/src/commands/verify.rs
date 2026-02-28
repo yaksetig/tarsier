@@ -65,6 +65,62 @@ pub(crate) struct RoundBoundMutationStats {
     unbounded_targets: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct VerifyCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) solver: String,
+    pub(crate) depth: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) dump_smt: Option<String>,
+    pub(crate) cegar_iters: usize,
+    pub(crate) cegar_report_out: Option<PathBuf>,
+    pub(crate) portfolio: bool,
+    pub(crate) format: String,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RoundSweepCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) solver: String,
+    pub(crate) depth: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) vars: Vec<String>,
+    pub(crate) min_bound: i64,
+    pub(crate) max_bound: i64,
+    pub(crate) stable_window: usize,
+    pub(crate) format: String,
+    pub(crate) out: Option<PathBuf>,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LivenessCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) solver: String,
+    pub(crate) depth: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) dump_smt: Option<String>,
+    pub(crate) format: String,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct FairLivenessCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) solver: String,
+    pub(crate) depth: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) fairness: String,
+    pub(crate) portfolio: bool,
+    pub(crate) format: String,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions — trace serialization
 // ---------------------------------------------------------------------------
@@ -1687,20 +1743,20 @@ pub(crate) fn merge_portfolio_prove_fair_results(
 ///
 /// Performs bounded model checking (BMC) with optional CEGAR refinement on the
 /// given protocol file, optionally using portfolio (Z3 + cvc5) mode.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_verify_command(
-    file: PathBuf,
-    solver: String,
-    depth: usize,
-    timeout: u64,
-    soundness: String,
-    dump_smt: Option<String>,
-    cegar_iters: usize,
-    cegar_report_out: Option<PathBuf>,
-    portfolio: bool,
-    format: String,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
+pub(crate) fn run_verify_command(args: VerifyCommandArgs) -> miette::Result<()> {
+    let VerifyCommandArgs {
+        file,
+        solver,
+        depth,
+        timeout,
+        soundness,
+        dump_smt,
+        cegar_iters,
+        cegar_report_out,
+        portfolio,
+        format,
+        cli_network_mode,
+    } = args;
     let output_format = parse_output_format(&format)?;
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
@@ -1901,21 +1957,21 @@ pub(crate) fn run_verify_command(
 ///
 /// Sweeps round/view upper bounds over a range and reports verdict convergence,
 /// detecting a candidate cutoff where the result stabilizes.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_round_sweep_command(
-    file: PathBuf,
-    solver: String,
-    depth: usize,
-    timeout: u64,
-    soundness: String,
-    vars: Vec<String>,
-    min_bound: i64,
-    max_bound: i64,
-    stable_window: usize,
-    format: String,
-    out: Option<PathBuf>,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
+pub(crate) fn run_round_sweep_command(args: RoundSweepCommandArgs) -> miette::Result<()> {
+    let RoundSweepCommandArgs {
+        file,
+        solver,
+        depth,
+        timeout,
+        soundness,
+        vars,
+        min_bound,
+        max_bound,
+        stable_window,
+        format,
+        out,
+        cli_network_mode,
+    } = args;
     if min_bound > max_bound {
         miette::bail!("min_bound must be <= max_bound");
     }
@@ -2017,17 +2073,17 @@ pub(crate) fn run_round_sweep_command(
 ///
 /// Checks bounded liveness: whether all processes satisfy the liveness target
 /// by the given depth.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_liveness_command(
-    file: PathBuf,
-    solver: String,
-    depth: usize,
-    timeout: u64,
-    soundness: String,
-    dump_smt: Option<String>,
-    format: String,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
+pub(crate) fn run_liveness_command(args: LivenessCommandArgs) -> miette::Result<()> {
+    let LivenessCommandArgs {
+        file,
+        solver,
+        depth,
+        timeout,
+        soundness,
+        dump_smt,
+        format,
+        cli_network_mode,
+    } = args;
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
     let soundness_mode = parse_soundness_mode(&soundness)?;
@@ -2083,18 +2139,18 @@ pub(crate) fn run_liveness_command(
 ///
 /// Searches for bounded fair non-termination lassos, optionally using
 /// portfolio (Z3 + cvc5) mode.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_fair_liveness_command(
-    file: PathBuf,
-    solver: String,
-    depth: usize,
-    timeout: u64,
-    soundness: String,
-    fairness: String,
-    portfolio: bool,
-    format: String,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
+pub(crate) fn run_fair_liveness_command(args: FairLivenessCommandArgs) -> miette::Result<()> {
+    let FairLivenessCommandArgs {
+        file,
+        solver,
+        depth,
+        timeout,
+        soundness,
+        fairness,
+        portfolio,
+        format,
+        cli_network_mode,
+    } = args;
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
     let soundness_mode = parse_soundness_mode(&soundness)?;

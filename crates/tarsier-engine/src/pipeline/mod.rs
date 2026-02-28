@@ -984,7 +984,10 @@ protocol FallbackBudget {
         };
         let ta = lower_with_controls(&program, "test.fallback", controls)
             .expect("lowering with fallback should succeed");
-        assert_eq!(ta.semantics.network_semantics, NetworkSemantics::IdentitySelective);
+        assert_eq!(
+            ta.semantics.network_semantics,
+            NetworkSemantics::IdentitySelective
+        );
 
         let diag = take_run_diagnostics();
         assert!(
@@ -1039,7 +1042,10 @@ protocol NoFallback {
             PipelineExecutionControls::default(),
         )
         .expect("lowering should succeed");
-        assert_eq!(ta.semantics.network_semantics, NetworkSemantics::ProcessSelective);
+        assert_eq!(
+            ta.semantics.network_semantics,
+            NetworkSemantics::ProcessSelective
+        );
         let diag = take_run_diagnostics();
         let lowering = diag
             .lowerings
@@ -2716,17 +2722,17 @@ protocol CtiConcreteClassification {
             soundness: SoundnessMode::Strict,
             proof_engine: ProofEngine::KInduction,
         };
-        let (classification, evidence) = classify_cti(
-            &cs,
-            &witness,
-            witness.k,
-            0,
-            &hypothesis_locations,
-            &params,
-            &ta,
-            &[],
-            &options,
-        );
+        let (classification, evidence) = classify_cti(&CtiClassificationInput {
+            cs: &cs,
+            witness: &witness,
+            cti_k: witness.k,
+            bmc_depth_checked: 0,
+            hypothesis_locations: &hypothesis_locations,
+            params: &params,
+            ta: &ta,
+            committee_bounds: &[],
+            options: &options,
+        });
         assert_eq!(
             classification,
             CtiClassification::Concrete,

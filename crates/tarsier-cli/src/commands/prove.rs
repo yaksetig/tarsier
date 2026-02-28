@@ -38,6 +38,77 @@ pub(crate) enum ProveAutoTarget {
     FairLiveness,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ProveCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) solver: String,
+    pub(crate) k: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) engine: String,
+    pub(crate) fairness: String,
+    pub(crate) cert_out: Option<PathBuf>,
+    pub(crate) cegar_iters: usize,
+    pub(crate) cegar_report_out: Option<PathBuf>,
+    pub(crate) portfolio: bool,
+    pub(crate) format: String,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProveFairCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) solver: String,
+    pub(crate) k: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) fairness: String,
+    pub(crate) cert_out: Option<PathBuf>,
+    pub(crate) cegar_iters: usize,
+    pub(crate) cegar_report_out: Option<PathBuf>,
+    pub(crate) portfolio: bool,
+    pub(crate) format: String,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProveRoundCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) solver: String,
+    pub(crate) k: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) engine: String,
+    pub(crate) round_vars: Vec<String>,
+    pub(crate) format: String,
+    pub(crate) out: Option<PathBuf>,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProveFairRoundCommandArgs {
+    pub(crate) file: PathBuf,
+    pub(crate) solver: String,
+    pub(crate) k: usize,
+    pub(crate) timeout: u64,
+    pub(crate) soundness: String,
+    pub(crate) fairness: String,
+    pub(crate) round_vars: Vec<String>,
+    pub(crate) format: String,
+    pub(crate) out: Option<PathBuf>,
+    pub(crate) cli_network_mode: CliNetworkSemanticsMode,
+}
+
+#[derive(Debug, Clone)]
+struct ProveExecutionConfig {
+    fairness: FairnessMode,
+    cert_out: Option<PathBuf>,
+    cegar_iters: usize,
+    cegar_report_out: Option<PathBuf>,
+    timeout: u64,
+    output_format: OutputFormat,
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
@@ -213,177 +284,111 @@ pub(crate) fn build_liveness_governance_report(
 /// Auto-detects whether the protocol specifies safety or fair-liveness
 /// properties and dispatches accordingly.  Supports portfolio mode
 /// (parallel Z3 + cvc5), CEGAR refinement, and certificate generation.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_prove_command(
-    file: PathBuf,
-    solver: String,
-    k: usize,
-    timeout: u64,
-    soundness: String,
-    engine: String,
-    fairness: String,
-    cert_out: Option<PathBuf>,
-    cegar_iters: usize,
-    cegar_report_out: Option<PathBuf>,
-    portfolio: bool,
-    format: String,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
-    let output_format = parse_output_format(&format)?;
-    let source = sandbox_read_source(&file)?;
-    let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness)?;
-    validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
+pub(crate) fn run_prove_command(args: ProveCommandArgs) -> miette::Result<()> {
+    let output_format = parse_output_format(&args.format)?;
+    let source = sandbox_read_source(&args.file)?;
+    let filename = args.file.display().to_string();
+    let soundness_mode = parse_soundness_mode(&args.soundness)?;
+    validate_cli_network_semantics_mode(&source, &filename, soundness_mode, args.cli_network_mode)?;
 
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver)?,
-        max_depth: k,
-        timeout_secs: timeout,
+        solver: parse_solver_choice(&args.solver)?,
+        max_depth: args.k,
+        timeout_secs: args.timeout,
         dump_smt: None,
         soundness: soundness_mode,
-        proof_engine: parse_proof_engine(&engine)?,
+        proof_engine: parse_proof_engine(&args.engine)?,
     };
-    let fairness = parse_fairness_mode(&fairness)?;
+    let fairness = parse_fairness_mode(&args.fairness)?;
+    let exec = ProveExecutionConfig {
+        fairness,
+        cert_out: args.cert_out,
+        cegar_iters: args.cegar_iters,
+        cegar_report_out: args.cegar_report_out,
+        timeout: args.timeout,
+        output_format,
+    };
     let prove_target = detect_prove_auto_target(&source, &filename)?;
 
     if prove_target == ProveAutoTarget::FairLiveness {
-        run_prove_fair_liveness_branch(
-            &source,
-            &filename,
-            &options,
-            fairness,
-            cert_out,
-            cegar_iters,
-            cegar_report_out,
-            portfolio,
-            timeout,
-            output_format,
-        )?;
-    } else if portfolio {
-        run_prove_safety_portfolio(
-            &source,
-            &filename,
-            &options,
-            fairness,
-            cert_out,
-            cegar_iters,
-            cegar_report_out,
-            timeout,
-            output_format,
-        )?;
+        run_prove_fair_liveness_branch(&source, &filename, &options, args.portfolio, exec)?;
+    } else if args.portfolio {
+        run_prove_safety_portfolio(&source, &filename, &options, exec)?;
     } else {
         run_prove_safety_single(
             &source,
             &filename,
             &options,
-            cert_out,
-            cegar_iters,
-            cegar_report_out,
-            output_format,
+            exec.cert_out,
+            exec.cegar_iters,
+            exec.cegar_report_out,
+            exec.output_format,
         )?;
     }
     Ok(())
 }
 
 /// Handler for `tarsier prove-fair`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_prove_fair_command(
-    file: PathBuf,
-    solver: String,
-    k: usize,
-    timeout: u64,
-    soundness: String,
-    fairness: String,
-    cert_out: Option<PathBuf>,
-    cegar_iters: usize,
-    cegar_report_out: Option<PathBuf>,
-    portfolio: bool,
-    format: String,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
-    let source = sandbox_read_source(&file)?;
-    let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness)?;
-    let output_format = parse_output_format(&format)?;
-    validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
+pub(crate) fn run_prove_fair_command(args: ProveFairCommandArgs) -> miette::Result<()> {
+    let source = sandbox_read_source(&args.file)?;
+    let filename = args.file.display().to_string();
+    let soundness_mode = parse_soundness_mode(&args.soundness)?;
+    let output_format = parse_output_format(&args.format)?;
+    validate_cli_network_semantics_mode(&source, &filename, soundness_mode, args.cli_network_mode)?;
 
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver)?,
-        max_depth: k,
-        timeout_secs: timeout,
+        solver: parse_solver_choice(&args.solver)?,
+        max_depth: args.k,
+        timeout_secs: args.timeout,
         dump_smt: None,
         soundness: soundness_mode,
         proof_engine: ProofEngine::Pdr,
     };
-    let fairness = parse_fairness_mode(&fairness)?;
+    let exec = ProveExecutionConfig {
+        fairness: parse_fairness_mode(&args.fairness)?,
+        cert_out: args.cert_out,
+        cegar_iters: args.cegar_iters,
+        cegar_report_out: args.cegar_report_out,
+        timeout: args.timeout,
+        output_format,
+    };
 
-    if portfolio {
-        run_prove_fair_portfolio(
-            &source,
-            &filename,
-            &options,
-            fairness,
-            cert_out,
-            cegar_iters,
-            cegar_report_out,
-            timeout,
-            output_format,
-        )?;
+    if args.portfolio {
+        run_prove_fair_portfolio(&source, &filename, &options, exec)?;
     } else {
-        run_prove_fair_single(
-            &source,
-            &filename,
-            &options,
-            fairness,
-            cert_out,
-            cegar_iters,
-            cegar_report_out,
-            output_format,
-        )?;
+        run_prove_fair_single(&source, &filename, &options, exec)?;
     }
     Ok(())
 }
 
 /// Handler for `tarsier prove-round`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_prove_round_command(
-    file: PathBuf,
-    solver: String,
-    k: usize,
-    timeout: u64,
-    soundness: String,
-    engine: String,
-    round_vars: Vec<String>,
-    format: String,
-    out: Option<PathBuf>,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
-    if round_vars.is_empty() {
+pub(crate) fn run_prove_round_command(args: ProveRoundCommandArgs) -> miette::Result<()> {
+    if args.round_vars.is_empty() {
         miette::bail!("Provide at least one round variable name with --round-vars.");
     }
 
-    let source = sandbox_read_source(&file)?;
-    let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness)?;
-    validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
+    let source = sandbox_read_source(&args.file)?;
+    let filename = args.file.display().to_string();
+    let soundness_mode = parse_soundness_mode(&args.soundness)?;
+    validate_cli_network_semantics_mode(&source, &filename, soundness_mode, args.cli_network_mode)?;
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver)?,
-        max_depth: k,
-        timeout_secs: timeout,
+        solver: parse_solver_choice(&args.solver)?,
+        max_depth: args.k,
+        timeout_secs: args.timeout,
         dump_smt: None,
         soundness: soundness_mode,
-        proof_engine: parse_proof_engine(&engine)?,
+        proof_engine: parse_proof_engine(&args.engine)?,
     };
 
     let proved = tarsier_engine::pipeline::prove_safety_with_round_abstraction(
         &source,
         &filename,
         &options,
-        &round_vars,
+        &args.round_vars,
     )
     .into_diagnostic()?;
 
-    match parse_output_format(&format)? {
+    match parse_output_format(&args.format)? {
         OutputFormat::Text => {
             println!(
                 "{}",
@@ -416,7 +421,7 @@ pub(crate) fn run_prove_round_command(
                         "Inconclusive result; try larger k or different engine.",
                 },
             });
-            if let Some(path) = out {
+            if let Some(path) = args.out {
                 write_json_artifact(&path, &value)?;
                 println!("Round abstraction report written to {}", path.display());
             } else {
@@ -431,31 +436,19 @@ pub(crate) fn run_prove_round_command(
 }
 
 /// Handler for `tarsier prove-fair-round`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn run_prove_fair_round_command(
-    file: PathBuf,
-    solver: String,
-    k: usize,
-    timeout: u64,
-    soundness: String,
-    fairness: String,
-    round_vars: Vec<String>,
-    format: String,
-    out: Option<PathBuf>,
-    cli_network_mode: CliNetworkSemanticsMode,
-) -> miette::Result<()> {
-    if round_vars.is_empty() {
+pub(crate) fn run_prove_fair_round_command(args: ProveFairRoundCommandArgs) -> miette::Result<()> {
+    if args.round_vars.is_empty() {
         miette::bail!("Provide at least one round variable name with --round-vars.");
     }
-    let source = sandbox_read_source(&file)?;
-    let filename = file.display().to_string();
-    let fairness = parse_fairness_mode(&fairness)?;
-    let soundness_mode = parse_soundness_mode(&soundness)?;
-    validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
+    let source = sandbox_read_source(&args.file)?;
+    let filename = args.file.display().to_string();
+    let fairness = parse_fairness_mode(&args.fairness)?;
+    let soundness_mode = parse_soundness_mode(&args.soundness)?;
+    validate_cli_network_semantics_mode(&source, &filename, soundness_mode, args.cli_network_mode)?;
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver)?,
-        max_depth: k,
-        timeout_secs: timeout,
+        solver: parse_solver_choice(&args.solver)?,
+        max_depth: args.k,
+        timeout_secs: args.timeout,
         dump_smt: None,
         soundness: soundness_mode,
         proof_engine: ProofEngine::Pdr,
@@ -466,11 +459,11 @@ pub(crate) fn run_prove_fair_round_command(
         &filename,
         &options,
         fairness,
-        &round_vars,
+        &args.round_vars,
     )
     .into_diagnostic()?;
 
-    match parse_output_format(&format)? {
+    match parse_output_format(&args.format)? {
         OutputFormat::Text => {
             println!(
                 "{}",
@@ -502,7 +495,7 @@ pub(crate) fn run_prove_fair_round_command(
                         "Inconclusive result; try larger k or different fairness settings.",
                 },
             });
-            if let Some(path) = out {
+            if let Some(path) = args.out {
                 write_json_artifact(&path, &value)?;
                 println!(
                     "Round abstraction fair-liveness report written to {}",
@@ -524,19 +517,21 @@ pub(crate) fn run_prove_fair_round_command(
 // ---------------------------------------------------------------------------
 
 /// Run the fair-liveness branch of `tarsier prove` (auto-dispatched).
-#[allow(clippy::too_many_arguments)]
 fn run_prove_fair_liveness_branch(
     source: &str,
     filename: &str,
     options: &PipelineOptions,
-    fairness: FairnessMode,
-    cert_out: Option<PathBuf>,
-    cegar_iters: usize,
-    cegar_report_out: Option<PathBuf>,
     portfolio: bool,
-    timeout: u64,
-    output_format: OutputFormat,
+    config: ProveExecutionConfig,
 ) -> miette::Result<()> {
+    let ProveExecutionConfig {
+        fairness,
+        cert_out,
+        cegar_iters,
+        cegar_report_out,
+        timeout,
+        output_format,
+    } = config;
     if portfolio {
         let mut z3_options = options.clone();
         z3_options.solver = SolverChoice::Z3;
@@ -751,18 +746,20 @@ fn run_prove_fair_liveness_branch(
 }
 
 /// Run `tarsier prove` in safety portfolio mode (parallel Z3 + cvc5).
-#[allow(clippy::too_many_arguments)]
 fn run_prove_safety_portfolio(
     source: &str,
     filename: &str,
     options: &PipelineOptions,
-    fairness: FairnessMode,
-    cert_out: Option<PathBuf>,
-    cegar_iters: usize,
-    cegar_report_out: Option<PathBuf>,
-    timeout: u64,
-    output_format: OutputFormat,
+    config: ProveExecutionConfig,
 ) -> miette::Result<()> {
+    let ProveExecutionConfig {
+        fairness,
+        cert_out,
+        cegar_iters,
+        cegar_report_out,
+        timeout,
+        output_format,
+    } = config;
     let mut z3_options = options.clone();
     z3_options.solver = SolverChoice::Z3;
     let mut cvc5_options = options.clone();
@@ -967,18 +964,20 @@ fn run_prove_safety_single(
 }
 
 /// Run `tarsier prove-fair` in portfolio mode (parallel Z3 + cvc5).
-#[allow(clippy::too_many_arguments)]
 fn run_prove_fair_portfolio(
     source: &str,
     filename: &str,
     options: &PipelineOptions,
-    fairness: FairnessMode,
-    cert_out: Option<PathBuf>,
-    cegar_iters: usize,
-    cegar_report_out: Option<PathBuf>,
-    timeout: u64,
-    output_format: OutputFormat,
+    config: ProveExecutionConfig,
 ) -> miette::Result<()> {
+    let ProveExecutionConfig {
+        fairness,
+        cert_out,
+        cegar_iters,
+        cegar_report_out,
+        timeout,
+        output_format,
+    } = config;
     let mut z3_options = options.clone();
     z3_options.solver = SolverChoice::Z3;
     let mut cvc5_options = options.clone();
@@ -1095,17 +1094,20 @@ fn run_prove_fair_portfolio(
 }
 
 /// Run `tarsier prove-fair` in single-solver mode.
-#[allow(clippy::too_many_arguments)]
 fn run_prove_fair_single(
     source: &str,
     filename: &str,
     options: &PipelineOptions,
-    fairness: FairnessMode,
-    cert_out: Option<PathBuf>,
-    cegar_iters: usize,
-    cegar_report_out: Option<PathBuf>,
-    output_format: OutputFormat,
+    config: ProveExecutionConfig,
 ) -> miette::Result<()> {
+    let ProveExecutionConfig {
+        fairness,
+        cert_out,
+        cegar_iters,
+        cegar_report_out,
+        output_format,
+        ..
+    } = config;
     let result = if let Some(report_path) = cegar_report_out.clone() {
         let report = tarsier_engine::pipeline::prove_fair_liveness_with_cegar_report(
             source,
