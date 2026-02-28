@@ -1,6 +1,7 @@
 //! Network semantics, POR analysis, and controlled lowering helpers.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
 pub(crate) fn adversary_value<'a>(proto: &'a ast::ProtocolDecl, key: &str) -> Option<&'a str> {
     proto
@@ -267,7 +268,7 @@ pub(crate) fn guard_read_vars(guard: &tarsier_ir::threshold_automaton::Guard) ->
     let mut out = HashSet::new();
     for atom in &guard.atoms {
         let GuardAtom::Threshold { vars, .. } = atom;
-        out.extend(vars.iter().copied());
+        out.extend(vars.iter().map(|v| v.as_usize()));
     }
     out
 }
@@ -275,7 +276,7 @@ pub(crate) fn guard_read_vars(guard: &tarsier_ir::threshold_automaton::Guard) ->
 pub(crate) fn update_write_vars(
     updates: &[tarsier_ir::threshold_automaton::Update],
 ) -> HashSet<usize> {
-    updates.iter().map(|u| u.var).collect()
+    updates.iter().map(|u| u.var.as_usize()).collect()
 }
 
 pub(crate) fn por_normalized_vars(vars: &[usize]) -> Vec<usize> {
@@ -291,7 +292,7 @@ pub(crate) fn por_normalized_lc_terms(lc: &LinearCombination) -> Vec<(i64, usize
         if *coeff == 0 {
             continue;
         }
-        *coeff_by_param.entry(*pid).or_insert(0) += *coeff;
+        *coeff_by_param.entry(pid.as_usize()).or_insert(0) += *coeff;
     }
     let mut terms: Vec<(i64, usize)> = coeff_by_param
         .into_iter()
@@ -356,8 +357,13 @@ pub(crate) fn por_guard_atom_implies(lhs: &GuardAtom, rhs: &GuardAtom) -> bool {
                 distinct: rhs_distinct,
             },
         ) => {
-            if lhs_distinct != rhs_distinct
-                || por_normalized_vars(lhs_vars) != por_normalized_vars(rhs_vars)
+            let lhs_vars_norm = por_normalized_vars(
+                &lhs_vars.iter().map(|v| v.as_usize()).collect::<Vec<_>>(),
+            );
+            let rhs_vars_norm = por_normalized_vars(
+                &rhs_vars.iter().map(|v| v.as_usize()).collect::<Vec<_>>(),
+            );
+            if lhs_distinct != rhs_distinct || lhs_vars_norm != rhs_vars_norm
             {
                 return false;
             }
@@ -472,7 +478,7 @@ pub(crate) fn is_pure_stutter_rule(rule: &tarsier_ir::threshold_automaton::Rule)
 }
 
 pub(crate) fn por_rule_pruning_summary(ta: &ThresholdAutomaton) -> (usize, usize, usize, usize) {
-    if ta.por_mode == PorMode::Off {
+    if ta.semantics.por_mode == PorMode::Off {
         return (0, 0, 0, ta.rules.len());
     }
     let mut stutter_pruned = 0usize;
@@ -544,7 +550,7 @@ pub(crate) fn rules_independent(
     if lhs.from == rhs.from || lhs.from == rhs.to || lhs.to == rhs.from || lhs.to == rhs.to {
         return false;
     }
-    if ta.locations[lhs.from].role == ta.locations[rhs.from].role {
+    if ta.locations[lhs.from.as_usize()].role == ta.locations[rhs.from.as_usize()].role {
         return false;
     }
     let lhs_reads = guard_read_vars(&lhs.guard);
@@ -604,7 +610,7 @@ pub(crate) fn lower_with_controls(
 
     // Apply CLI POR mode override if specified.
     if let Some(por_override) = controls.por_mode_override {
-        current_ta.por_mode = por_override;
+        current_ta.semantics.por_mode = por_override;
     }
 
     let requested_footprint = automaton_footprint(&current_ta);
@@ -713,14 +719,14 @@ pub(crate) fn lower_with_controls(
         context: context.to_string(),
         requested_network: network_semantics_name(requested_network).into(),
         effective_network: network_semantics_name(current_mode).into(),
-        fault_model: fault_model_name(current_ta.fault_model).into(),
-        authentication: authentication_mode_name(current_ta.authentication_mode).into(),
-        equivocation: equivocation_mode_name(current_ta.equivocation_mode).into(),
-        delivery_control: delivery_control_mode_name(current_ta.delivery_control).into(),
-        fault_budget_scope: fault_budget_scope_name(current_ta.fault_budget_scope).into(),
-        identity_roles: current_ta.role_identities.len(),
+        fault_model: fault_model_name(current_ta.semantics.fault_model).into(),
+        authentication: authentication_mode_name(current_ta.semantics.authentication_mode).into(),
+        equivocation: equivocation_mode_name(current_ta.semantics.equivocation_mode).into(),
+        delivery_control: delivery_control_mode_name(current_ta.semantics.delivery_control).into(),
+        fault_budget_scope: fault_budget_scope_name(current_ta.semantics.fault_budget_scope).into(),
+        identity_roles: current_ta.security.role_identities.len(),
         process_identity_roles: current_ta
-            .role_identities
+            .security.role_identities
             .values()
             .filter(|cfg| cfg.scope == tarsier_ir::threshold_automaton::RoleIdentityScope::Process)
             .count(),
@@ -750,7 +756,8 @@ pub(crate) fn lower_with_active_controls(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::pipeline::*;
+use crate::pipeline::verification::*;
     use tarsier_ir::threshold_automaton::{Guard, LinearCombination, Rule, Update, UpdateKind};
 
     // Helper: create a minimal ProtocolDecl for testing
@@ -1020,7 +1027,7 @@ mod tests {
     fn por_normalized_lc_terms_merges_and_filters() {
         let lc = LinearCombination {
             constant: 0,
-            terms: vec![(2, 0), (3, 0), (1, 1), (0, 2)],
+            terms: vec![(2, 0.into()), (3, 0.into()), (1, 1.into()), (0, 2.into())],
         };
         let result = por_normalized_lc_terms(&lc);
         // pid=0: 2+3=5, pid=1: 1, pid=2: coeff 0 is filtered
@@ -1031,11 +1038,11 @@ mod tests {
     fn por_comparable_lc_constants_same_terms() {
         let lhs = LinearCombination {
             constant: 10,
-            terms: vec![(1, 0)],
+            terms: vec![(1, 0.into())],
         };
         let rhs = LinearCombination {
             constant: 20,
-            terms: vec![(1, 0)],
+            terms: vec![(1, 0.into())],
         };
         assert_eq!(por_comparable_lc_constants(&lhs, &rhs), Some((10, 20)));
     }
@@ -1044,11 +1051,11 @@ mod tests {
     fn por_comparable_lc_constants_different_terms() {
         let lhs = LinearCombination {
             constant: 10,
-            terms: vec![(1, 0)],
+            terms: vec![(1, 0.into())],
         };
         let rhs = LinearCombination {
             constant: 20,
-            terms: vec![(1, 1)],
+            terms: vec![(1, 1.into())],
         };
         assert_eq!(por_comparable_lc_constants(&lhs, &rhs), None);
     }
@@ -1079,8 +1086,8 @@ mod tests {
     #[test]
     fn is_pure_stutter_rule_true_case() {
         let rule = Rule {
-            from: 0,
-            to: 0,
+            from: 0.into(),
+            to: 0.into(),
             guard: Guard::trivial(),
             updates: vec![],
         };
@@ -1090,8 +1097,8 @@ mod tests {
     #[test]
     fn is_pure_stutter_rule_false_different_locations() {
         let rule = Rule {
-            from: 0,
-            to: 1,
+            from: 0.into(),
+            to: 1.into(),
             guard: Guard::trivial(),
             updates: vec![],
         };
@@ -1101,11 +1108,11 @@ mod tests {
     #[test]
     fn is_pure_stutter_rule_false_has_updates() {
         let rule = Rule {
-            from: 0,
-            to: 0,
+            from: 0.into(),
+            to: 0.into(),
             guard: Guard::trivial(),
             updates: vec![Update {
-                var: 0,
+                var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
         };
@@ -1117,13 +1124,13 @@ mod tests {
         let guard = Guard {
             atoms: vec![
                 GuardAtom::Threshold {
-                    vars: vec![0, 1],
+                    vars: vec![0.into(), 1.into()],
                     op: CmpOp::Ge,
                     bound: LinearCombination::constant(1),
                     distinct: false,
                 },
                 GuardAtom::Threshold {
-                    vars: vec![2],
+                    vars: vec![2.into()],
                     op: CmpOp::Gt,
                     bound: LinearCombination::constant(0),
                     distinct: false,
@@ -1141,11 +1148,11 @@ mod tests {
     fn update_write_vars_extracts_vars() {
         let updates = vec![
             Update {
-                var: 0,
+                var: 0.into(),
                 kind: UpdateKind::Increment,
             },
             Update {
-                var: 3,
+                var: 3.into(),
                 kind: UpdateKind::Increment,
             },
         ];
@@ -1159,7 +1166,7 @@ mod tests {
     fn por_linear_combination_signature_format() {
         let lc = LinearCombination {
             constant: 5,
-            terms: vec![(2, 0), (1, 1)],
+            terms: vec![(2, 0.into()), (1, 1.into())],
         };
         let sig = por_linear_combination_signature(&lc);
         assert_eq!(sig, "c=5|2*p0|1*p1");
@@ -1168,7 +1175,7 @@ mod tests {
     #[test]
     fn por_update_signature_increment() {
         let update = Update {
-            var: 3,
+            var: 3.into(),
             kind: UpdateKind::Increment,
         };
         assert_eq!(por_update_signature(&update), "inc@3");
@@ -1177,10 +1184,10 @@ mod tests {
     #[test]
     fn por_update_signature_set() {
         let update = Update {
-            var: 1,
+            var: 1.into(),
             kind: UpdateKind::Set(LinearCombination {
                 constant: 0,
-                terms: vec![(1, 0)],
+                terms: vec![(1, 0.into())],
             }),
         };
         assert_eq!(por_update_signature(&update), "set@1=c=0|1*p0");

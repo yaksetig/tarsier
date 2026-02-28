@@ -10,7 +10,7 @@ use super::verification::{
     preflight_validate, run_unbounded_fair_pdr_with_certificate, FairPdrInvariantCertificate,
     PipelineCommand,
 };
-use super::*;
+use crate::pipeline::*;
 
 pub fn generate_kinduction_safety_certificate(
     source: &str,
@@ -29,10 +29,10 @@ pub fn generate_kinduction_safety_certificate(
     let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
     let has_committees = !committee_summaries.is_empty();
     let committee_bounds: Vec<(usize, u64)> = ta
-        .committees
+        .constraints.committees
         .iter()
         .zip(committee_summaries.iter())
-        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
         .collect();
 
     if has_committees && committee_bounds.is_empty() {
@@ -145,10 +145,10 @@ pub fn generate_pdr_safety_certificate(
     let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
     let has_committees = !committee_summaries.is_empty();
     let committee_bounds: Vec<(usize, u64)> = ta
-        .committees
+        .constraints.committees
         .iter()
         .zip(committee_summaries.iter())
-        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
         .collect();
 
     if has_committees && committee_bounds.is_empty() {
@@ -270,10 +270,10 @@ pub fn generate_fair_liveness_certificate_with_mode(
     let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
     let has_committees = !committee_summaries.is_empty();
     let committee_bounds: Vec<(usize, u64)> = ta
-        .committees
+        .constraints.committees
         .iter()
         .zip(committee_summaries.iter())
-        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
         .collect();
 
     if has_committees && committee_bounds.is_empty() {
@@ -402,7 +402,7 @@ pub(super) fn dump_smt_to_file(
     let smt = encoding_to_smt2_script(&encoding, extra_assertions);
 
     if let Err(e) = std::fs::write(path, smt) {
-        eprintln!("Warning: could not write SMT dump to {path}: {e}");
+        tracing::warn!("could not write SMT dump to {path}: {e}");
     } else {
         info!("SMT dump written to {path}");
     }
@@ -539,7 +539,12 @@ pub(super) fn fair_pdr_certificate_to_obligations(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        dump_smt_to_file, encoding_to_smt2_script, fair_pdr_certificate_to_obligations,
+        pdr_certificate_to_obligations, query_to_smt2_script,
+    };
+    use crate::pipeline::*;
+    use crate::pipeline::verification::FairPdrInvariantCertificate;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tarsier_ir::counter_system::CounterSystem;
     use tarsier_ir::threshold_automaton::{Guard, Location, Parameter, Rule, ThresholdAutomaton};
@@ -559,14 +564,14 @@ mod tests {
             phase: "p".to_string(),
             local_vars: Default::default(),
         });
-        ta.initial_locations = vec![0];
+        ta.initial_locations = vec![0.into()];
         ta.rules.push(Rule {
-            from: 0,
-            to: 0,
+            from: 0.into(),
+            to: 0.into(),
             guard: Guard::trivial(),
             updates: vec![],
         });
-        CounterSystem::new(ta)
+        ta
     }
 
     #[test]
@@ -593,7 +598,9 @@ mod tests {
     #[test]
     fn encoding_to_smt2_script_appends_extra_assertions() {
         let cs = tiny_counter_system();
-        let property = SafetyProperty::Termination { goal_locs: vec![0] };
+        let property = SafetyProperty::Termination {
+            goal_locs: vec![0.into()],
+        };
         let encoding = encode_bmc(&cs, &property, 0);
 
         let script = encoding_to_smt2_script(
@@ -607,7 +614,9 @@ mod tests {
     #[test]
     fn dump_smt_to_file_writes_query_script() {
         let cs = tiny_counter_system();
-        let property = SafetyProperty::Termination { goal_locs: vec![0] };
+        let property = SafetyProperty::Termination {
+            goal_locs: vec![0.into()],
+        };
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock should be available")

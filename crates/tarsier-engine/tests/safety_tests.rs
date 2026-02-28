@@ -148,7 +148,7 @@ fn lower_reliable_broadcast() {
     assert_eq!(ta.parameters.len(), 3);
     // 1 initial location (waiting, accepted=false, decided=false)
     assert_eq!(ta.initial_locations.len(), 1);
-    assert!(ta.resilience_condition.is_some());
+    assert!(ta.constraints.resilience_condition.is_some());
 }
 
 #[test]
@@ -259,9 +259,9 @@ fn lower_algorand_committee() {
     // 2 message types -> 2 shared vars
     assert_eq!(ta.shared_vars.len(), 2);
     // 1 committee
-    assert_eq!(ta.committees.len(), 1);
+    assert_eq!(ta.constraints.committees.len(), 1);
     // adversary bound set
-    assert!(ta.adversary_bound_param.is_some());
+    assert!(ta.constraints.adversary_bound_param.is_some());
 }
 
 #[test]

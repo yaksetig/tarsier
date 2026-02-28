@@ -29,7 +29,7 @@ pub(crate) use temporal_buchi::*;
 pub(crate) use temporal_encoding::*;
 pub(crate) use temporal_types::*;
 
-use super::*;
+use crate::pipeline::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QuantifiedFragment {

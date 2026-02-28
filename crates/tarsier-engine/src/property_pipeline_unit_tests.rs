@@ -1,3 +1,5 @@
+//! Property-pipeline unit and proptest coverage.
+
 use proptest::prelude::*;
 use proptest::test_runner::{
     Config as ProptestConfig, FileFailurePersistence, RngAlgorithm, RngSeed,

@@ -12,14 +12,14 @@ pub fn generate_go(protocol: &ProtocolDecl) -> Result<String, CodegenError> {
     let mut out = String::new();
 
     let pkg_name = protocol.name.to_lowercase().replace('_', "");
-    write_header(&mut out, protocol, &pkg_name);
-    write_config(&mut out, protocol);
-    write_enums(&mut out, protocol);
-    write_messages(&mut out, protocol);
-    write_envelope(&mut out);
-    write_semantics_surface(&mut out, protocol);
-    write_outbound_message(&mut out);
-    write_network_interface(&mut out);
+    write_header(&mut out, protocol, &pkg_name)?;
+    write_config(&mut out, protocol)?;
+    write_enums(&mut out, protocol)?;
+    write_messages(&mut out, protocol)?;
+    write_envelope(&mut out)?;
+    write_semantics_surface(&mut out, protocol)?;
+    write_outbound_message(&mut out)?;
+    write_network_interface(&mut out)?;
 
     for role in &protocol.roles {
         write_role(&mut out, &role.node, protocol, &params)?;
@@ -27,214 +27,212 @@ pub fn generate_go(protocol: &ProtocolDecl) -> Result<String, CodegenError> {
 
     // Emit helper functions when distinct-sender guards are used
     if uses_distinct_guards(protocol) {
-        write_distinct_helpers(&mut out);
+        write_distinct_helpers(&mut out)?;
     }
 
     // Emit filtered-guard helper functions when field-filtered threshold guards are used
     if uses_filtered_guards(protocol) {
-        write_filtered_helpers(&mut out);
+        write_filtered_helpers(&mut out)?;
     }
 
     Ok(out)
 }
 
-fn write_header(out: &mut String, protocol: &ProtocolDecl, pkg_name: &str) {
-    writeln!(out, "// Generated from protocol: {}", protocol.name).unwrap();
+fn write_header(out: &mut String, protocol: &ProtocolDecl, pkg_name: &str) -> std::fmt::Result {
+    writeln!(out, "// Generated from protocol: {}", protocol.name)?;
     writeln!(
         out,
         "// Verified implementation scaffold. Protocol logic is derived from the verified .trs model."
-    )
-    .unwrap();
-    writeln!(out, "//").unwrap();
+    )?;
+    writeln!(out, "//")?;
     writeln!(
         out,
         "// Integrate networking, serialization, and deployment infrastructure to complete."
-    )
-    .unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "package {pkg_name}").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out)?;
+    writeln!(out, "package {pkg_name}")?;
+    writeln!(out)?;
+    Ok(())
 }
 
-fn write_config(out: &mut String, protocol: &ProtocolDecl) {
+fn write_config(out: &mut String, protocol: &ProtocolDecl) -> std::fmt::Result {
     if protocol.parameters.is_empty() {
-        return;
+        return Ok(());
     }
-    writeln!(out, "// Config holds protocol parameters.").unwrap();
-    writeln!(out, "type Config struct {{").unwrap();
+    writeln!(out, "// Config holds protocol parameters.")?;
+    writeln!(out, "type Config struct {{")?;
     for p in &protocol.parameters {
         let ty = match p.ty {
             ParamType::Nat => "uint64",
             ParamType::Int => "int64",
         };
-        writeln!(out, "\t{} {ty}", to_pascal_case(&p.name)).unwrap();
+        writeln!(out, "\t{} {ty}", to_pascal_case(&p.name))?;
     }
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "}}")?;
+    writeln!(out)?;
+    Ok(())
 }
 
-fn write_enums(out: &mut String, protocol: &ProtocolDecl) {
+fn write_enums(out: &mut String, protocol: &ProtocolDecl) -> std::fmt::Result {
     for e in &protocol.enums {
         let type_name = to_pascal_case(&e.name);
-        writeln!(out, "type {type_name} uint64").unwrap();
-        writeln!(out).unwrap();
-        writeln!(out, "const (").unwrap();
+        writeln!(out, "type {type_name} uint64")?;
+        writeln!(out)?;
+        writeln!(out, "const (")?;
         for (i, v) in e.variants.iter().enumerate() {
             let variant_name = format!("{type_name}{}", to_pascal_case(v));
             if i == 0 {
-                writeln!(out, "\t{variant_name} {type_name} = iota").unwrap();
+                writeln!(out, "\t{variant_name} {type_name} = iota")?;
             } else {
-                writeln!(out, "\t{variant_name}").unwrap();
+                writeln!(out, "\t{variant_name}")?;
             }
         }
-        writeln!(out, ")").unwrap();
-        writeln!(out).unwrap();
+        writeln!(out, ")")?;
+        writeln!(out)?;
     }
+    Ok(())
 }
 
-fn write_messages(out: &mut String, protocol: &ProtocolDecl) {
+fn write_messages(out: &mut String, protocol: &ProtocolDecl) -> std::fmt::Result {
     for msg in &protocol.messages {
         let name = format!("{}Msg", to_pascal_case(&msg.name));
-        writeln!(out, "// {name} represents a {} message.", msg.name).unwrap();
-        writeln!(out, "type {name} struct {{").unwrap();
+        writeln!(out, "// {name} represents a {} message.", msg.name)?;
+        writeln!(out, "type {name} struct {{")?;
         for f in &msg.fields {
             let ty = field_type_to_go(&f.ty);
-            writeln!(out, "\t{} {ty}", to_pascal_case(&f.name)).unwrap();
+            writeln!(out, "\t{} {ty}", to_pascal_case(&f.name))?;
         }
-        writeln!(out, "}}").unwrap();
-        writeln!(out).unwrap();
+        writeln!(out, "}}")?;
+        writeln!(out)?;
     }
 
     // Message is represented as interface{} in Go (no sum types).
-    writeln!(out, "// Message is a union type for all protocol messages.").unwrap();
+    writeln!(out, "// Message is a union type for all protocol messages.")?;
     if !protocol.messages.is_empty() {
         writeln!(
             out,
             "// Use type switches to match: switch m := msg.(type) {{ case *EchoMsg: ... }}"
-        )
-        .unwrap();
+        )?;
     }
-    writeln!(out, "type Message interface{{}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type Message interface{{}}")?;
+    writeln!(out)?;
+    Ok(())
 }
 
-fn write_envelope(out: &mut String) {
-    writeln!(out, "// Envelope wraps a message with sender information.").unwrap();
-    writeln!(out, "type Envelope struct {{").unwrap();
-    writeln!(out, "\tSender  uint64").unwrap();
-    writeln!(out, "\tMessage Message").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+fn write_envelope(out: &mut String) -> std::fmt::Result {
+    writeln!(out, "// Envelope wraps a message with sender information.")?;
+    writeln!(out, "type Envelope struct {{")?;
+    writeln!(out, "\tSender  uint64")?;
+    writeln!(out, "\tMessage Message")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
+    Ok(())
 }
 
-fn write_semantics_surface(out: &mut String, protocol: &ProtocolDecl) {
+fn write_semantics_surface(out: &mut String, protocol: &ProtocolDecl) -> std::fmt::Result {
     let default_auth = default_channel_auth_variant(protocol);
     let default_equivocation = default_equivocation_variant(protocol);
 
-    writeln!(out, "type IdentityScopeSpec string").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "const (").unwrap();
-    writeln!(out, "\tIdentityScopeRole IdentityScopeSpec = \"role\"").unwrap();
+    writeln!(out, "type IdentityScopeSpec string")?;
+    writeln!(out)?;
+    writeln!(out, "const (")?;
+    writeln!(out, "\tIdentityScopeRole IdentityScopeSpec = \"role\"")?;
     writeln!(
         out,
         "\tIdentityScopeProcess IdentityScopeSpec = \"process\""
-    )
-    .unwrap();
-    writeln!(out, ")").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out, ")")?;
+    writeln!(out)?;
 
-    writeln!(out, "type IdentityDeclSpec struct {{").unwrap();
-    writeln!(out, "\tRole string").unwrap();
-    writeln!(out, "\tScope IdentityScopeSpec").unwrap();
-    writeln!(out, "\tProcessVar string").unwrap();
-    writeln!(out, "\tHasProcessVar bool").unwrap();
-    writeln!(out, "\tKey string").unwrap();
-    writeln!(out, "\tHasKey bool").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type IdentityDeclSpec struct {{")?;
+    writeln!(out, "\tRole string")?;
+    writeln!(out, "\tScope IdentityScopeSpec")?;
+    writeln!(out, "\tProcessVar string")?;
+    writeln!(out, "\tHasProcessVar bool")?;
+    writeln!(out, "\tKey string")?;
+    writeln!(out, "\tHasKey bool")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
-    writeln!(out, "type ChannelAuthModeSpec string").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "const (").unwrap();
+    writeln!(out, "type ChannelAuthModeSpec string")?;
+    writeln!(out)?;
+    writeln!(out, "const (")?;
     writeln!(
         out,
         "\tChannelAuthAuthenticated ChannelAuthModeSpec = \"authenticated\""
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "\tChannelAuthUnauthenticated ChannelAuthModeSpec = \"unauthenticated\""
-    )
-    .unwrap();
-    writeln!(out, ")").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out, ")")?;
+    writeln!(out)?;
 
-    writeln!(out, "type ChannelPolicySpec struct {{").unwrap();
-    writeln!(out, "\tMessage string").unwrap();
-    writeln!(out, "\tAuth ChannelAuthModeSpec").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type ChannelPolicySpec struct {{")?;
+    writeln!(out, "\tMessage string")?;
+    writeln!(out, "\tAuth ChannelAuthModeSpec")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
-    writeln!(out, "type EquivocationModeSpec string").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "const (").unwrap();
-    writeln!(out, "\tEquivocationFull EquivocationModeSpec = \"full\"").unwrap();
-    writeln!(out, "\tEquivocationNone EquivocationModeSpec = \"none\"").unwrap();
-    writeln!(out, ")").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type EquivocationModeSpec string")?;
+    writeln!(out)?;
+    writeln!(out, "const (")?;
+    writeln!(out, "\tEquivocationFull EquivocationModeSpec = \"full\"")?;
+    writeln!(out, "\tEquivocationNone EquivocationModeSpec = \"none\"")?;
+    writeln!(out, ")")?;
+    writeln!(out)?;
 
-    writeln!(out, "type EquivocationPolicySpec struct {{").unwrap();
-    writeln!(out, "\tMessage string").unwrap();
-    writeln!(out, "\tMode EquivocationModeSpec").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type EquivocationPolicySpec struct {{")?;
+    writeln!(out, "\tMessage string")?;
+    writeln!(out, "\tMode EquivocationModeSpec")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
-    writeln!(out, "type CommitteeValueKind string").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "const (").unwrap();
-    writeln!(out, "\tCommitteeValueParam CommitteeValueKind = \"param\"").unwrap();
-    writeln!(out, "\tCommitteeValueInt CommitteeValueKind = \"int\"").unwrap();
-    writeln!(out, "\tCommitteeValueFloat CommitteeValueKind = \"float\"").unwrap();
-    writeln!(out, ")").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type CommitteeValueKind string")?;
+    writeln!(out)?;
+    writeln!(out, "const (")?;
+    writeln!(out, "\tCommitteeValueParam CommitteeValueKind = \"param\"")?;
+    writeln!(out, "\tCommitteeValueInt CommitteeValueKind = \"int\"")?;
+    writeln!(out, "\tCommitteeValueFloat CommitteeValueKind = \"float\"")?;
+    writeln!(out, ")")?;
+    writeln!(out)?;
 
-    writeln!(out, "type CommitteeValueSpec struct {{").unwrap();
-    writeln!(out, "\tKind CommitteeValueKind").unwrap();
-    writeln!(out, "\tParam string").unwrap();
-    writeln!(out, "\tInt int64").unwrap();
-    writeln!(out, "\tFloat float64").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type CommitteeValueSpec struct {{")?;
+    writeln!(out, "\tKind CommitteeValueKind")?;
+    writeln!(out, "\tParam string")?;
+    writeln!(out, "\tInt int64")?;
+    writeln!(out, "\tFloat float64")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
-    writeln!(out, "type CommitteeItemSpec struct {{").unwrap();
-    writeln!(out, "\tKey string").unwrap();
-    writeln!(out, "\tValue CommitteeValueSpec").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type CommitteeItemSpec struct {{")?;
+    writeln!(out, "\tKey string")?;
+    writeln!(out, "\tValue CommitteeValueSpec")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
-    writeln!(out, "type CommitteeSpec struct {{").unwrap();
-    writeln!(out, "\tName string").unwrap();
-    writeln!(out, "\tItems []CommitteeItemSpec").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type CommitteeSpec struct {{")?;
+    writeln!(out, "\tName string")?;
+    writeln!(out, "\tItems []CommitteeItemSpec")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
-    writeln!(out, "type ProtocolSemanticsSpec struct {{").unwrap();
-    writeln!(out, "\tIdentities []IdentityDeclSpec").unwrap();
-    writeln!(out, "\tChannels []ChannelPolicySpec").unwrap();
-    writeln!(out, "\tEquivocation []EquivocationPolicySpec").unwrap();
-    writeln!(out, "\tCommittees []CommitteeSpec").unwrap();
-    writeln!(out, "\tDefaultChannelAuth ChannelAuthModeSpec").unwrap();
-    writeln!(out, "\tDefaultEquivocation EquivocationModeSpec").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "type ProtocolSemanticsSpec struct {{")?;
+    writeln!(out, "\tIdentities []IdentityDeclSpec")?;
+    writeln!(out, "\tChannels []ChannelPolicySpec")?;
+    writeln!(out, "\tEquivocation []EquivocationPolicySpec")?;
+    writeln!(out, "\tCommittees []CommitteeSpec")?;
+    writeln!(out, "\tDefaultChannelAuth ChannelAuthModeSpec")?;
+    writeln!(out, "\tDefaultEquivocation EquivocationModeSpec")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
     writeln!(
         out,
         "func ProtocolSemanticsSpecData() ProtocolSemanticsSpec {{"
-    )
-    .unwrap();
-    writeln!(out, "\treturn ProtocolSemanticsSpec{{").unwrap();
-    writeln!(out, "\t\tIdentities: []IdentityDeclSpec{{").unwrap();
+    )?;
+    writeln!(out, "\treturn ProtocolSemanticsSpec{{")?;
+    writeln!(out, "\t\tIdentities: []IdentityDeclSpec{{")?;
     for identity in &protocol.identities {
         let scope = match identity.scope {
             IdentityScope::Role => "IdentityScopeRole",
@@ -256,113 +254,109 @@ fn write_semantics_surface(out: &mut String, protocol: &ProtocolDecl) {
             out,
             "\t\t\t{{Role: \"{}\", Scope: {scope}, ProcessVar: \"{process_var}\", HasProcessVar: {has_process_var}, Key: \"{key}\", HasKey: {has_key}}},",
             identity.role
-        )
-        .unwrap();
+        )?;
     }
-    writeln!(out, "\t\t}},").unwrap();
+    writeln!(out, "\t\t}},")?;
 
-    writeln!(out, "\t\tChannels: []ChannelPolicySpec{{").unwrap();
+    writeln!(out, "\t\tChannels: []ChannelPolicySpec{{")?;
     for channel in &protocol.channels {
         writeln!(
             out,
             "\t\t\t{{Message: \"{}\", Auth: {}}},",
             channel.message,
             channel_auth_variant(channel.auth)
-        )
-        .unwrap();
+        )?;
     }
-    writeln!(out, "\t\t}},").unwrap();
+    writeln!(out, "\t\t}},")?;
 
-    writeln!(out, "\t\tEquivocation: []EquivocationPolicySpec{{").unwrap();
+    writeln!(out, "\t\tEquivocation: []EquivocationPolicySpec{{")?;
     for policy in &protocol.equivocation_policies {
         writeln!(
             out,
             "\t\t\t{{Message: \"{}\", Mode: {}}},",
             policy.message,
             equivocation_variant(policy.mode)
-        )
-        .unwrap();
+        )?;
     }
-    writeln!(out, "\t\t}},").unwrap();
+    writeln!(out, "\t\t}},")?;
 
-    writeln!(out, "\t\tCommittees: []CommitteeSpec{{").unwrap();
+    writeln!(out, "\t\tCommittees: []CommitteeSpec{{")?;
     for committee in &protocol.committees {
-        writeln!(out, "\t\t\t{{").unwrap();
-        writeln!(out, "\t\t\t\tName: \"{}\",", committee.name).unwrap();
-        writeln!(out, "\t\t\t\tItems: []CommitteeItemSpec{{").unwrap();
+        writeln!(out, "\t\t\t{{")?;
+        writeln!(out, "\t\t\t\tName: \"{}\",", committee.name)?;
+        writeln!(out, "\t\t\t\tItems: []CommitteeItemSpec{{")?;
         for item in &committee.items {
             writeln!(
                 out,
                 "\t\t\t\t\t{{Key: \"{}\", Value: {}}},",
                 item.key,
                 render_committee_value(&item.value)
-            )
-            .unwrap();
+            )?;
         }
-        writeln!(out, "\t\t\t\t}},").unwrap();
-        writeln!(out, "\t\t\t}},").unwrap();
+        writeln!(out, "\t\t\t\t}},")?;
+        writeln!(out, "\t\t\t}},")?;
     }
-    writeln!(out, "\t\t}},").unwrap();
-    writeln!(out, "\t\tDefaultChannelAuth: {default_auth},").unwrap();
-    writeln!(out, "\t\tDefaultEquivocation: {default_equivocation},").unwrap();
-    writeln!(out, "\t}}").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "\t\t}},")?;
+    writeln!(out, "\t\tDefaultChannelAuth: {default_auth},")?;
+    writeln!(out, "\t\tDefaultEquivocation: {default_equivocation},")?;
+    writeln!(out, "\t}}")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
     writeln!(
         out,
         "func channelAuthForMessageFamily(messageFamily string) ChannelAuthModeSpec {{"
-    )
-    .unwrap();
-    writeln!(out, "\tswitch messageFamily {{").unwrap();
+    )?;
+    writeln!(out, "\tswitch messageFamily {{")?;
     for channel in &protocol.channels {
-        writeln!(out, "\tcase \"{}\":", channel.message).unwrap();
-        writeln!(out, "\t\treturn {}", channel_auth_variant(channel.auth)).unwrap();
+        writeln!(out, "\tcase \"{}\":", channel.message)?;
+        writeln!(out, "\t\treturn {}", channel_auth_variant(channel.auth))?;
     }
-    writeln!(out, "\tdefault:").unwrap();
-    writeln!(out, "\t\treturn {default_auth}").unwrap();
-    writeln!(out, "\t}}").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "\tdefault:")?;
+    writeln!(out, "\t\treturn {default_auth}")?;
+    writeln!(out, "\t}}")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
     writeln!(
         out,
         "func equivocationModeForMessageFamily(messageFamily string) EquivocationModeSpec {{"
-    )
-    .unwrap();
-    writeln!(out, "\tswitch messageFamily {{").unwrap();
+    )?;
+    writeln!(out, "\tswitch messageFamily {{")?;
     for policy in &protocol.equivocation_policies {
-        writeln!(out, "\tcase \"{}\":", policy.message).unwrap();
-        writeln!(out, "\t\treturn {}", equivocation_variant(policy.mode)).unwrap();
+        writeln!(out, "\tcase \"{}\":", policy.message)?;
+        writeln!(out, "\t\treturn {}", equivocation_variant(policy.mode))?;
     }
-    writeln!(out, "\tdefault:").unwrap();
-    writeln!(out, "\t\treturn {default_equivocation}").unwrap();
-    writeln!(out, "\t}}").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "\tdefault:")?;
+    writeln!(out, "\t\treturn {default_equivocation}")?;
+    writeln!(out, "\t}}")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
+    Ok(())
 }
 
-fn write_outbound_message(out: &mut String) {
-    writeln!(out, "type OutboundMessage struct {{").unwrap();
-    writeln!(out, "\tMessage Message").unwrap();
-    writeln!(out, "\tRecipientRole string").unwrap();
-    writeln!(out, "\tChannelAuth ChannelAuthModeSpec").unwrap();
-    writeln!(out, "\tEquivocation EquivocationModeSpec").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+fn write_outbound_message(out: &mut String) -> std::fmt::Result {
+    writeln!(out, "type OutboundMessage struct {{")?;
+    writeln!(out, "\tMessage Message")?;
+    writeln!(out, "\tRecipientRole string")?;
+    writeln!(out, "\tChannelAuth ChannelAuthModeSpec")?;
+    writeln!(out, "\tEquivocation EquivocationModeSpec")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
+    Ok(())
 }
 
-fn write_network_interface(out: &mut String) {
+fn write_network_interface(out: &mut String) -> std::fmt::Result {
     writeln!(
         out,
         "// Network is the interface for sending protocol messages."
-    )
-    .unwrap();
-    writeln!(out, "type Network interface {{").unwrap();
-    writeln!(out, "\tBroadcast(outbound OutboundMessage)").unwrap();
-    writeln!(out, "\tSend(outbound OutboundMessage, to uint64)").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out, "type Network interface {{")?;
+    writeln!(out, "\tBroadcast(outbound OutboundMessage)")?;
+    writeln!(out, "\tSend(outbound OutboundMessage, to uint64)")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
+    Ok(())
 }
 
 fn write_role(
@@ -375,57 +369,55 @@ fn write_role(
 
     // Phase type and constants
     let phase_type = format!("{role_name}Phase");
-    writeln!(out, "type {phase_type} int").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "const (").unwrap();
+    writeln!(out, "type {phase_type} int")?;
+    writeln!(out)?;
+    writeln!(out, "const (")?;
     for (i, phase) in role.phases.iter().enumerate() {
         let const_name = format!("{phase_type}{}", to_pascal_case(&phase.node.name));
         if i == 0 {
-            writeln!(out, "\t{const_name} {phase_type} = iota").unwrap();
+            writeln!(out, "\t{const_name} {phase_type} = iota")?;
         } else {
-            writeln!(out, "\t{const_name}").unwrap();
+            writeln!(out, "\t{const_name}")?;
         }
     }
-    writeln!(out, ")").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, ")")?;
+    writeln!(out)?;
 
     // Decision struct
     writeln!(
         out,
         "// {role_name}Decision represents a protocol decision."
-    )
-    .unwrap();
-    writeln!(out, "type {role_name}Decision struct {{").unwrap();
-    writeln!(out, "\tValue uint64").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out, "type {role_name}Decision struct {{")?;
+    writeln!(out, "\tValue uint64")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
     // State struct
     let state_name = format!("{role_name}State");
     writeln!(
         out,
         "// {state_name} holds the state for a {role_name} node."
-    )
-    .unwrap();
-    writeln!(out, "type {state_name} struct {{").unwrap();
-    writeln!(out, "\tPhase {phase_type}").unwrap();
+    )?;
+    writeln!(out, "type {state_name} struct {{")?;
+    writeln!(out, "\tPhase {phase_type}")?;
     for var in &role.vars {
         let ty = go_type(&var.ty);
-        writeln!(out, "\t{} {ty}", to_pascal_case(&var.name)).unwrap();
+        writeln!(out, "\t{} {ty}", to_pascal_case(&var.name))?;
     }
     for msg in &protocol.messages {
         let buf_name = format!("{}Buffer", to_pascal_case(&msg.name));
-        writeln!(out, "\t{buf_name} []Envelope").unwrap();
+        writeln!(out, "\t{buf_name} []Envelope")?;
     }
     // Per-crypto-object tracking fields
     for co in &protocol.crypto_objects {
         let pascal = to_pascal_case(&co.name);
-        writeln!(out, "\t{pascal}Count uint64").unwrap();
-        writeln!(out, "\tLock{pascal} bool").unwrap();
-        writeln!(out, "\tJustify{pascal} bool").unwrap();
+        writeln!(out, "\t{pascal}Count uint64")?;
+        writeln!(out, "\tLock{pascal} bool")?;
+        writeln!(out, "\tJustify{pascal} bool")?;
     }
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
     // New function
     let init_phase = role.init_phase.as_deref().unwrap_or_else(|| {
@@ -437,16 +429,14 @@ fn write_role(
     writeln!(
         out,
         "// New{state_name} creates a new {state_name} with initial values."
-    )
-    .unwrap();
-    writeln!(out, "func New{state_name}() *{state_name} {{").unwrap();
-    writeln!(out, "\treturn &{state_name}{{").unwrap();
+    )?;
+    writeln!(out, "func New{state_name}() *{state_name} {{")?;
+    writeln!(out, "\treturn &{state_name}{{")?;
     writeln!(
         out,
         "\t\tPhase: {phase_type}{},",
         to_pascal_case(init_phase)
-    )
-    .unwrap();
+    )?;
     for var in &role.vars {
         let default_val = match &var.init {
             Some(expr) => render_expr_literal_go(expr),
@@ -456,53 +446,51 @@ fn write_role(
                 VarType::Enum(_) => "0".to_string(),
             },
         };
-        writeln!(out, "\t\t{}: {default_val},", to_pascal_case(&var.name)).unwrap();
+        writeln!(out, "\t\t{}: {default_val},", to_pascal_case(&var.name))?;
     }
-    writeln!(out, "\t}}").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "\t}}")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
     // HandleMessage method
     writeln!(
         out,
         "// HandleMessage processes an incoming message and returns outgoing messages and an optional decision."
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "func (s *{state_name}) HandleMessage(envelope Envelope, config *Config) ([]OutboundMessage, *{role_name}Decision) {{"
-    )
-    .unwrap();
-    writeln!(out, "\tvar outgoing []OutboundMessage").unwrap();
-    writeln!(out, "\tvar decision *{role_name}Decision").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out, "\tvar outgoing []OutboundMessage")?;
+    writeln!(out, "\tvar decision *{role_name}Decision")?;
+    writeln!(out)?;
 
     // Buffer incoming
-    writeln!(out, "\t// Buffer incoming message").unwrap();
-    writeln!(out, "\tswitch envelope.Message.(type) {{").unwrap();
+    writeln!(out, "\t// Buffer incoming message")?;
+    writeln!(out, "\tswitch envelope.Message.(type) {{")?;
     for msg in &protocol.messages {
         let struct_name = format!("*{}Msg", to_pascal_case(&msg.name));
         let buf_name = format!("{}Buffer", to_pascal_case(&msg.name));
-        writeln!(out, "\tcase {struct_name}:").unwrap();
-        writeln!(out, "\t\ts.{buf_name} = append(s.{buf_name}, envelope)").unwrap();
+        writeln!(out, "\tcase {struct_name}:")?;
+        writeln!(out, "\t\ts.{buf_name} = append(s.{buf_name}, envelope)")?;
     }
-    writeln!(out, "\t}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "\t}}")?;
+    writeln!(out)?;
 
     // Phase switch
-    writeln!(out, "\t// Evaluate transitions for current phase").unwrap();
-    writeln!(out, "\tswitch s.Phase {{").unwrap();
+    writeln!(out, "\t// Evaluate transitions for current phase")?;
+    writeln!(out, "\tswitch s.Phase {{")?;
     for phase in &role.phases {
         let phase_const = format!("{phase_type}{}", to_pascal_case(&phase.node.name));
-        writeln!(out, "\tcase {phase_const}:").unwrap();
+        writeln!(out, "\tcase {phase_const}:")?;
         write_phase_transitions_go(out, &phase.node, protocol, params, &role_name, &phase_type)?;
     }
-    writeln!(out, "\t}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "\t}}")?;
+    writeln!(out)?;
 
-    writeln!(out, "\treturn outgoing, decision").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    writeln!(out, "\treturn outgoing, decision")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
     Ok(())
 }
@@ -520,7 +508,7 @@ fn write_phase_transitions_go(
         let t = &transition.node;
         let keyword = if i == 0 { "if" } else { "} else if" };
         let guard_str = render_guard_go(&t.guard, params);
-        writeln!(out, "{indent}{keyword} {guard_str} {{").unwrap();
+        writeln!(out, "{indent}{keyword} {guard_str} {{")?;
         write_actions_go(
             out,
             &t.actions,
@@ -532,7 +520,7 @@ fn write_phase_transitions_go(
         )?;
     }
     if !phase.transitions.is_empty() {
-        writeln!(out, "{indent}}}").unwrap();
+        writeln!(out, "{indent}}}")?;
     }
     Ok(())
 }
@@ -616,32 +604,29 @@ fn write_actions_go(
             } => {
                 let recipient_role = recipient_role.as_deref().unwrap_or("");
                 let ctor = render_message_ctor(message_type, args, protocol, params);
-                writeln!(out, "{indent}outgoing = append(outgoing, OutboundMessage{{").unwrap();
-                writeln!(out, "{indent}\tMessage: {ctor},").unwrap();
-                writeln!(out, "{indent}\tRecipientRole: \"{recipient_role}\",").unwrap();
+                writeln!(out, "{indent}outgoing = append(outgoing, OutboundMessage{{")?;
+                writeln!(out, "{indent}\tMessage: {ctor},")?;
+                writeln!(out, "{indent}\tRecipientRole: \"{recipient_role}\",")?;
                 writeln!(
                     out,
                     "{indent}\tChannelAuth: channelAuthForMessageFamily(\"{message_type}\"),"
-                )
-                .unwrap();
+                )?;
                 writeln!(
                     out,
                     "{indent}\tEquivocation: equivocationModeForMessageFamily(\"{message_type}\"),"
-                )
-                .unwrap();
-                writeln!(out, "{indent}}})").unwrap();
+                )?;
+                writeln!(out, "{indent}}})")?;
             }
             Action::Assign { var, value } => {
                 let val = render_expr(value, params, CodegenTarget::Go);
-                writeln!(out, "{indent}s.{} = {val}", to_pascal_case(var)).unwrap();
+                writeln!(out, "{indent}s.{} = {val}", to_pascal_case(var))?;
             }
             Action::GotoPhase { phase } => {
                 writeln!(
                     out,
                     "{indent}s.Phase = {phase_type}{}",
                     to_pascal_case(phase)
-                )
-                .unwrap();
+                )?;
             }
             Action::Decide { value } => {
                 // Go cannot cast bool to uint64, so map BoolLit to 1/0
@@ -653,20 +638,19 @@ fn write_actions_go(
                 writeln!(
                     out,
                     "{indent}decision = &{role_name}Decision{{Value: uint64({val})}}"
-                )
-                .unwrap();
+                )?;
             }
             Action::FormCryptoObject { object_name, .. } => {
                 let pascal = to_pascal_case(object_name);
-                writeln!(out, "{indent}s.{pascal}Count++").unwrap();
+                writeln!(out, "{indent}s.{pascal}Count++")?;
             }
             Action::LockCryptoObject { object_name, .. } => {
                 let pascal = to_pascal_case(object_name);
-                writeln!(out, "{indent}s.Lock{pascal} = true").unwrap();
+                writeln!(out, "{indent}s.Lock{pascal} = true")?;
             }
             Action::JustifyCryptoObject { object_name, .. } => {
                 let pascal = to_pascal_case(object_name);
-                writeln!(out, "{indent}s.Justify{pascal} = true").unwrap();
+                writeln!(out, "{indent}s.Justify{pascal} = true")?;
             }
         }
     }
@@ -793,63 +777,60 @@ fn field_type_to_go(ty: &str) -> &str {
 }
 
 /// Emit Go helper functions for filtered-guard counting.
-fn write_filtered_helpers(out: &mut String) {
+fn write_filtered_helpers(out: &mut String) -> std::fmt::Result {
     writeln!(
         out,
         "// countFiltered counts envelopes whose message satisfies the predicate."
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "func countFiltered(buf []Envelope, match func(interface{{}}) bool) uint64 {{"
-    )
-    .unwrap();
-    writeln!(out, "\tvar count uint64").unwrap();
-    writeln!(out, "\tfor _, e := range buf {{").unwrap();
-    writeln!(out, "\t\tif match(e.Message) {{").unwrap();
-    writeln!(out, "\t\t\tcount++").unwrap();
-    writeln!(out, "\t\t}}").unwrap();
-    writeln!(out, "\t}}").unwrap();
-    writeln!(out, "\treturn count").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out, "\tvar count uint64")?;
+    writeln!(out, "\tfor _, e := range buf {{")?;
+    writeln!(out, "\t\tif match(e.Message) {{")?;
+    writeln!(out, "\t\t\tcount++")?;
+    writeln!(out, "\t\t}}")?;
+    writeln!(out, "\t}}")?;
+    writeln!(out, "\treturn count")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
     writeln!(
         out,
         "// countDistinctFiltered counts distinct senders of envelopes satisfying the predicate."
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "func countDistinctFiltered(buf []Envelope, match func(interface{{}}) bool) uint64 {{"
-    )
-    .unwrap();
-    writeln!(out, "\tseen := make(map[uint64]bool)").unwrap();
-    writeln!(out, "\tfor _, e := range buf {{").unwrap();
-    writeln!(out, "\t\tif match(e.Message) {{").unwrap();
-    writeln!(out, "\t\t\tseen[e.Sender] = true").unwrap();
-    writeln!(out, "\t\t}}").unwrap();
-    writeln!(out, "\t}}").unwrap();
-    writeln!(out, "\treturn uint64(len(seen))").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out, "\tseen := make(map[uint64]bool)")?;
+    writeln!(out, "\tfor _, e := range buf {{")?;
+    writeln!(out, "\t\tif match(e.Message) {{")?;
+    writeln!(out, "\t\t\tseen[e.Sender] = true")?;
+    writeln!(out, "\t\t}}")?;
+    writeln!(out, "\t}}")?;
+    writeln!(out, "\treturn uint64(len(seen))")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
+    Ok(())
 }
 
 /// Emit Go helper functions for distinct-sender counting.
-fn write_distinct_helpers(out: &mut String) {
+fn write_distinct_helpers(out: &mut String) -> std::fmt::Result {
     writeln!(
         out,
         "// countDistinctSenders counts the number of unique senders in a buffer."
-    )
-    .unwrap();
-    writeln!(out, "func countDistinctSenders(buf []Envelope) uint64 {{").unwrap();
-    writeln!(out, "\tseen := make(map[uint64]bool)").unwrap();
-    writeln!(out, "\tfor _, e := range buf {{").unwrap();
-    writeln!(out, "\t\tseen[e.Sender] = true").unwrap();
-    writeln!(out, "\t}}").unwrap();
-    writeln!(out, "\treturn uint64(len(seen))").unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out, "func countDistinctSenders(buf []Envelope) uint64 {{")?;
+    writeln!(out, "\tseen := make(map[uint64]bool)")?;
+    writeln!(out, "\tfor _, e := range buf {{")?;
+    writeln!(out, "\t\tseen[e.Sender] = true")?;
+    writeln!(out, "\t}}")?;
+    writeln!(out, "\treturn uint64(len(seen))")?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -47,17 +47,27 @@ Data flows **DSL** -> **IR** -> **SMT** -> solver -> result. The engine crate or
 ## Running Tests
 
 ```sh
+# Full local CI-style gate
+just ci
+
 # Full test suite
-cargo test --workspace
+just test
 
 # Single crate
-cargo test -p tarsier-engine
+CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test -p tarsier-engine
 
 # Benchmarks
-cargo bench -p tarsier-engine
+CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo bench -p tarsier-engine
+```
 
-# Lint (must pass with zero warnings)
-cargo clippy --all-targets -- -D warnings
+Additional common tasks:
+
+```sh
+just fmt-check
+just clippy
+just check
+just proptest
+just validate
 ```
 
 ## CI Checks

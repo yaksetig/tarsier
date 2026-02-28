@@ -2,7 +2,8 @@
 
 use std::collections::HashSet;
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PipelineCommand {
@@ -408,8 +409,8 @@ pub(crate) fn strict_preflight_validate(
             .collect();
         unsent_messages.sort();
         if !unsent_messages.is_empty() {
-            eprintln!(
-                "Warning: Faithful network in strict mode: declared messages with no `send` action: {}. \
+            tracing::warn!(
+                "Faithful network in strict mode: declared messages with no `send` action: {}. \
                  Delivery counters will only increment via adversary injection.",
                 unsent_messages.join(", ")
             );
@@ -563,8 +564,8 @@ pub(crate) fn strict_preflight_validate(
                     };
                     if let Some(name) = obj_name {
                         if !guard_has_crypto_check(&tr.node.guard, name) {
-                            eprintln!(
-                                "Warning: Transition in role '{}' phase '{}' uses lock/justify for '{}' \
+                            tracing::warn!(
+                                "Transition in role '{}' phase '{}' uses lock/justify for '{}' \
                                  without explicit 'has {}(...)' guard.",
                                 role.node.name, phase.node.name, name, name
                             );
@@ -723,7 +724,8 @@ pub fn completeness_preflight(program: &ast::Program) -> Vec<CompletenessWarning
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
     // Helper: build a simple ThresholdGuard for testing
     fn make_threshold_guard(

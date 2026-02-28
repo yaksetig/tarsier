@@ -1,3 +1,5 @@
+//! Governance certificate-suite execution and output rendering.
+//
 // Cert suite runner: execution, rendering, output.
 
 use miette::IntoDiagnostic;

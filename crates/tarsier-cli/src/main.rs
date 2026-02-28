@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+//! CLI entrypoint and top-level command dispatch.
 
 mod cli;
 mod commands;
@@ -110,7 +111,15 @@ pub(crate) use tarsier_proof_kernel::{
     CERTIFICATE_SCHEMA_VERSION,
 };
 
-fn main() -> miette::Result<()> {
+fn main() {
+    if let Err(err) = run() {
+        let exit_code = commands::helpers::exit_code_from_report(&err).unwrap_or(1);
+        eprintln!("{err:?}");
+        std::process::exit(exit_code);
+    }
+}
+
+fn run() -> miette::Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -121,8 +130,8 @@ fn main() -> miette::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let cli_network_mode = parse_cli_network_semantics_mode(&cli.network_semantics);
-    let exec_controls = execution_controls_from_cli(&cli);
+    let cli_network_mode = parse_cli_network_semantics_mode(&cli.network_semantics)?;
+    let exec_controls = execution_controls_from_cli(&cli)?;
     set_global_execution_controls(exec_controls);
 
     // Activate runtime sandbox with configured resource limits.

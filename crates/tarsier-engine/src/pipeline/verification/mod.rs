@@ -1,7 +1,6 @@
 //! BMC orchestration, k-induction, PDR, CEGAR coordination, liveness checking.
 // Sub-submodules use `use super::*` to access these imports; the unused_imports
 // lint fires because the items are not referenced directly in this file.
-#![allow(unused_imports)]
 
 mod timeout;
 pub(crate) use timeout::*;
@@ -61,4 +60,4 @@ use super::property::{
     validate_property_fragments, FairLivenessTarget, LivenessSpec, QuantifiedFragment,
     TemporalAtomLit, TemporalBuchiAutomaton, TemporalBuchiState,
 };
-use super::*;
+use crate::pipeline::*;

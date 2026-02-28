@@ -20,9 +20,10 @@ pub(crate) fn run_compose_check_command(file: PathBuf) -> miette::Result<()> {
     let program = tarsier_engine::pipeline::parse(&source, &filename).into_diagnostic()?;
 
     if program.protocol.node.modules.is_empty() {
-        eprintln!("No module declarations found in {}.", filename);
-        eprintln!("Compositional verification requires `module {{ ... }}` blocks.");
-        std::process::exit(1);
+        return Err(miette::miette!(
+            "No module declarations found in {}.\nCompositional verification requires `module {{ ... }}` blocks.",
+            filename
+        ));
     }
 
     // Lower each module independently
@@ -99,8 +100,10 @@ pub(crate) fn run_compose_check_command(file: PathBuf) -> miette::Result<()> {
                 });
             }
             Err(e) => {
-                eprintln!("Error lowering module '{}': {e}", module_decl.name);
-                std::process::exit(1);
+                return Err(miette::miette!(
+                    "Error lowering module '{}': {e}",
+                    module_decl.name
+                ));
             }
         }
     }
@@ -118,7 +121,7 @@ pub(crate) fn run_compose_check_command(file: PathBuf) -> miette::Result<()> {
         tarsier_engine::compositional::CompositionalResult::CompositionError(msg) => {
             println!("Composition check: INVALID");
             println!("{msg}");
-            std::process::exit(1);
+            return Err(miette::miette!("Composition check failed: {msg}"));
         }
     }
     Ok(())

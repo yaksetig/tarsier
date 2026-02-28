@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+//! LSP server binary entrypoint.
 
 use tower_lsp::{LspService, Server};
 

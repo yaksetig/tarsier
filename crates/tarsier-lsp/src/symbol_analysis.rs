@@ -1,3 +1,5 @@
+//! Symbol-table and reference-graph analysis for the LSP backend.
+
 use pest::Parser as _;
 use std::collections::HashMap;
 

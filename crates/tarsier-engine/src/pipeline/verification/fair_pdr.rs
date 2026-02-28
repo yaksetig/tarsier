@@ -1,6 +1,7 @@
 //! Unbounded fair PDR engine (IC3-style).
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
 pub(crate) fn run_fair_lasso_search<S: SmtSolver>(
     solver: &mut S,
@@ -272,7 +273,7 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
     target: &FairLivenessTarget,
     fairness: FairnessMode,
 ) -> Result<FairPdrArtifacts, PipelineError> {
-    let ta = &cs.automaton;
+    let ta = cs;
     let dummy_property = SafetyProperty::Agreement {
         conflicting_pairs: Vec::new(),
     };
@@ -511,11 +512,14 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
     // Monitor transition updates.
     let armed0_true = bit_is_true(mon_armed(0));
     let choose0_true = bit_is_true(mon_choose(0));
-    let post_gst_now = if ta.timing_model
+    let post_gst_now = if ta.semantics.timing_model
         == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
     {
-        ta.gst_param
-            .map(|gst_pid| SmtTerm::var(pdr_param_var(gst_pid)).le(SmtTerm::var(pdr_time_var(0))))
+        ta.semantics.gst_param
+            .map(|gst_pid| {
+                SmtTerm::var(pdr_param_var(gst_pid.as_usize()))
+                    .le(SmtTerm::var(pdr_time_var(0)))
+            })
     } else {
         None
     };

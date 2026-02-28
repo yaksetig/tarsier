@@ -1157,7 +1157,7 @@ fn execute_lint(request: LintRequest) -> Result<LintResponse, String> {
 
     match tarsier_ir::lowering::lower(&parsed) {
         Ok(ta) => {
-            if ta.adversary_bound_param.is_none() {
+            if ta.constraints.adversary_bound_param.is_none() {
                 issues.push(LintIssue {
                     severity: "warn".into(),
                     code: "missing_fault_bound".into(),

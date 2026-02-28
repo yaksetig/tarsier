@@ -1,3 +1,5 @@
+//! Semantic-token classification and token-stream generation for editor highlighting.
+
 use std::collections::HashMap;
 use tower_lsp::lsp_types::*;
 

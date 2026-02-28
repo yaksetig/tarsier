@@ -1,6 +1,8 @@
-use super::*;
+//! Unit tests for verification helpers and SMT orchestration glue.
+
+use crate::pipeline::*;
+use crate::pipeline::verification::*;
 use std::collections::HashMap;
-use tarsier_ir::counter_system::CounterSystem;
 use tarsier_ir::properties::SafetyProperty;
 use tarsier_ir::threshold_automaton::{
     LocalValue, Location, Parameter, SharedVar, SharedVarKind, ThresholdAutomaton,
@@ -30,7 +32,7 @@ fn report_ta() -> ThresholdAutomaton {
         phase: "done".into(),
         local_vars: Default::default(),
     });
-    ta.initial_locations = vec![0];
+    ta.initial_locations = vec![0.into()];
     ta.shared_vars.push(SharedVar {
         name: "vote_count".into(),
         kind: SharedVarKind::MessageCounter,
@@ -56,7 +58,7 @@ fn int_model(values: &[(&str, i64)]) -> Model {
 
 #[test]
 fn bmc_result_to_liveness_result_preserves_safe_and_unknown_shapes() {
-    let cs = CounterSystem::new(report_ta());
+    let cs = report_ta();
 
     let safe = bmc_result_to_liveness_result(BmcResult::Safe { depth_checked: 4 }, &cs);
     match safe {
@@ -79,7 +81,7 @@ fn bmc_result_to_liveness_result_preserves_safe_and_unknown_shapes() {
 
 #[test]
 fn bmc_result_to_liveness_result_unsafe_maps_to_not_live_trace() {
-    let cs = CounterSystem::new(report_ta());
+    let cs = report_ta();
     let result = bmc_result_to_liveness_result(
         BmcResult::Unsafe {
             depth: 1,
@@ -123,7 +125,7 @@ fn collect_named_shared_values_filters_zero_and_missing_entries() {
 fn summarize_property_violation_covers_agreement_witness_and_fallback() {
     let ta = report_ta();
     let property = SafetyProperty::Agreement {
-        conflicting_pairs: vec![(0, 1), (1, 2)],
+        conflicting_pairs: vec![(0.into(), 1.into()), (1.into(), 2.into())],
     };
 
     let witness_model = int_model(&[("kappa_4_0", 1), ("kappa_4_1", 2), ("kappa_4_2", 0)]);
@@ -142,7 +144,7 @@ fn summarize_property_violation_covers_agreement_witness_and_fallback() {
 fn summarize_property_violation_covers_invariant_witness_and_fallback() {
     let ta = report_ta();
     let property = SafetyProperty::Invariant {
-        bad_sets: vec![vec![0, 2], vec![1]],
+        bad_sets: vec![vec![0.into(), 2.into()], vec![1.into()]],
     };
 
     let witness_model = int_model(&[("kappa_3_0", 1), ("kappa_3_1", 0), ("kappa_3_2", 4)]);
@@ -160,7 +162,9 @@ fn summarize_property_violation_covers_invariant_witness_and_fallback() {
 #[test]
 fn summarize_property_violation_termination_highlights_non_goal_population() {
     let ta = report_ta();
-    let property = SafetyProperty::Termination { goal_locs: vec![2] };
+    let property = SafetyProperty::Termination {
+        goal_locs: vec![2.into()],
+    };
 
     let witness_model = int_model(&[("kappa_1_0", 1), ("kappa_1_1", 2), ("kappa_1_2", 0)]);
     let witness = summarize_property_violation(&ta, &property, &witness_model, 1);
@@ -194,13 +198,13 @@ fn build_cti_rationale_mentions_context_for_both_classifications() {
 #[test]
 fn cti_hypothesis_state_assertions_include_bounds_and_model_defaults() {
     let ta = report_ta();
-    let cs = CounterSystem::new(ta);
+    let cs = ta;
     let witness = KInductionCti {
         k: 1,
         model: int_model(&[("kappa_0_0", 5), ("g_0_0", 3), ("p_0", 11)]),
     };
 
-    let assertions = cti_hypothesis_state_assertions(&cs, &witness, &[(0, 9)]);
+    let assertions = cti_hypothesis_state_assertions(&cs, &witness, &[(0, 9u64)]);
     assert_eq!(assertions.len(), 8);
 
     assert!(assertions.contains(&SmtTerm::var("p_0").le(SmtTerm::int(9))));
@@ -219,7 +223,7 @@ fn cti_hypothesis_state_assertions_include_bounds_and_model_defaults() {
 
 #[test]
 fn por_entails_exhaustive_table() {
-    use CmpOp::*;
+    use tarsier_ir::threshold_automaton::CmpOp::*;
     // All 15 positive match arms
     assert!(por_threshold_op_entails(Eq, 5, Eq, 5));
     assert!(!por_threshold_op_entails(Eq, 5, Eq, 6));
@@ -296,16 +300,16 @@ fn por_normalized_vars_dedup_and_sort() {
 fn por_normalized_lc_terms_merges_duplicates() {
     let lc = LinearCombination {
         constant: 0,
-        terms: vec![(2, 0), (3, 1), (-2, 0)],
+        terms: vec![(2, 0.into()), (3, 1.into()), (-2, 0.into())],
     };
-    // (2, 0) + (-2, 0) = 0, filtered out; only (3, 1) remains
+    // (2, 0.into()) + (-2, 0.into()) = 0, filtered out; only (3, 1.into()) remains
     assert_eq!(por_normalized_lc_terms(&lc), vec![(3, 1)]);
 
     let lc2 = LinearCombination {
         constant: 5,
-        terms: vec![(1, 2), (1, 0)],
+        terms: vec![(1, 2.into()), (1, 0.into())],
     };
-    // sorted by param id: (1,0), (1,2)
+    // sorted by param id: (1, 0.into()), (1, 2.into())
     assert_eq!(por_normalized_lc_terms(&lc2), vec![(1, 0), (1, 2)]);
 }
 
@@ -313,17 +317,17 @@ fn por_normalized_lc_terms_merges_duplicates() {
 fn por_comparable_lc_constants_same_vs_different_terms() {
     let lhs = LinearCombination {
         constant: 10,
-        terms: vec![(1, 0)],
+        terms: vec![(1, 0.into())],
     };
     let rhs = LinearCombination {
         constant: 20,
-        terms: vec![(1, 0)],
+        terms: vec![(1, 0.into())],
     };
-    assert_eq!(por_comparable_lc_constants(&lhs, &rhs), Some((10, 20)));
+    assert_eq!(por_comparable_lc_constants(&lhs, &rhs), Some((10, 20.into())));
 
     let rhs_diff = LinearCombination {
         constant: 20,
-        terms: vec![(2, 0)],
+        terms: vec![(2, 0.into())],
     };
     assert_eq!(por_comparable_lc_constants(&lhs, &rhs_diff), None);
 }
@@ -336,9 +340,12 @@ fn make_guard_atom(
     distinct: bool,
 ) -> GuardAtom {
     GuardAtom::Threshold {
-        vars,
+        vars: vars.into_iter().map(Into::into).collect(),
         op,
-        bound: LinearCombination { constant, terms },
+        bound: LinearCombination {
+            constant,
+            terms: terms.into_iter().map(|(coeff, pid)| (coeff, pid.into())).collect(),
+        },
         distinct,
     }
 }
@@ -391,7 +398,7 @@ fn por_guard_implies_subset_and_empty_rhs() {
 
 #[test]
 fn combinations_of_size_basic_and_edge_cases() {
-    // C(4, 2) = 6
+    // C(4, 2.into()) = 6
     let result = combinations_of_size(4, 2);
     assert_eq!(result.len(), 6);
     assert_eq!(result[0], vec![0, 1]);
@@ -403,10 +410,10 @@ fn combinations_of_size_basic_and_edge_cases() {
     // pick > n -> empty
     assert_eq!(combinations_of_size(2, 5), Vec::<Vec<usize>>::new());
 
-    // C(3, 3) = 1
+    // C(3, 3.into()) = 1
     assert_eq!(combinations_of_size(3, 3), vec![vec![0, 1, 2]]);
 
-    // C(1, 1) = 1
+    // C(1, 1.into()) = 1
     assert_eq!(combinations_of_size(1, 1), vec![vec![0]]);
 }
 
@@ -576,7 +583,7 @@ fn test_state_vars() -> Vec<(String, SmtSort)> {
 
 #[test]
 fn cube_to_conjunction_equality_terms() {
-    let cube = make_cube(&[(0, 5), (2, 3)]);
+    let cube = make_cube(&[(0, 5.into()), (2, 3.into())]);
     let state_vars = test_state_vars();
     let conj = cube.to_conjunction(&state_vars);
 
@@ -596,8 +603,8 @@ fn cube_to_conjunction_empty_is_true() {
 
 #[test]
 fn cube_subsumes_reflexive_and_subset() {
-    let big = make_cube(&[(0, 1), (1, 2), (2, 3)]);
-    let small = make_cube(&[(0, 1), (2, 3)]);
+    let big = make_cube(&[(0, 1.into()), (1, 2.into()), (2, 3.into())]);
+    let small = make_cube(&[(0, 1.into()), (2, 3.into())]);
 
     // Reflexive
     assert!(big.subsumes(&big));
@@ -611,8 +618,8 @@ fn cube_subsumes_reflexive_and_subset() {
 
 #[test]
 fn cube_not_subsumes_when_lit_missing() {
-    let a = make_cube(&[(0, 1), (1, 5)]);
-    let b = make_cube(&[(0, 1), (1, 2)]);
+    let a = make_cube(&[(0, 1.into()), (1, 5.into())]);
+    let b = make_cube(&[(0, 1.into()), (1, 2.into())]);
     // Different values for same var_idx -> not subsumed
     assert!(!a.subsumes(&b));
     assert!(!b.subsumes(&a));
@@ -621,12 +628,12 @@ fn cube_not_subsumes_when_lit_missing() {
 #[test]
 fn frame_insert_removes_subsumed() {
     let mut frame = FairPdrFrame::default();
-    let big = make_cube(&[(0, 1), (1, 2), (2, 3)]);
+    let big = make_cube(&[(0, 1.into()), (1, 2.into()), (2, 3.into())]);
     frame.insert(big.clone());
     assert!(frame.contains(&big));
 
     // Insert a more general cube: should remove big
-    let small = make_cube(&[(0, 1), (2, 3)]);
+    let small = make_cube(&[(0, 1.into()), (2, 3.into())]);
     frame.insert(small.clone());
     assert!(frame.contains(&small));
     assert!(!frame.contains(&big));
@@ -636,11 +643,11 @@ fn frame_insert_removes_subsumed() {
 #[test]
 fn frame_insert_skips_when_existing_subsumes() {
     let mut frame = FairPdrFrame::default();
-    let small = make_cube(&[(0, 1)]);
+    let small = make_cube(&[(0, 1.into())]);
     frame.insert(small.clone());
 
     // Insert a more specific cube: should be skipped
-    let big = make_cube(&[(0, 1), (1, 2)]);
+    let big = make_cube(&[(0, 1.into()), (1, 2.into())]);
     frame.insert(big.clone());
     assert!(!frame.contains(&big));
     assert_eq!(frame.cubes.len(), 1);
@@ -720,15 +727,15 @@ fn guard_read_vars_from_threshold_atoms() {
 fn update_write_vars_unique() {
     let updates = vec![
         Update {
-            var: 0,
+            var: 0.into(),
             kind: UpdateKind::Increment,
         },
         Update {
-            var: 2,
+            var: 2.into(),
             kind: UpdateKind::Increment,
         },
         Update {
-            var: 0,
+            var: 0.into(),
             kind: UpdateKind::Increment,
         },
     ];
@@ -741,27 +748,27 @@ fn update_write_vars_unique() {
 #[test]
 fn is_pure_stutter_rule_detection() {
     let stutter = Rule {
-        from: 0,
-        to: 0,
+        from: 0.into(),
+        to: 0.into(),
         guard: make_guard(vec![]),
         updates: vec![],
     };
     assert!(is_pure_stutter_rule(&stutter));
 
     let non_stutter_move = Rule {
-        from: 0,
-        to: 1,
+        from: 0.into(),
+        to: 1.into(),
         guard: make_guard(vec![]),
         updates: vec![],
     };
     assert!(!is_pure_stutter_rule(&non_stutter_move));
 
     let non_stutter_update = Rule {
-        from: 0,
-        to: 0,
+        from: 0.into(),
+        to: 0.into(),
         guard: make_guard(vec![]),
         updates: vec![Update {
-            var: 0,
+            var: 0.into(),
             kind: UpdateKind::Increment,
         }],
     };
@@ -812,7 +819,7 @@ fn make_por_ta() -> ThresholdAutomaton {
         distinct: false,
         distinct_role: None,
     });
-    ta.initial_locations = vec![0, 2];
+    ta.initial_locations = vec![0.into(), 2.into()];
     ta
 }
 
@@ -821,21 +828,21 @@ fn rules_independent_disjoint_locations_and_vars() {
     let ta = make_por_ta();
     // Rule A: 0 -> 1 (role A), writes var 0
     let rule_a = Rule {
-        from: 0,
-        to: 1,
+        from: 0.into(),
+        to: 1.into(),
         guard: make_guard(vec![]),
         updates: vec![Update {
-            var: 0,
+            var: 0.into(),
             kind: UpdateKind::Increment,
         }],
     };
     // Rule B: 2 -> 3 (role B), writes var 1
     let rule_b = Rule {
-        from: 2,
-        to: 3,
+        from: 2.into(),
+        to: 3.into(),
         guard: make_guard(vec![]),
         updates: vec![Update {
-            var: 1,
+            var: 1.into(),
             kind: UpdateKind::Increment,
         }],
     };
@@ -847,14 +854,14 @@ fn rules_not_independent_shared_location() {
     let ta = make_por_ta();
     // Both rules share source location 0
     let rule_a = Rule {
-        from: 0,
-        to: 1,
+        from: 0.into(),
+        to: 1.into(),
         guard: make_guard(vec![]),
         updates: vec![],
     };
     let rule_b = Rule {
-        from: 0,
-        to: 1,
+        from: 0.into(),
+        to: 1.into(),
         guard: make_guard(vec![]),
         updates: vec![],
     };
@@ -866,18 +873,18 @@ fn rules_not_independent_write_read_conflict() {
     let ta = make_por_ta();
     // Rule A: 0 -> 1, writes var 0
     let rule_a = Rule {
-        from: 0,
-        to: 1,
+        from: 0.into(),
+        to: 1.into(),
         guard: make_guard(vec![]),
         updates: vec![Update {
-            var: 0,
+            var: 0.into(),
             kind: UpdateKind::Increment,
         }],
     };
     // Rule B: 2 -> 3, reads var 0 (in guard)
     let rule_b = Rule {
-        from: 2,
-        to: 3,
+        from: 2.into(),
+        to: 3.into(),
         guard: make_guard(vec![make_guard_atom(vec![0], CmpOp::Ge, 1, vec![], false)]),
         updates: vec![],
     };
@@ -956,7 +963,7 @@ fn encode_lc_constant_and_with_params() {
     // With params: 42 + 1*p_0 + 3*p_1
     let lc2 = LinearCombination {
         constant: 42,
-        terms: vec![(1, 0), (3, 1)],
+        terms: vec![(1, 0.into()), (3, 1.into())],
     };
     let result = encode_lc_term(&lc2);
     let expected = SmtTerm::int(42)

@@ -52,7 +52,12 @@ pub fn generate_obligation_map(
             SafetyProperty::Agreement { conflicting_pairs } => {
                 let pairs: Vec<(String, String)> = conflicting_pairs
                     .iter()
-                    .map(|&(a, b)| (ta.locations[a].name.clone(), ta.locations[b].name.clone()))
+                    .map(|&(a, b)| {
+                        (
+                            ta.locations[a.as_usize()].name.clone(),
+                            ta.locations[b.as_usize()].name.clone(),
+                        )
+                    })
                     .collect();
                 RuntimeObligation {
                     property_name: name.clone(),
@@ -72,7 +77,7 @@ pub fn generate_obligation_map(
                     .iter()
                     .map(|set| {
                         set.iter()
-                            .map(|&lid| ta.locations[lid].name.clone())
+                            .map(|&lid| ta.locations[lid.as_usize()].name.clone())
                             .collect()
                     })
                     .collect();
@@ -92,7 +97,7 @@ pub fn generate_obligation_map(
             SafetyProperty::Termination { goal_locs } => {
                 let goals: Vec<String> = goal_locs
                     .iter()
-                    .map(|&lid| ta.locations[lid].name.clone())
+                    .map(|&lid| ta.locations[lid.as_usize()].name.clone())
                     .collect();
                 RuntimeObligation {
                     property_name: name.clone(),
@@ -158,7 +163,7 @@ mod tests {
             phase: "Abort".into(),
             local_vars: local_vars_abort,
         });
-        ta.initial_locations = vec![0];
+        ta.initial_locations = vec![tarsier_ir::threshold_automaton::LocationId::from(0)];
         ta.add_shared_var(SharedVar {
             name: "cnt_Vote".into(),
             kind: SharedVarKind::MessageCounter,
@@ -166,14 +171,14 @@ mod tests {
             distinct_role: None,
         });
         ta.add_rule(Rule {
-            from: 0,
-            to: 1,
+            from: tarsier_ir::threshold_automaton::LocationId::from(0),
+            to: tarsier_ir::threshold_automaton::LocationId::from(1),
             guard: Guard::trivial(),
             updates: vec![],
         });
         ta.add_rule(Rule {
-            from: 0,
-            to: 2,
+            from: tarsier_ir::threshold_automaton::LocationId::from(0),
+            to: tarsier_ir::threshold_automaton::LocationId::from(2),
             guard: Guard::trivial(),
             updates: vec![],
         });
@@ -186,7 +191,10 @@ mod tests {
         let props = vec![(
             "agreement".into(),
             SafetyProperty::Agreement {
-                conflicting_pairs: vec![(1, 2)],
+                conflicting_pairs: vec![(
+                    tarsier_ir::threshold_automaton::LocationId::from(1),
+                    tarsier_ir::threshold_automaton::LocationId::from(2),
+                )],
             },
         )];
 
@@ -220,7 +228,7 @@ mod tests {
         let props = vec![(
             "safety_inv".into(),
             SafetyProperty::Invariant {
-                bad_sets: vec![vec![1, 2]],
+                bad_sets: vec![vec![1.into(), 2.into()]],
             },
         )];
 
@@ -244,7 +252,7 @@ mod tests {
         let props = vec![(
             "liveness".into(),
             SafetyProperty::Termination {
-                goal_locs: vec![1, 2],
+                goal_locs: vec![1.into(), 2.into()],
             },
         )];
 
@@ -270,12 +278,14 @@ mod tests {
             (
                 "agreement".into(),
                 SafetyProperty::Agreement {
-                    conflicting_pairs: vec![(1, 2)],
+                    conflicting_pairs: vec![(1.into(), 2.into())],
                 },
             ),
             (
                 "liveness".into(),
-                SafetyProperty::Termination { goal_locs: vec![1] },
+                SafetyProperty::Termination {
+                    goal_locs: vec![1.into()],
+                },
             ),
         ];
 

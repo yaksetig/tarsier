@@ -1,6 +1,7 @@
 //! `FormulaValue`, `eval_formula_*` functions.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::property::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum FormulaValue {
@@ -54,7 +55,7 @@ pub(crate) fn eval_formula_comparison(
     lhs: FormulaValue,
     rhs: FormulaValue,
 ) -> Result<bool, PipelineError> {
-    use ast::CmpOp;
+    use tarsier_dsl::ast::CmpOp;
     match (lhs, rhs) {
         (FormulaValue::Bool(l), FormulaValue::Bool(r)) => match op {
             CmpOp::Eq => Ok(l == r),

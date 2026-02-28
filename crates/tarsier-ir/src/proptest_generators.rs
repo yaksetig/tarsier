@@ -53,14 +53,14 @@ pub fn arb_threshold_automaton() -> impl Strategy<Value = ThresholdAutomaton> {
             let f_id = ta.add_parameter(Parameter { name: "f".into() });
 
             // Resilience condition: n > 3*t
-            ta.resilience_condition = Some(LinearConstraint {
-                lhs: LinearCombination::param(0), // n
+            ta.constraints.resilience_condition = Some(LinearConstraint {
+                lhs: LinearCombination::param(ParamId::from(0)), // n
                 op: CmpOp::Gt,
                 rhs: LinearCombination::param(t_id).scale(3),
             });
 
             // Adversary bound is f
-            ta.adversary_bound_param = Some(f_id);
+            ta.constraints.adversary_bound_param = Some(f_id);
 
             // Add locations
             for i in 0..nlocs {
@@ -73,7 +73,7 @@ pub fn arb_threshold_automaton() -> impl Strategy<Value = ThresholdAutomaton> {
             }
 
             // First location is always initial
-            ta.initial_locations.push(0);
+            ta.initial_locations.push(LocationId::from(0));
 
             // Add shared vars (message counters)
             for i in 0..nvars {
@@ -91,7 +91,7 @@ pub fn arb_threshold_automaton() -> impl Strategy<Value = ThresholdAutomaton> {
 
                 // Build guard: shared_var >= 1 + 2*t (or similar)
                 let guard = Guard::single(GuardAtom::Threshold {
-                    vars: vec![*guard_var],
+                    vars: vec![SharedVarId::from(*guard_var)],
                     op: *guard_op,
                     bound: LinearCombination {
                         constant: 1,
@@ -104,14 +104,14 @@ pub fn arb_threshold_automaton() -> impl Strategy<Value = ThresholdAutomaton> {
                 let mut updates = Vec::new();
                 if let Some(var_id) = update_info[idx] {
                     updates.push(Update {
-                        var: var_id,
+                        var: SharedVarId::from(var_id),
                         kind: UpdateKind::Increment,
                     });
                 }
 
                 ta.add_rule(Rule {
-                    from,
-                    to,
+                    from: LocationId::from(from),
+                    to: LocationId::from(to),
                     guard,
                     updates,
                 });
@@ -140,7 +140,7 @@ mod tests {
             // Has initial location
             prop_assert!(!ta.initial_locations.is_empty());
             // Has resilience condition
-            prop_assert!(ta.resilience_condition.is_some());
+            prop_assert!(ta.constraints.resilience_condition.is_some());
             // All rule references are valid
             for rule in &ta.rules {
                 prop_assert!(rule.from < ta.locations.len());

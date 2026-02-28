@@ -39,14 +39,14 @@ pub(crate) fn run_cert_suite_command(
     artifacts_dir: Option<PathBuf>,
     cli_network_mode: CliNetworkSemanticsMode,
 ) -> miette::Result<()> {
-    let solver = parse_solver_choice(&solver);
-    let engine = parse_proof_engine(&engine);
-    let soundness = parse_soundness_mode(&soundness);
+    let solver = parse_solver_choice(&solver)?;
+    let engine = parse_proof_engine(&engine)?;
+    let soundness = parse_soundness_mode(&soundness)?;
     if cli_network_mode == CliNetworkSemanticsMode::Faithful && soundness != SoundnessMode::Strict {
         miette::bail!("`--network-semantics faithful` requires `--soundness strict`.");
     }
-    let fairness = parse_fairness_mode(&fairness);
-    let output_format = parse_output_format(&format);
+    let fairness = parse_fairness_mode(&fairness)?;
+    let output_format = parse_output_format(&format)?;
     let defaults = CertSuiteDefaults {
         solver,
         depth,
@@ -77,7 +77,10 @@ pub(crate) fn run_cert_suite_command(
     }
 
     if report.overall != "pass" {
-        std::process::exit(2);
+        return Err(report_with_exit_code(
+            2,
+            format!("Certification suite reported overall='{}'.", report.overall),
+        ));
     }
     Ok(())
 }
@@ -98,25 +101,19 @@ pub(crate) fn run_certify_safety_command(
 ) -> miette::Result<()> {
     let source = fs::read_to_string(&file).into_diagnostic()?;
     let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness);
+    let soundness_mode = parse_soundness_mode(&soundness)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver),
+        solver: parse_solver_choice(&solver)?,
         max_depth: k,
         timeout_secs: timeout,
         dump_smt: None,
         soundness: soundness_mode,
-        proof_engine: parse_proof_engine(&engine),
+        proof_engine: parse_proof_engine(&engine)?,
     };
 
-    let cert =
-        match tarsier_engine::pipeline::generate_safety_certificate(&source, &filename, &options) {
-            Ok(cert) => cert,
-            Err(e) => {
-                eprintln!("Error: {e}");
-                std::process::exit(1);
-            }
-        };
+    let cert = tarsier_engine::pipeline::generate_safety_certificate(&source, &filename, &options)
+        .map_err(|e| miette::miette!("Error: {e}"))?;
 
     let bundle = certificate_bundle_from_safety(&cert);
     write_certificate_bundle(&out, &bundle, capture_proofs, allow_missing_proofs)?;
@@ -147,11 +144,11 @@ pub(crate) fn run_certify_fair_liveness_command(
 ) -> miette::Result<()> {
     let source = fs::read_to_string(&file).into_diagnostic()?;
     let filename = file.display().to_string();
-    let fairness = parse_fairness_mode(&fairness);
-    let soundness_mode = parse_soundness_mode(&soundness);
+    let fairness = parse_fairness_mode(&fairness)?;
+    let soundness_mode = parse_soundness_mode(&soundness)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver),
+        solver: parse_solver_choice(&solver)?,
         max_depth: k,
         timeout_secs: timeout,
         dump_smt: None,
@@ -163,10 +160,7 @@ pub(crate) fn run_certify_fair_liveness_command(
         &source, &filename, &options, fairness,
     ) {
         Ok(cert) => cert,
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
+        Err(e) => return Err(miette::miette!("Error: {e}")),
     };
 
     let bundle = certificate_bundle_from_fair_liveness(&cert);
@@ -258,7 +252,10 @@ pub(crate) fn run_check_certificate_command(
     }
 
     if had_error {
-        std::process::exit(2);
+        return Err(report_with_exit_code(
+            2,
+            "Certificate integrity checks failed.",
+        ));
     }
 
     if trusted_check && proof_checker.is_none() && allow_unchecked_proofs {
@@ -296,7 +293,10 @@ pub(crate) fn run_check_certificate_command(
     }
 
     if had_error {
-        std::process::exit(2);
+        return Err(report_with_exit_code(
+            2,
+            "Certificate re-derivation checks failed.",
+        ));
     }
 
     let emit_proofs_dir = emit_proofs.clone();
@@ -516,7 +516,10 @@ pub(crate) fn run_check_certificate_command(
     }
 
     if had_error {
-        std::process::exit(2);
+        return Err(report_with_exit_code(
+            2,
+            "Certificate verification checks failed.",
+        ));
     } else {
         println!(
             "Certificate verified for kind '{}' with engine '{}' (k/frame: {}).",
@@ -543,32 +546,29 @@ pub(crate) fn run_generate_trust_report_command(
     // Validate governance profile
     let valid_profiles = ["standard", "reinforced", "high-assurance"];
     if !valid_profiles.contains(&profile.as_str()) {
-        eprintln!(
-            "Error: invalid governance profile '{}'. Must be one of: {}",
+        miette::bail!(
+            "Invalid governance profile '{}'. Must be one of: {}",
             profile,
             valid_profiles.join(", ")
         );
-        std::process::exit(1);
     }
     // Validate soundness
     let valid_soundness = ["strict", "permissive"];
     if !valid_soundness.contains(&soundness.as_str()) {
-        eprintln!(
-            "Error: invalid soundness '{}'. Must be one of: {}",
+        miette::bail!(
+            "Invalid soundness '{}'. Must be one of: {}",
             soundness,
             valid_soundness.join(", ")
         );
-        std::process::exit(1);
     }
     // Validate engine
     let valid_engines = ["kinduction", "pdr"];
     if !valid_engines.contains(&engine.as_str()) {
-        eprintln!(
-            "Error: invalid engine '{}'. Must be one of: {}",
+        miette::bail!(
+            "Invalid engine '{}'. Must be one of: {}",
             engine,
             valid_engines.join(", ")
         );
-        std::process::exit(1);
     }
 
     let solver_list: Vec<&str> = solvers.split(',').map(|s| s.trim()).collect();
@@ -603,7 +603,7 @@ pub(crate) fn run_governance_pipeline_command(
     por_mode: &str,
 ) -> miette::Result<()> {
     let pipeline_start = std::time::Instant::now();
-    let output_format = parse_output_format(&format);
+    let output_format = parse_output_format(&format)?;
     let mut gates: Vec<GovernanceGateResult> = Vec::new();
 
     // --- Gate 1: Proof (analyze in audit mode) ---
@@ -611,8 +611,8 @@ pub(crate) fn run_governance_pipeline_command(
     let proof_gate = (|| -> Result<GovernanceGateResult, String> {
         let source = fs::read_to_string(&file).map_err(|e| e.to_string())?;
         let filename = file.display().to_string();
-        let eff_solver = parse_solver_choice(&solver);
-        let eff_soundness = parse_soundness_mode(&soundness);
+        let eff_solver = parse_solver_choice(&solver).map_err(|e| e.to_string())?;
+        let eff_soundness = parse_soundness_mode(&soundness).map_err(|e| e.to_string())?;
         let cfg = LayerRunCfg {
             solver: eff_solver,
             depth,
@@ -665,8 +665,8 @@ pub(crate) fn run_governance_pipeline_command(
     // --- Gate 2: Cert-suite ---
     let cert_start = std::time::Instant::now();
     let cert_gate = (|| -> Result<GovernanceGateResult, String> {
-        let eff_solver = parse_solver_choice(&solver);
-        let eff_soundness = parse_soundness_mode(&soundness);
+        let eff_solver = parse_solver_choice(&solver).map_err(|e| e.to_string())?;
+        let eff_soundness = parse_soundness_mode(&soundness).map_err(|e| e.to_string())?;
         let defaults = CertSuiteDefaults {
             solver: eff_solver,
             depth,
@@ -851,7 +851,10 @@ pub(crate) fn run_governance_pipeline_command(
     }
 
     if overall != "pass" {
-        std::process::exit(2);
+        return Err(report_with_exit_code(
+            2,
+            format!("Governance pipeline overall result was '{}'.", overall),
+        ));
     }
     Ok(())
 }
@@ -861,7 +864,7 @@ pub(crate) fn run_verify_governance_bundle_command(
     bundle: PathBuf,
     format: String,
 ) -> miette::Result<()> {
-    let output_format = parse_output_format(&format);
+    let output_format = parse_output_format(&format)?;
     let report = verify_governance_bundle(&bundle);
     let report_json = serde_json::to_string_pretty(&report).into_diagnostic()?;
     match output_format {
@@ -888,7 +891,13 @@ pub(crate) fn run_verify_governance_bundle_command(
         }
     }
     if report.overall != "pass" {
-        std::process::exit(2);
+        return Err(report_with_exit_code(
+            2,
+            format!(
+                "Governance bundle verification overall result was '{}'.",
+                report.overall
+            ),
+        ));
     }
     Ok(())
 }

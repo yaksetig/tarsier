@@ -1,3 +1,8 @@
+//! CVC5 solver backend via subprocess and SMT-LIB2 stdin/stdout protocol.
+//!
+//! Spawns `cvc5` as a child process in incremental mode with `QF_LIA` logic,
+//! and communicates via SMT-LIB2 commands over stdin/stdout.
+
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
@@ -9,18 +14,28 @@ use crate::solver::{Model, ModelValue, SatResult, SmtSolver};
 use crate::sorts::SmtSort;
 use crate::terms::SmtTerm;
 
+/// Errors from the cvc5 subprocess backend.
 #[derive(Debug, Error)]
 pub enum Cvc5Error {
+    /// I/O error communicating with the cvc5 process.
     #[error("cvc5 I/O error: {0}")]
     Io(#[from] std::io::Error),
+    /// The cvc5 binary was not found on the system PATH.
     #[error("cvc5 not found: {0}")]
     NotFound(String),
+    /// cvc5 returned an error response.
     #[error("cvc5 error: {0}")]
     SolverError(String),
+    /// Failed to parse cvc5's SMT-LIB2 output.
     #[error("Failed to parse cvc5 output: {0}")]
     ParseError(String),
 }
 
+/// Out-of-process cvc5 solver.
+///
+/// Spawns cvc5 as a child process and communicates via SMT-LIB2 over
+/// stdin/stdout. Supports incremental solving, model extraction, and
+/// UNSAT-assumption cores.
 pub struct Cvc5Solver {
     child: Child,
     stdin: ChildStdin,
@@ -31,10 +46,12 @@ pub struct Cvc5Solver {
 }
 
 impl Cvc5Solver {
+    /// Spawn cvc5 with default settings (no timeout).
     pub fn new() -> Result<Self, Cvc5Error> {
         Self::with_command_and_timeout("cvc5", None)
     }
 
+    /// Spawn cvc5 with a per-query timeout. Zero means no timeout.
     pub fn with_timeout_secs(timeout_secs: u64) -> Result<Self, Cvc5Error> {
         if timeout_secs == 0 {
             return Self::with_command_and_timeout("cvc5", None);
@@ -43,10 +60,12 @@ impl Cvc5Solver {
         Self::with_command_and_timeout("cvc5", Some(timeout_ms))
     }
 
+    /// Spawn a custom cvc5-compatible binary (e.g., a different path or wrapper).
     pub fn with_command(cmd: &str) -> Result<Self, Cvc5Error> {
         Self::with_command_and_timeout(cmd, None)
     }
 
+    /// Spawn a custom binary with an optional timeout in milliseconds.
     pub fn with_command_and_timeout(cmd: &str, timeout_ms: Option<u64>) -> Result<Self, Cvc5Error> {
         let mut args = vec![
             "--lang".to_string(),

@@ -1,3 +1,5 @@
+//! Go-to-definition and reference navigation utilities for the LSP backend.
+
 use tower_lsp::lsp_types::*;
 
 use crate::code_actions::levenshtein;

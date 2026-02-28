@@ -1,5 +1,8 @@
+//! Unit tests for property lowering, evaluation, and temporal encodings.
+
 use super::super::verification::pdr_kappa_var;
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::property::*;
 use tarsier_ir::threshold_automaton::{Guard, Location, Parameter, Rule};
 use tarsier_smt::terms::SmtTerm;
 
@@ -83,23 +86,23 @@ fn test_ta() -> ThresholdAutomaton {
         .push(mk_loc("s0", "S", "s0", false, true, "Other", 0)); // 3
     ta.locations
         .push(mk_loc("ghost", "R", "u", true, true, "Ghost", 99)); // 4 unreachable
-    ta.initial_locations = vec![0, 3];
+    ta.initial_locations = vec![0.into(), 3.into()];
 
     ta.rules.push(Rule {
-        from: 0,
-        to: 1,
+        from: 0.into(),
+        to: 1.into(),
         guard: Guard::trivial(),
         updates: vec![],
     });
     ta.rules.push(Rule {
-        from: 1,
-        to: 2,
+        from: 1.into(),
+        to: 2.into(),
         guard: Guard::trivial(),
         updates: vec![],
     });
     ta.rules.push(Rule {
-        from: 3,
-        to: 3,
+        from: 3.into(),
+        to: 3.into(),
         guard: Guard::trivial(),
         updates: vec![],
     });
@@ -1179,7 +1182,7 @@ protocol MultiLive {
         resolve_param_or_const(&ParamOrConst::Const(7), &ta).unwrap(),
         7
     );
-    assert!(resolve_param_or_const(&ParamOrConst::Param(0), &ta).is_err());
+    assert!(resolve_param_or_const(&ParamOrConst::Param(0.into()), &ta).is_err());
 }
 
 #[test]

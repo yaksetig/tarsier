@@ -1701,16 +1701,16 @@ pub(crate) fn run_verify_command(
     format: String,
     cli_network_mode: CliNetworkSemanticsMode,
 ) -> miette::Result<()> {
-    let output_format = parse_output_format(&format);
+    let output_format = parse_output_format(&format)?;
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness);
+    let soundness_mode = parse_soundness_mode(&soundness)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
     let network_faithfulness =
         network_faithfulness_section(&source, &filename, cli_network_mode, soundness_mode);
 
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver),
+        solver: parse_solver_choice(&solver)?,
         max_depth: depth,
         timeout_secs: timeout,
         dump_smt,
@@ -1889,7 +1889,7 @@ pub(crate) fn run_verify_command(
                         eprintln!("Error: {e}");
                     }
                 }
-                std::process::exit(1);
+                return Err(miette::miette!("Error: {e}"));
             }
         }
     }
@@ -1928,11 +1928,11 @@ pub(crate) fn run_round_sweep_command(
 
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness);
+    let soundness_mode = parse_soundness_mode(&soundness)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
     let base_program = tarsier_engine::pipeline::parse(&source, &filename).into_diagnostic()?;
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver),
+        solver: parse_solver_choice(&solver)?,
         max_depth: depth,
         timeout_secs: timeout,
         dump_smt: None,
@@ -1992,7 +1992,7 @@ pub(crate) fn run_round_sweep_command(
         ),
     };
 
-    match parse_output_format(&format) {
+    match parse_output_format(&format)? {
         OutputFormat::Text => {
             println!("{}", render_round_sweep_text(&report));
         }
@@ -2030,12 +2030,12 @@ pub(crate) fn run_liveness_command(
 ) -> miette::Result<()> {
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness);
-    let output_format = parse_output_format(&format);
+    let soundness_mode = parse_soundness_mode(&soundness)?;
+    let output_format = parse_output_format(&format)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
 
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver),
+        solver: parse_solver_choice(&solver)?,
         max_depth: depth,
         timeout_secs: timeout,
         dump_smt,
@@ -2072,7 +2072,7 @@ pub(crate) fn run_liveness_command(
                     eprintln!("Error: {e}");
                 }
             }
-            std::process::exit(1);
+            return Err(miette::miette!("Error: {e}"));
         }
     }
 
@@ -2097,12 +2097,17 @@ pub(crate) fn run_fair_liveness_command(
 ) -> miette::Result<()> {
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness);
-    let output_format = parse_output_format(&format);
+    let soundness_mode = parse_soundness_mode(&soundness)?;
+    let output_format = parse_output_format(&format)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
 
-    let options = make_options(parse_solver_choice(&solver), depth, timeout, soundness_mode);
-    let fairness = parse_fairness_mode(&fairness);
+    let options = make_options(
+        parse_solver_choice(&solver)?,
+        depth,
+        timeout,
+        soundness_mode,
+    );
+    let fairness = parse_fairness_mode(&fairness)?;
     if portfolio {
         let mut z3_options = options.clone();
         z3_options.solver = SolverChoice::Z3;
@@ -2198,7 +2203,7 @@ pub(crate) fn run_fair_liveness_command(
                         eprintln!("Error: {e}");
                     }
                 }
-                std::process::exit(1);
+                return Err(miette::miette!("Error: {e}"));
             }
         }
     }
@@ -2224,7 +2229,7 @@ pub(crate) fn run_comm_command(
         tarsier_engine::pipeline::SoundnessMode::Strict,
         cli_network_mode,
     )?;
-    let output_format = parse_output_format(&format);
+    let output_format = parse_output_format(&format)?;
 
     match tarsier_engine::pipeline::comm_complexity(&source, &filename, depth) {
         Ok(report) => {
@@ -2247,7 +2252,7 @@ pub(crate) fn run_comm_command(
         }
         Err(e) => {
             eprintln!("Error: {e}");
-            std::process::exit(1);
+            return Err(miette::miette!("Error: {e}"));
         }
     }
     Ok(())

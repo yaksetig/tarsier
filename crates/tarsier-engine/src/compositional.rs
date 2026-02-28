@@ -183,7 +183,7 @@ mod tests {
         let constrained = module(
             "Constrained",
             vec![Assumption::ParameterConstraint {
-                lhs: LinearCombination::param(0),
+                lhs: LinearCombination::param(0.into()),
                 op: CmpOp::Ge,
                 rhs: LinearCombination::constant(1),
             }],

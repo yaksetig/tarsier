@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, HashMap};
 use tarsier_dsl::ast;
 use tarsier_ir::properties::{extract_agreement_property, SafetyProperty};
 use tarsier_ir::threshold_automaton::{
-    CmpOp, GuardAtom, LinearCombination, LocalValue, ThresholdAutomaton, UpdateKind,
+    CmpOp, GuardAtom, LinearCombination, LocalValue, LocationId, ThresholdAutomaton, UpdateKind,
 };
 
 /// Convert a `ThresholdAutomaton` into ByMC `.ta` format text.
@@ -94,7 +94,7 @@ where
     }
 
     // Assumptions (resilience condition)
-    if let Some(ref rc) = ta.resilience_condition {
+    if let Some(ref rc) = ta.constraints.resilience_condition {
         let lhs = format_lc_bymc(&rc.lhs, ta);
         let rhs = format_lc_bymc(&rc.rhs, ta);
         let op = format_cmp_op(rc.op);
@@ -135,7 +135,7 @@ where
     }
     // Non-initial locations start at 0
     for (i, _) in ta.locations.iter().enumerate() {
-        if !ta.initial_locations.contains(&i) {
+        if !ta.initial_locations.contains(&LocationId::from(i)) {
             init_parts.push(format!("loc{i} == 0"));
         }
     }
@@ -685,7 +685,7 @@ fn format_lc_bymc(lc: &LinearCombination, ta: &ThresholdAutomaton) -> String {
         }
         let pname = ta
             .parameters
-            .get(pid)
+            .get(pid.as_usize())
             .map(|p| p.name.to_uppercase())
             .unwrap_or_else(|| format!("P{pid}"));
         if first {
@@ -744,7 +744,7 @@ fn format_guard_bymc(atoms: &[GuardAtom], ta: &ThresholdAutomaton) -> String {
                     "0".to_string()
                 } else {
                     vars.iter()
-                        .map(|&v| sanitize_name(&ta.shared_vars[v].name))
+                        .map(|&v| sanitize_name(&ta.shared_vars[v.as_usize()].name))
                         .collect::<Vec<_>>()
                         .join(" + ")
                 };
@@ -926,12 +926,12 @@ mod tests {
         let source = include_str!("../../../examples/library/reliable_broadcast_safe_live.trs");
         let program = tarsier_dsl::parse(source, "test.trs").expect("parse failed");
         let ta = tarsier_ir::lowering::lower(&program).expect("lower failed");
-        let goal_locs: Vec<usize> = ta
+        let goal_locs: Vec<LocationId> = ta
             .locations
             .iter()
             .enumerate()
             .filter(|(_, loc)| loc.phase == "done")
-            .map(|(id, _)| id)
+            .map(|(id, _)| id.into())
             .collect();
         assert!(!goal_locs.is_empty(), "expected at least one done location");
 

@@ -1,6 +1,8 @@
 //! BMC execution, committee bounds, k-induction, and CTI analysis helpers.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::verification::*;
+use tarsier_ir::threshold_automaton::LocationId;
 
 pub(crate) fn with_smt_profile<T, F>(context: &str, run: F) -> Result<T, PipelineError>
 where
@@ -92,7 +94,7 @@ pub(crate) fn make_property_assumptions(
         solver: solver_choice_name(options.solver).to_string(),
         soundness: soundness_mode_name(options.soundness).to_string(),
         max_depth: options.max_depth,
-        network_semantics: network_semantics_name(ta.network_semantics).to_string(),
+        network_semantics: network_semantics_name(ta.semantics.network_semantics).to_string(),
         committee_bounds: named_committee_bounds(ta, committee_bounds),
         failure_probability_bound,
     }
@@ -411,7 +413,7 @@ pub(crate) fn run_liveness_spec_bmc(
     match spec {
         LivenessSpec::TerminationGoalLocs(goal_locs) => {
             let property = SafetyProperty::Termination {
-                goal_locs: goal_locs.clone(),
+                goal_locs: goal_locs.iter().copied().map(Into::into).collect(),
             };
             if let Some(path) = dump_smt_path {
                 let extra = committee_bound_assertions(committee_bounds);
@@ -459,7 +461,7 @@ pub(crate) fn run_liveness_spec_bmc(
             if let Some(path) = dump_smt_path {
                 let smt = query_to_smt2_script(&encoding.declarations, &encoding.assertions);
                 if let Err(e) = std::fs::write(path, smt) {
-                    eprintln!("Warning: could not write SMT dump to {path}: {e}");
+                    tracing::warn!("could not write SMT dump to {path}: {e}");
                 } else {
                     info!("SMT dump written to {path}");
                 }
@@ -746,20 +748,20 @@ pub(crate) fn property_relevant_location_set(property: &SafetyProperty) -> HashS
     match property {
         SafetyProperty::Agreement { conflicting_pairs } => {
             for (a, b) in conflicting_pairs {
-                locs.insert(*a);
-                locs.insert(*b);
+                locs.insert(a.as_usize());
+                locs.insert(b.as_usize());
             }
         }
         SafetyProperty::Invariant { bad_sets } => {
             for bad in bad_sets {
                 for loc in bad {
-                    locs.insert(*loc);
+                    locs.insert(loc.as_usize());
                 }
             }
         }
         SafetyProperty::Termination { goal_locs } => {
             for loc in goal_locs {
-                locs.insert(*loc);
+                locs.insert(loc.as_usize());
             }
         }
     }
@@ -808,7 +810,7 @@ pub(crate) fn prove_location_unreachable_for_synthesis(
     loc_id: usize,
 ) -> Result<bool, PipelineError> {
     let candidate = SafetyProperty::Invariant {
-        bad_sets: vec![vec![loc_id]],
+        bad_sets: vec![vec![loc_id.into()]],
     };
     let kind_result = match options.solver {
         SolverChoice::Z3 => {
@@ -913,7 +915,7 @@ pub(crate) fn build_induction_cti_summary(
     committee_bounds: &[(usize, u64)],
     options: &PipelineOptions,
 ) -> InductionCtiSummary {
-    let ta = &cs.automaton;
+    let ta = cs;
     let k = witness.k;
     let model = &witness.model;
 
@@ -948,8 +950,8 @@ pub(crate) fn build_induction_cti_summary(
                 if delta <= 0 {
                     return None;
                 }
-                let from = &ta.locations[rule.from].name;
-                let to = &ta.locations[rule.to].name;
+                let from = &ta.locations[rule.from.as_usize()].name;
+                let to = &ta.locations[rule.to.as_usize()].name;
                 Some((format!("r{rule_id} ({from} -> {to})"), delta))
             })
             .collect()
@@ -1007,7 +1009,7 @@ pub(crate) fn cti_hypothesis_state_assertions(
     let step = witness.k.saturating_sub(1);
     let mut assertions = committee_bound_assertions(committee_bounds);
 
-    for loc_id in 0..cs.automaton.locations.len() {
+    for loc_id in 0..cs.locations.len() {
         let value = witness
             .model
             .get_int(&format!("kappa_{step}_{loc_id}"))
@@ -1015,7 +1017,7 @@ pub(crate) fn cti_hypothesis_state_assertions(
         assertions.push(SmtTerm::var(format!("kappa_{step}_{loc_id}")).eq(SmtTerm::int(value)));
     }
 
-    for var_id in 0..cs.automaton.shared_vars.len() {
+    for var_id in 0..cs.shared_vars.len() {
         let value = witness
             .model
             .get_int(&format!("g_{step}_{var_id}"))
@@ -1023,7 +1025,7 @@ pub(crate) fn cti_hypothesis_state_assertions(
         assertions.push(SmtTerm::var(format!("g_{step}_{var_id}")).eq(SmtTerm::int(value)));
     }
 
-    for param_id in 0..cs.automaton.parameters.len() {
+    for param_id in 0..cs.parameters.len() {
         let value = witness.model.get_int(&format!("p_{param_id}")).unwrap_or(0);
         assertions.push(SmtTerm::var(format!("p_{param_id}")).eq(SmtTerm::int(value)));
     }
@@ -1143,7 +1145,7 @@ pub(crate) fn classify_cti(
     let init_location_names: Vec<&str> = ta
         .initial_locations
         .iter()
-        .filter_map(|&loc_id| ta.locations.get(loc_id).map(|loc| loc.name.as_str()))
+        .filter_map(|&loc_id| ta.locations.get(loc_id.as_usize()).map(|loc| loc.name.as_str()))
         .collect();
     if !init_location_names.is_empty() {
         let hyp_names: std::collections::HashMap<&str, i64> = hypothesis_locations
@@ -1290,7 +1292,8 @@ pub(crate) fn summarize_property_violation(
                 if ka > 0 && kb > 0 {
                     violated_pairs.push(format!(
                         "{} and {} both occupied",
-                        ta.locations[a].name, ta.locations[b].name
+                        ta.locations[a.as_usize()].name,
+                        ta.locations[b.as_usize()].name
                     ));
                 }
             }
@@ -1304,7 +1307,7 @@ pub(crate) fn summarize_property_violation(
         SafetyProperty::Invariant { bad_sets } => {
             let mut witnesses = Vec::new();
             for bad_set in bad_sets {
-                let occupied: Vec<usize> = bad_set
+                let occupied: Vec<LocationId> = bad_set
                     .iter()
                     .copied()
                     .filter(|loc| model.get_int(&format!("kappa_{step}_{loc}")).unwrap_or(0) > 0)
@@ -1312,7 +1315,7 @@ pub(crate) fn summarize_property_violation(
                 if occupied.len() == bad_set.len() {
                     let names = occupied
                         .iter()
-                        .map(|loc| ta.locations[*loc].name.clone())
+                        .map(|loc| ta.locations[loc.as_usize()].name.clone())
                         .collect::<Vec<_>>()
                         .join(", ");
                     witnesses.push(format!("all of {{{names}}} occupied"));
@@ -1326,7 +1329,7 @@ pub(crate) fn summarize_property_violation(
             }
         }
         SafetyProperty::Termination { goal_locs } => {
-            let goal_set: HashSet<usize> = goal_locs.iter().copied().collect();
+            let goal_set: HashSet<usize> = goal_locs.iter().map(|loc| loc.as_usize()).collect();
             let still_active = ta
                 .locations
                 .iter()
@@ -1355,7 +1358,8 @@ pub(crate) fn summarize_property_violation(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
     #[test]
     fn solver_choice_name_z3() {
@@ -1472,7 +1476,7 @@ mod tests {
     #[test]
     fn safety_property_canonical_agreement_sorted() {
         let prop = SafetyProperty::Agreement {
-            conflicting_pairs: vec![(2, 3), (0, 1)],
+            conflicting_pairs: vec![(2.into(), 3.into()), (0.into(), 1.into())],
         };
         let canon = safety_property_canonical(&prop);
         // Pairs should be sorted
@@ -1491,7 +1495,7 @@ mod tests {
     #[test]
     fn safety_property_canonical_invariant() {
         let prop = SafetyProperty::Invariant {
-            bad_sets: vec![vec![2, 1], vec![0]],
+            bad_sets: vec![vec![2.into(), 1.into()], vec![0.into()]],
         };
         let canon = safety_property_canonical(&prop);
         // Inner sets sorted, outer sorted
@@ -1501,7 +1505,7 @@ mod tests {
     #[test]
     fn safety_property_canonical_termination() {
         let prop = SafetyProperty::Termination {
-            goal_locs: vec![3, 1, 2],
+            goal_locs: vec![3.into(), 1.into(), 2.into()],
         };
         let canon = safety_property_canonical(&prop);
         assert_eq!(canon, "termination:[1, 2, 3]");
@@ -1510,7 +1514,7 @@ mod tests {
     #[test]
     fn property_relevant_location_set_agreement() {
         let prop = SafetyProperty::Agreement {
-            conflicting_pairs: vec![(0, 1), (2, 3)],
+            conflicting_pairs: vec![(0.into(), 1.into()), (2.into(), 3.into())],
         };
         let locs = property_relevant_location_set(&prop);
         assert_eq!(locs.len(), 4);
@@ -1523,7 +1527,7 @@ mod tests {
     #[test]
     fn property_relevant_location_set_invariant() {
         let prop = SafetyProperty::Invariant {
-            bad_sets: vec![vec![5, 6], vec![7]],
+            bad_sets: vec![vec![5.into(), 6.into()], vec![7.into()]],
         };
         let locs = property_relevant_location_set(&prop);
         assert_eq!(locs.len(), 3);
@@ -1535,7 +1539,7 @@ mod tests {
     #[test]
     fn property_relevant_location_set_termination() {
         let prop = SafetyProperty::Termination {
-            goal_locs: vec![10, 20],
+            goal_locs: vec![10.into(), 20.into()],
         };
         let locs = property_relevant_location_set(&prop);
         assert_eq!(locs.len(), 2);

@@ -10,6 +10,10 @@ use crate::terms::SmtTerm;
 use super::variables::*;
 use super::BmcEncoding;
 
+/// Result of static partial-order reduction analysis.
+///
+/// Tracks which rules are disabled and the reason for each pruning, enabling
+/// diagnostic reporting of how many rules were eliminated.
 #[derive(Debug, Clone)]
 pub(super) struct PorRulePruning {
     disabled_rules: Vec<bool>,
@@ -19,10 +23,12 @@ pub(super) struct PorRulePruning {
 }
 
 impl PorRulePruning {
+    /// Check if a rule has been pruned by any POR strategy.
     pub(super) fn is_disabled(&self, rule_id: usize) -> bool {
         self.disabled_rules.get(rule_id).copied().unwrap_or(false)
     }
 
+    /// Return the IDs of rules that survived pruning.
     pub(super) fn active_rule_ids(&self) -> Vec<usize> {
         self.disabled_rules
             .iter()
@@ -32,6 +38,7 @@ impl PorRulePruning {
     }
 }
 
+/// Normalize a linear combination into a canonical string for comparing guards.
 pub(super) fn linear_combination_signature(lc: &LinearCombination) -> String {
     let mut terms = lc.terms.clone();
     terms.sort_by_key(|(_, pid)| *pid);
@@ -43,20 +50,22 @@ pub(super) fn linear_combination_signature(lc: &LinearCombination) -> String {
     out
 }
 
-pub(super) fn normalized_vars(vars: &[usize]) -> Vec<usize> {
-    let mut out = vars.to_vec();
+/// Sort and deduplicate a variable index list for comparison.
+pub(super) fn normalized_vars(vars: &[impl Copy + Into<usize>]) -> Vec<usize> {
+    let mut out: Vec<usize> = vars.iter().map(|v| (*v).into()).collect();
     out.sort();
     out.dedup();
     out
 }
 
+/// Merge duplicate parameter coefficients and drop zeros.
 pub(super) fn normalized_lc_terms(lc: &LinearCombination) -> Vec<(i64, usize)> {
     let mut coeff_by_param: HashMap<usize, i64> = HashMap::new();
     for (coeff, pid) in &lc.terms {
         if *coeff == 0 {
             continue;
         }
-        *coeff_by_param.entry(*pid).or_insert(0) += *coeff;
+        *coeff_by_param.entry(pid.as_usize()).or_insert(0) += *coeff;
     }
     let mut terms: Vec<(i64, usize)> = coeff_by_param
         .into_iter()
@@ -66,6 +75,7 @@ pub(super) fn normalized_lc_terms(lc: &LinearCombination) -> Vec<(i64, usize)> {
     terms
 }
 
+/// If two linear combinations have identical parameter terms, return their constants for comparison.
 pub(super) fn comparable_lc_constants(
     lhs: &LinearCombination,
     rhs: &LinearCombination,
@@ -79,6 +89,8 @@ pub(super) fn comparable_lc_constants(
     }
 }
 
+/// Check whether one threshold guard logically implies another, given
+/// that both share the same parameter-coefficient structure.
 pub(super) fn threshold_op_entails(
     lhs_op: CmpOp,
     lhs_const: i64,
@@ -105,6 +117,7 @@ pub(super) fn threshold_op_entails(
     }
 }
 
+/// Check whether one guard atom logically implies another.
 pub(super) fn guard_atom_implies(lhs: &GuardAtom, rhs: &GuardAtom) -> bool {
     match (lhs, rhs) {
         (
@@ -134,6 +147,7 @@ pub(super) fn guard_atom_implies(lhs: &GuardAtom, rhs: &GuardAtom) -> bool {
     }
 }
 
+/// Check whether a guard (conjunction of atoms) implies another.
 pub(super) fn guard_implies(lhs: &Guard, rhs: &Guard) -> bool {
     rhs.atoms.iter().all(|rhs_atom| {
         lhs.atoms
@@ -142,6 +156,7 @@ pub(super) fn guard_implies(lhs: &Guard, rhs: &Guard) -> bool {
     })
 }
 
+/// Serialize a guard atom to a canonical string for deduplication.
 pub(super) fn guard_atom_signature(atom: &GuardAtom) -> String {
     match atom {
         GuardAtom::Threshold {
@@ -171,6 +186,7 @@ pub(super) fn guard_atom_signature(atom: &GuardAtom) -> String {
     }
 }
 
+/// Canonical signature of a rule's effect (source, target, updates) without its guard.
 pub(super) fn rule_effect_signature(rule: &Rule) -> String {
     let updates = rule
         .updates
@@ -181,6 +197,7 @@ pub(super) fn rule_effect_signature(rule: &Rule) -> String {
     format!("from={};to={};updates=[{updates}]", rule.from, rule.to)
 }
 
+/// Canonical signature of a single shared-var update.
 pub(super) fn update_signature(update: &Update) -> String {
     match &update.kind {
         UpdateKind::Increment => format!("inc@{}", update.var),
@@ -188,6 +205,7 @@ pub(super) fn update_signature(update: &Update) -> String {
     }
 }
 
+/// Full canonical signature of a rule (guards + effect) for commutative-duplicate detection.
 pub(super) fn rule_signature(rule: &Rule) -> String {
     let mut guards = rule
         .guard
@@ -211,12 +229,19 @@ pub(super) fn rule_signature(rule: &Rule) -> String {
     )
 }
 
+/// A pure stutter rule is a self-loop with no updates — always prunable.
 pub(super) fn is_pure_stutter_rule(rule: &Rule) -> bool {
     rule.from == rule.to && rule.updates.is_empty()
 }
 
+/// Analyze the threshold automaton and disable rules that are provably redundant.
+///
+/// Three pruning strategies applied in order:
+/// 1. **Stutter**: identity transitions (self-loop, no updates)
+/// 2. **Commutative duplicates**: rules with identical signatures
+/// 3. **Guard-dominated**: rules whose guard is implied by a cheaper alternative
 pub(super) fn compute_por_rule_pruning(ta: &ThresholdAutomaton) -> PorRulePruning {
-    if ta.por_mode == PorMode::Off {
+    if ta.semantics.por_mode == PorMode::Off {
         return PorRulePruning {
             disabled_rules: vec![false; ta.rules.len()],
             stutter_pruned: 0,
@@ -279,11 +304,12 @@ pub(super) fn compute_por_rule_pruning(ta: &ThresholdAutomaton) -> PorRulePrunin
 
 const DEFAULT_PROCESS_ID_VAR: &str = "pid";
 
+/// Look up the process-identity local variable name for a role.
 pub(super) fn role_process_identity_var<'a>(
     ta: &'a ThresholdAutomaton,
     role: &str,
 ) -> Option<&'a str> {
-    ta.role_identities
+    ta.security.role_identities
         .get(role)
         .and_then(|cfg| {
             if cfg.scope == RoleIdentityScope::Process {
@@ -295,6 +321,7 @@ pub(super) fn role_process_identity_var<'a>(
         .or(Some(DEFAULT_PROCESS_ID_VAR))
 }
 
+/// Check whether a location has a non-negative process identity value.
 pub(super) fn location_has_valid_process_identity(ta: &ThresholdAutomaton, loc: &Location) -> bool {
     let Some(pid_var) = role_process_identity_var(ta, &loc.role) else {
         return false;
@@ -302,6 +329,7 @@ pub(super) fn location_has_valid_process_identity(ta: &ThresholdAutomaton, loc: 
     matches!(loc.local_vars.get(pid_var), Some(LocalValue::Int(pid)) if *pid >= 0)
 }
 
+/// Group locations by (role, process-id) for process-selective network constraints.
 pub(super) fn process_identity_buckets(
     ta: &ThresholdAutomaton,
 ) -> HashMap<(String, i64), Vec<usize>> {
@@ -320,6 +348,7 @@ pub(super) fn process_identity_buckets(
     buckets
 }
 
+/// Assert that each (role, pid) bucket occupies exactly one location at each step.
 pub(super) fn assert_process_identity_uniqueness(
     enc: &mut BmcEncoding,
     step: usize,
@@ -338,6 +367,7 @@ pub(super) fn assert_process_identity_uniqueness(
     }
 }
 
+/// Parse a message-counter variable name to extract (family, optional recipient).
 pub(super) fn message_family_and_recipient_from_counter_name(
     name: &str,
 ) -> Option<(String, Option<String>)> {
@@ -362,6 +392,7 @@ pub(super) fn message_family_and_recipient_from_counter_name(
     Some((family, recipient))
 }
 
+/// Parse a message-counter variable name to extract (family, optional sender channel).
 pub(super) fn message_family_and_sender_from_counter_name(
     name: &str,
 ) -> Option<(String, Option<String>)> {
@@ -384,6 +415,7 @@ pub(super) fn message_family_and_sender_from_counter_name(
     Some((family, sender))
 }
 
+/// Extract the role name from a sender channel key (before the `#` separator).
 pub(super) fn sender_channel_role(sender_channel: &str) -> &str {
     sender_channel
         .split_once('#')
@@ -391,17 +423,19 @@ pub(super) fn sender_channel_role(sender_channel: &str) -> &str {
         .unwrap_or(sender_channel)
 }
 
+/// Check if a sender channel's signing key has been marked as compromised.
 pub(super) fn sender_channel_key_compromised(
     ta: &ThresholdAutomaton,
     sender_channel: &str,
 ) -> bool {
     let role = sender_channel_role(sender_channel);
-    ta.role_identities
+    ta.security.role_identities
         .get(role)
-        .map(|cfg| ta.compromised_keys.contains(&cfg.key_name))
+        .map(|cfg| ta.security.compromised_keys.contains(&cfg.key_name))
         .unwrap_or(false)
 }
 
+/// Parse a counter name to extract (variant key, family name) for message grouping.
 pub(super) fn message_variant_and_family_from_counter_name(name: &str) -> Option<(String, String)> {
     let stripped = name.strip_prefix("cnt_")?;
     let (variant, family) = match stripped.split_once('@') {
@@ -429,6 +463,7 @@ pub(super) fn message_variant_and_family_from_counter_name(name: &str) -> Option
     Some((variant, family))
 }
 
+/// Collect message-counter shared vars into groups by variant, for encoding message semantics.
 pub(super) fn collect_message_variant_groups(ta: &ThresholdAutomaton) -> MessageVariantGroups {
     let mut group_index_by_variant: HashMap<String, usize> = HashMap::new();
     let mut groups: Vec<Vec<usize>> = Vec::new();
@@ -460,6 +495,7 @@ pub(super) fn collect_message_variant_groups(ta: &ThresholdAutomaton) -> Message
     (groups, group_families, family_groups)
 }
 
+/// Collect crypto-object message groups with exclusive conflict policy.
 pub(super) fn collect_exclusive_crypto_variant_groups(
     ta: &ThresholdAutomaton,
 ) -> HashMap<(String, String), Vec<Vec<usize>>> {
@@ -476,7 +512,7 @@ pub(super) fn collect_exclusive_crypto_variant_groups(
         let Some(recipient) = recipient else {
             continue;
         };
-        let Some(spec) = ta.crypto_objects.get(&family) else {
+        let Some(spec) = ta.security.crypto_objects.get(&family) else {
             continue;
         };
         if spec.conflict_policy != CryptoConflictPolicy::Exclusive {
@@ -507,32 +543,35 @@ pub(super) fn collect_exclusive_crypto_variant_groups(
     result
 }
 
+/// Resolve a message family's effective authentication policy (inheriting from global if needed).
 pub(super) fn message_effective_signed_auth(ta: &ThresholdAutomaton, family: &str) -> bool {
     match ta
-        .message_policies
+        .security.message_policies
         .get(family)
         .map(|p| p.auth)
         .unwrap_or(MessageAuthPolicy::Inherit)
     {
         MessageAuthPolicy::Authenticated => true,
         MessageAuthPolicy::Unauthenticated => false,
-        MessageAuthPolicy::Inherit => ta.authentication_mode == AuthenticationMode::Signed,
+        MessageAuthPolicy::Inherit => ta.semantics.authentication_mode == AuthenticationMode::Signed,
     }
 }
 
+/// Resolve a message family's effective equivocation policy (inheriting from global if needed).
 pub(super) fn message_effective_non_equivocating(ta: &ThresholdAutomaton, family: &str) -> bool {
     match ta
-        .message_policies
+        .security.message_policies
         .get(family)
         .map(|p| p.equivocation)
         .unwrap_or(MessageEquivocationPolicy::Inherit)
     {
         MessageEquivocationPolicy::None => true,
         MessageEquivocationPolicy::Full => false,
-        MessageEquivocationPolicy::Inherit => ta.equivocation_mode == EquivocationMode::None,
+        MessageEquivocationPolicy::Inherit => ta.semantics.equivocation_mode == EquivocationMode::None,
     }
 }
 
+/// Group message-counter shared vars by recipient, plus a flat list of all counters.
 pub(super) fn collect_message_counter_recipient_groups(
     ta: &ThresholdAutomaton,
 ) -> (HashMap<String, Vec<usize>>, Vec<usize>) {
@@ -551,6 +590,7 @@ pub(super) fn collect_message_counter_recipient_groups(
     (groups, all)
 }
 
+/// Boolean flag per shared var: true if it is a message counter.
 pub(super) fn collect_message_counter_flags(ta: &ThresholdAutomaton) -> Vec<bool> {
     ta.shared_vars
         .iter()
@@ -596,9 +636,10 @@ pub(super) fn encode_lc(lc: &LinearCombination) -> SmtTerm {
     sum_terms_balanced(terms)
 }
 
+/// Encode a threshold guard atom as an SmtTerm for a given step.
 pub(super) fn encode_threshold_guard_at_step(
     step: usize,
-    vars: &[usize],
+    vars: &[impl Copy + std::fmt::Display],
     op: CmpOp,
     bound: &LinearCombination,
     distinct: bool,

@@ -1,3 +1,8 @@
+//! Z3 solver backend via the `z3` crate with thread-local context.
+//!
+//! Uses z3 crate v0.19's implicit thread-local context — no explicit `Context`
+//! parameter is needed for constructors like `Solver::new()` or `Int::new_const()`.
+
 use std::collections::HashMap;
 
 use thiserror::Error;
@@ -7,16 +12,25 @@ use crate::solver::{Model, ModelValue, SatResult, SmtSolver};
 use crate::sorts::SmtSort;
 use crate::terms::SmtTerm;
 
+/// Errors from the Z3 backend.
 #[derive(Debug, Error)]
 pub enum Z3Error {
+    /// Internal Z3 error or unexpected state.
     #[error("Z3 error: {0}")]
     Internal(String),
+    /// Referenced a variable that was never declared.
     #[error("Unknown variable: {0}")]
     UnknownVariable(String),
+    /// Variable used in a context expecting a different sort.
     #[error("Sort mismatch for variable {0}")]
     SortMismatch(String),
 }
 
+/// In-process Z3 solver.
+///
+/// Uses the z3 crate's thread-local context — no explicit `Context` parameter needed.
+/// Maintains separate maps for integer and boolean variables to support
+/// sort-polymorphic operations like equality.
 pub struct Z3Solver {
     solver: z3::Solver,
     int_vars: HashMap<String, z3::ast::Int>,
@@ -27,6 +41,7 @@ pub struct Z3Solver {
 }
 
 impl Z3Solver {
+    /// Create a solver with default configuration (no timeout).
     pub fn new() -> Self {
         let solver = z3::Solver::new();
         Self {
@@ -39,6 +54,7 @@ impl Z3Solver {
         }
     }
 
+    /// Create a solver with a per-query timeout. Zero means no timeout.
     pub fn with_timeout_secs(timeout_secs: u64) -> Self {
         if timeout_secs == 0 {
             return Self::new();
@@ -59,10 +75,12 @@ impl Z3Solver {
         }
     }
 
+    /// Alias for [`Z3Solver::new`].
     pub fn with_default_config() -> Self {
         Self::new()
     }
 
+    /// Recursively translate an [`SmtTerm`] into a Z3 AST node.
     fn translate_term(&self, term: &SmtTerm) -> Result<Z3Term, Z3Error> {
         match term {
             SmtTerm::Var(name) => {
@@ -164,6 +182,7 @@ impl Z3Solver {
     }
 }
 
+/// Typed wrapper around Z3 AST nodes, used during term translation.
 enum Z3Term {
     Int(z3::ast::Int),
     Bool(z3::ast::Bool),

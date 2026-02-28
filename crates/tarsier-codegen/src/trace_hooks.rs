@@ -4,94 +4,82 @@ use std::fmt::Write;
 /// as Rust source code to be included in generated skeleton output.
 pub fn generate_trace_recorder_trait() -> String {
     let mut out = String::new();
+    write_trait(&mut out).expect("writing to String");
+    out
+}
 
-    writeln!(out, "/// Trait for recording protocol execution traces.").unwrap();
-    writeln!(out, "///").unwrap();
+fn write_trait(out: &mut String) -> std::fmt::Result {
+    writeln!(out, "/// Trait for recording protocol execution traces.")?;
+    writeln!(out, "///")?;
     writeln!(
         out,
         "/// Implement this trait to capture runtime traces for conformance checking"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "/// against the verified model. Use `NoopRecorder` in production."
-    )
-    .unwrap();
-    writeln!(out, "pub trait TraceRecorder {{").unwrap();
+    )?;
+    writeln!(out, "pub trait TraceRecorder {{")?;
     writeln!(
         out,
         "    fn record_init(&mut self, process_id: u64, location: &str);"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_transition(&mut self, process_id: u64, from: &str, to: &str);"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_send(&mut self, process_id: u64, msg_type: &str, fields: &[(&str, &str)]);"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_receive(&mut self, process_id: u64, msg_type: &str, from: u64, fields: &[(&str, &str)]);"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_decide(&mut self, process_id: u64, value: &str);"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_var_update(&mut self, process_id: u64, var: &str, value: &str);"
-    )
-    .unwrap();
-    writeln!(out, "}}").unwrap();
-    writeln!(out).unwrap();
+    )?;
+    writeln!(out, "}}")?;
+    writeln!(out)?;
 
     writeln!(
         out,
         "/// No-op recorder for production use (zero overhead)."
-    )
-    .unwrap();
-    writeln!(out, "pub struct NoopRecorder;").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "impl TraceRecorder for NoopRecorder {{").unwrap();
+    )?;
+    writeln!(out, "pub struct NoopRecorder;")?;
+    writeln!(out)?;
+    writeln!(out, "impl TraceRecorder for NoopRecorder {{")?;
     writeln!(
         out,
         "    fn record_init(&mut self, _process_id: u64, _location: &str) {{}}"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_transition(&mut self, _process_id: u64, _from: &str, _to: &str) {{}}"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_send(&mut self, _process_id: u64, _msg_type: &str, _fields: &[(&str, &str)]) {{}}"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_receive(&mut self, _process_id: u64, _msg_type: &str, _from: u64, _fields: &[(&str, &str)]) {{}}"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_decide(&mut self, _process_id: u64, _value: &str) {{}}"
-    )
-    .unwrap();
+    )?;
     writeln!(
         out,
         "    fn record_var_update(&mut self, _process_id: u64, _var: &str, _value: &str) {{}}"
-    )
-    .unwrap();
-    writeln!(out, "}}").unwrap();
-
-    out
+    )?;
+    writeln!(out, "}}")?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -10,90 +10,115 @@ pub enum SmtTerm {
     /// Boolean literal.
     BoolLit(bool),
 
-    // Arithmetic
+    /// Integer addition.
     Add(Box<SmtTerm>, Box<SmtTerm>),
+    /// Integer subtraction (non-commutative).
     Sub(Box<SmtTerm>, Box<SmtTerm>),
+    /// Integer multiplication.
     Mul(Box<SmtTerm>, Box<SmtTerm>),
 
-    // Comparison
+    /// Equality (polymorphic over Int and Bool).
     Eq(Box<SmtTerm>, Box<SmtTerm>),
+    /// Strict less-than.
     Lt(Box<SmtTerm>, Box<SmtTerm>),
+    /// Less-than-or-equal.
     Le(Box<SmtTerm>, Box<SmtTerm>),
+    /// Strict greater-than.
     Gt(Box<SmtTerm>, Box<SmtTerm>),
+    /// Greater-than-or-equal.
     Ge(Box<SmtTerm>, Box<SmtTerm>),
 
-    // Boolean logic
+    /// N-ary conjunction. Empty is `true`.
     And(Vec<SmtTerm>),
+    /// N-ary disjunction. Empty is `false`.
     Or(Vec<SmtTerm>),
+    /// Logical negation.
     Not(Box<SmtTerm>),
+    /// Logical implication (non-commutative).
     Implies(Box<SmtTerm>, Box<SmtTerm>),
 
-    // Quantifiers (for completeness)
+    /// Universal quantifier (bindings, body). Unused in QF_LIA encodings.
     ForAll(Vec<(String, SmtSort)>, Box<SmtTerm>),
+    /// Existential quantifier (bindings, body). Unused in QF_LIA encodings.
     Exists(Vec<(String, SmtSort)>, Box<SmtTerm>),
 
-    // If-then-else
+    /// If-then-else (condition, then-branch, else-branch).
     Ite(Box<SmtTerm>, Box<SmtTerm>, Box<SmtTerm>),
 }
 
 #[allow(clippy::should_implement_trait)]
 impl SmtTerm {
+    /// Create a variable reference.
     pub fn var(name: impl Into<String>) -> Self {
         SmtTerm::Var(name.into())
     }
 
+    /// Create an integer literal.
     pub fn int(n: i64) -> Self {
         SmtTerm::IntLit(n)
     }
 
+    /// Create a boolean literal.
     pub fn bool(b: bool) -> Self {
         SmtTerm::BoolLit(b)
     }
 
+    /// Build `self + other`.
     pub fn add(self, other: SmtTerm) -> Self {
         SmtTerm::Add(Box::new(self), Box::new(other))
     }
 
+    /// Build `self - other`.
     pub fn sub(self, other: SmtTerm) -> Self {
         SmtTerm::Sub(Box::new(self), Box::new(other))
     }
 
+    /// Build `self * other`.
     pub fn mul(self, other: SmtTerm) -> Self {
         SmtTerm::Mul(Box::new(self), Box::new(other))
     }
 
+    /// Build `self = other`.
     pub fn eq(self, other: SmtTerm) -> Self {
         SmtTerm::Eq(Box::new(self), Box::new(other))
     }
 
+    /// Build `self < other`.
     pub fn lt(self, other: SmtTerm) -> Self {
         SmtTerm::Lt(Box::new(self), Box::new(other))
     }
 
+    /// Build `self <= other`.
     pub fn le(self, other: SmtTerm) -> Self {
         SmtTerm::Le(Box::new(self), Box::new(other))
     }
 
+    /// Build `self > other`.
     pub fn gt(self, other: SmtTerm) -> Self {
         SmtTerm::Gt(Box::new(self), Box::new(other))
     }
 
+    /// Build `self >= other`.
     pub fn ge(self, other: SmtTerm) -> Self {
         SmtTerm::Ge(Box::new(self), Box::new(other))
     }
 
+    /// Build a conjunction over `terms`.
     pub fn and(terms: Vec<SmtTerm>) -> Self {
         SmtTerm::And(terms)
     }
 
+    /// Build a disjunction over `terms`.
     pub fn or(terms: Vec<SmtTerm>) -> Self {
         SmtTerm::Or(terms)
     }
 
+    /// Build `¬self`.
     pub fn not(self) -> Self {
         SmtTerm::Not(Box::new(self))
     }
 
+    /// Build `self ⇒ other`.
     pub fn implies(self, other: SmtTerm) -> Self {
         SmtTerm::Implies(Box::new(self), Box::new(other))
     }

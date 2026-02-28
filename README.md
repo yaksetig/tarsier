@@ -370,16 +370,24 @@ property some_decided_always: safety {
 ## Development
 
 ```bash
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all-targets
+just ci
+```
+
+Common developer tasks are available via `just`:
+
+```bash
+just fmt-check
+just clippy
+just check
+just test
+just proptest
+just validate
 ```
 
 Property-based randomized pipeline tests (parse -> lower -> encode -> solve):
 
 ```bash
-PROPTEST_CASES=48 PROPTEST_RNG_ALGORITHM=cc PROPTEST_RNG_SEED=246813579 \
-  cargo test -p tarsier-engine --test property_pipeline_proptest -- --nocapture
+just proptest
 ```
 
 Testing-layer guarantees and scope are documented in `docs/TESTING_STRATEGY.md`.

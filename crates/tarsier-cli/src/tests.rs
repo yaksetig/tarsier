@@ -1,3 +1,5 @@
+//! Unit tests for CLI command helpers and report formatting.
+
 use super::{
     assistant_template, augment_query_for_proof, build_liveness_governance_report,
     canonicalize_obligation_smt2, cegar_diff_friendly_projection, cegar_with_provenance,
@@ -300,19 +302,19 @@ fn proof_object_nontrivial_heuristic_accepts_balanced_structure() {
 fn parse_visualize_modes() {
     assert!(matches!(
         parse_visualize_check("fair-liveness"),
-        VisualizeCheck::FairLiveness
+        Ok(VisualizeCheck::FairLiveness)
     ));
     assert!(matches!(
         parse_visualize_check("prove-fair"),
-        VisualizeCheck::ProveFair
+        Ok(VisualizeCheck::ProveFair)
     ));
     assert!(matches!(
         parse_visualize_format("mermaid"),
-        VisualizeFormat::Mermaid
+        Ok(VisualizeFormat::Mermaid)
     ));
     assert!(matches!(
         parse_visualize_format("timeline"),
-        VisualizeFormat::Timeline
+        Ok(VisualizeFormat::Timeline)
     ));
 }
 
@@ -476,11 +478,11 @@ fn parse_debug_cex_accepts_auth_filter_flag() {
 fn parse_network_semantics_mode_accepts_known_values() {
     assert!(matches!(
         parse_cli_network_semantics_mode("dsl"),
-        CliNetworkSemanticsMode::Dsl
+        Ok(CliNetworkSemanticsMode::Dsl)
     ));
     assert!(matches!(
         parse_cli_network_semantics_mode("faithful"),
-        CliNetworkSemanticsMode::Faithful
+        Ok(CliNetworkSemanticsMode::Faithful)
     ));
 }
 
@@ -2860,7 +2862,7 @@ fn make_trace(steps: usize, param_vals: Vec<(String, i64)>) -> Trace {
     let trace_steps: Vec<TraceStep> = (0..steps)
         .map(|i| TraceStep {
             smt_step: i,
-            rule_id: 0,
+            rule_id: 0.into(),
             delta: 1,
             deliveries: vec![],
             config: config.clone(),
@@ -3408,7 +3410,7 @@ fn trace_json_includes_por_status_field() {
         },
         steps: vec![TraceStep {
             smt_step: 0,
-            rule_id: 0,
+            rule_id: 0.into(),
             delta: 1,
             deliveries: vec![],
             config: Configuration {
@@ -3438,7 +3440,7 @@ fn trace_json_por_status_null_when_off() {
         },
         steps: vec![TraceStep {
             smt_step: 0,
-            rule_id: 0,
+            rule_id: 0.into(),
             delta: 1,
             deliveries: vec![],
             config: Configuration {

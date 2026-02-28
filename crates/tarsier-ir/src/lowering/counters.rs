@@ -12,14 +12,14 @@ use super::{LocalVarType, LoweringError, MessageInfo, INTERNAL_DELIVERY_LANE_VAR
 
 pub(super) fn message_effective_authenticated(ta: &ThresholdAutomaton, message_type: &str) -> bool {
     match ta
-        .message_policies
+        .security.message_policies
         .get(message_type)
         .map(|p| p.auth)
         .unwrap_or(MessageAuthPolicy::Inherit)
     {
         MessageAuthPolicy::Authenticated => true,
         MessageAuthPolicy::Unauthenticated => false,
-        MessageAuthPolicy::Inherit => ta.authentication_mode == AuthenticationMode::Signed,
+        MessageAuthPolicy::Inherit => ta.semantics.authentication_mode == AuthenticationMode::Signed,
     }
 }
 
@@ -91,7 +91,7 @@ pub(super) fn object_counter_vars_for_recipient(
         .filter(|(_, var)| {
             var.kind == SharedVarKind::MessageCounter && var.name.starts_with(prefix.as_str())
         })
-        .map(|(var_id, _)| var_id)
+        .map(|(var_id, _)| SharedVarId::from(var_id))
         .collect()
 }
 

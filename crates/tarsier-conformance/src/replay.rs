@@ -66,18 +66,18 @@ pub fn concretize_trace(
         let rule_id = step.rule_id;
         if rule_id >= automaton.rules.len() {
             return Err(ReplayError::UnknownRule {
-                rule_id,
+                rule_id: rule_id.as_usize(),
                 num_rules: automaton.rules.len(),
             });
         }
         if step.delta < 0 {
             return Err(ReplayError::NegativeDelta {
-                rule_id,
+                rule_id: rule_id.as_usize(),
                 delta: step.delta,
             });
         }
 
-        let rule = &automaton.rules[rule_id];
+        let rule = &automaton.rules[rule_id.as_usize()];
         let from = rule.from;
         let to = rule.to;
         let delta = step.delta;
@@ -89,7 +89,7 @@ pub fn concretize_trace(
             .count() as i64;
         if available < delta {
             return Err(ReplayError::NotEnoughProcesses {
-                location: from,
+                location: from.as_usize(),
                 needed: delta,
                 available,
             });
@@ -104,12 +104,12 @@ pub fn concretize_trace(
             if proc.current_location == from {
                 let from_name = automaton
                     .locations
-                    .get(from)
+                    .get(from.as_usize())
                     .map(|l| l.name.clone())
                     .unwrap_or_else(|| format!("L{}", from));
                 let to_name = automaton
                     .locations
-                    .get(to)
+                    .get(to.as_usize())
                     .map(|l| l.name.clone())
                     .unwrap_or_else(|| format!("L{}", to));
 
@@ -119,7 +119,7 @@ pub fn concretize_trace(
                     kind: ProcessEventKind::Transition {
                         from_location: from_name,
                         to_location: to_name,
-                        rule_id: Some(rule_id),
+                        rule_id: Some(rule_id.as_usize()),
                     },
                 });
 
@@ -128,7 +128,7 @@ pub fn concretize_trace(
                     let seq = proc.events.len() as u64;
                     let var_name = automaton
                         .shared_vars
-                        .get(update.var)
+                        .get(update.var.as_usize())
                         .map(|v| v.name.clone())
                         .unwrap_or_else(|| format!("g{}", update.var));
 
@@ -155,7 +155,7 @@ pub fn concretize_trace(
                     }
                 }
 
-                proc.current_location = to;
+                proc.current_location = to.as_usize();
                 moved += 1;
             }
         }
@@ -194,7 +194,10 @@ fn eval_lc(
 ) -> i64 {
     let mut val = lc.constant;
     for &(coeff, pid) in &lc.terms {
-        let pval = param_values.get(pid).map(|(_, v)| *v).unwrap_or(0);
+        let pval = param_values
+            .get(pid.as_usize())
+            .map(|(_, v)| *v)
+            .unwrap_or(0);
         val += coeff * pval;
     }
     val
@@ -204,6 +207,7 @@ fn eval_lc(
 mod tests {
     use super::*;
     use tarsier_ir::counter_system::{Configuration, TraceStep};
+    use tarsier_ir::runtime_trace::ProcessEventKind;
     use tarsier_ir::threshold_automaton::*;
 
     fn make_test_automaton() -> ThresholdAutomaton {
@@ -226,7 +230,7 @@ mod tests {
             local_vars: Default::default(),
         });
 
-        ta.initial_locations = vec![0];
+        ta.initial_locations = vec![LocationId::from(0)];
         ta.add_shared_var(SharedVar {
             name: "cnt_Vote".into(),
             kind: SharedVarKind::MessageCounter,
@@ -236,12 +240,53 @@ mod tests {
 
         // Rule 0: L0 -> L1
         ta.add_rule(Rule {
-            from: 0,
-            to: 1,
+            from: LocationId::from(0),
+            to: LocationId::from(1),
             guard: Guard::trivial(),
             updates: vec![Update {
-                var: 0,
+                var: SharedVarId::from(0),
                 kind: UpdateKind::Increment,
+            }],
+        });
+
+        ta
+    }
+
+    fn make_set_update_automaton() -> ThresholdAutomaton {
+        let mut ta = ThresholdAutomaton::new();
+        ta.add_parameter(Parameter { name: "n".into() });
+
+        ta.add_location(Location {
+            name: "Worker_Init".into(),
+            role: "Worker".into(),
+            phase: "Init".into(),
+            local_vars: Default::default(),
+        });
+        ta.add_location(Location {
+            name: "Worker_Done".into(),
+            role: "Worker".into(),
+            phase: "Done".into(),
+            local_vars: Default::default(),
+        });
+
+        ta.initial_locations = vec![LocationId::from(0)];
+        ta.add_shared_var(SharedVar {
+            name: "var_decision".into(),
+            kind: SharedVarKind::Shared,
+            distinct: false,
+            distinct_role: None,
+        });
+
+        ta.add_rule(Rule {
+            from: LocationId::from(0),
+            to: LocationId::from(1),
+            guard: Guard::trivial(),
+            updates: vec![Update {
+                var: SharedVarId::from(0),
+                kind: UpdateKind::Set(LinearCombination {
+                    constant: 2,
+                    terms: vec![(4, ParamId::from(0)), (7, ParamId::from(1))],
+                }),
             }],
         });
 
@@ -259,7 +304,7 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: RuleId::from(0),
                 delta: 2,
                 deliveries: vec![],
                 config: Configuration {
@@ -294,7 +339,7 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: RuleId::from(0),
                 delta: 1,
                 deliveries: vec![],
                 config: Configuration {
@@ -331,7 +376,7 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: RuleId::from(0),
                 delta: 3, // but only 1 process at L0
                 deliveries: vec![],
                 config: Configuration {
@@ -358,5 +403,136 @@ mod tests {
             }
             other => panic!("expected NotEnoughProcesses, got: {other}"),
         }
+    }
+
+    #[test]
+    fn test_concretize_rejects_unknown_rule_id() {
+        let ta = make_test_automaton();
+        let trace = Trace {
+            initial_config: Configuration {
+                kappa: vec![1, 0],
+                gamma: vec![0],
+                params: vec![4, 1],
+            },
+            steps: vec![TraceStep {
+                smt_step: 0,
+                rule_id: RuleId::from(42),
+                delta: 1,
+                deliveries: vec![],
+                config: Configuration {
+                    kappa: vec![0, 1],
+                    gamma: vec![1],
+                    params: vec![4, 1],
+                },
+                por_status: None,
+            }],
+            param_values: vec![("n".into(), 4), ("t".into(), 1)],
+        };
+
+        let err = concretize_trace(&trace, &ta).expect_err("unknown rule id should fail");
+        assert!(matches!(
+            err,
+            ReplayError::UnknownRule {
+                rule_id: 42,
+                num_rules: 1
+            }
+        ));
+    }
+
+    #[test]
+    fn test_concretize_rejects_negative_delta() {
+        let ta = make_test_automaton();
+        let trace = Trace {
+            initial_config: Configuration {
+                kappa: vec![1, 0],
+                gamma: vec![0],
+                params: vec![4, 1],
+            },
+            steps: vec![TraceStep {
+                smt_step: 0,
+                rule_id: RuleId::from(0),
+                delta: -1,
+                deliveries: vec![],
+                config: Configuration {
+                    kappa: vec![2, -1],
+                    gamma: vec![0],
+                    params: vec![4, 1],
+                },
+                por_status: None,
+            }],
+            param_values: vec![("n".into(), 4), ("t".into(), 1)],
+        };
+
+        let err = concretize_trace(&trace, &ta).expect_err("negative delta should fail");
+        assert!(matches!(
+            err,
+            ReplayError::NegativeDelta {
+                rule_id: 0,
+                delta: -1
+            }
+        ));
+    }
+
+    #[test]
+    fn test_concretize_set_update_emits_var_update_event() {
+        let ta = make_set_update_automaton();
+        let trace = Trace {
+            initial_config: Configuration {
+                kappa: vec![1, 0],
+                gamma: vec![0],
+                params: vec![3],
+            },
+            steps: vec![TraceStep {
+                smt_step: 0,
+                rule_id: RuleId::from(0),
+                delta: 1,
+                deliveries: vec![],
+                config: Configuration {
+                    kappa: vec![0, 1],
+                    gamma: vec![14],
+                    params: vec![3],
+                },
+                por_status: None,
+            }],
+            param_values: vec![("n".into(), 3)],
+        };
+
+        let runtime = concretize_trace(&trace, &ta).expect("set update trace should concretize");
+        let events = &runtime.processes[0].events;
+        let var_update = events
+            .iter()
+            .find_map(|event| match &event.kind {
+                ProcessEventKind::VarUpdate {
+                    var_name,
+                    new_value,
+                } => Some((var_name.as_str(), new_value.as_str())),
+                _ => None,
+            })
+            .expect("expected VarUpdate event from UpdateKind::Set");
+
+        assert_eq!(var_update.0, "var_decision");
+        assert_eq!(
+            var_update.1, "14",
+            "missing param index in LC should be treated as zero"
+        );
+    }
+
+    #[test]
+    fn test_concretize_empty_trace_without_locations() {
+        let ta = ThresholdAutomaton::new();
+        let trace = Trace {
+            initial_config: Configuration {
+                kappa: vec![],
+                gamma: vec![],
+                params: vec![],
+            },
+            steps: vec![],
+            param_values: vec![],
+        };
+
+        let runtime = concretize_trace(&trace, &ta).expect("empty trace should concretize");
+        assert_eq!(runtime.protocol_name, "");
+        assert!(runtime.processes.is_empty());
+        assert_eq!(runtime.schema_version, 1);
     }
 }

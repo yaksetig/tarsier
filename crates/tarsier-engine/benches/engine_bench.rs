@@ -45,8 +45,8 @@ fn bench_lower_and_encode_trivial(c: &mut Criterion) {
     c.bench_function("engine_lower_and_encode_trivial", |b| {
         b.iter(|| {
             let ta = tarsier_ir::lowering::lower(black_box(&program)).unwrap();
-            let cs = tarsier_ir::counter_system::CounterSystem::new(ta);
-            let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+            let cs = ta;
+            let property = tarsier_ir::properties::extract_agreement_property(&cs);
             tarsier_smt::encoder::encode_bmc(black_box(&cs), black_box(&property), 3)
         })
     });
@@ -57,8 +57,8 @@ fn bench_lower_and_encode_pbft(c: &mut Criterion) {
     c.bench_function("engine_lower_and_encode_pbft", |b| {
         b.iter(|| {
             let ta = tarsier_ir::lowering::lower(black_box(&program)).unwrap();
-            let cs = tarsier_ir::counter_system::CounterSystem::new(ta);
-            let property = tarsier_ir::properties::extract_agreement_property(&cs.automaton);
+            let cs = ta;
+            let property = tarsier_ir::properties::extract_agreement_property(&cs);
             tarsier_smt::encoder::encode_bmc(black_box(&cs), black_box(&property), 3)
         })
     });

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use tarsier_ir::counter_system::{Configuration, MessageDeliveryEvent, Trace};
 use tarsier_ir::threshold_automaton::{
-    LinearCombination, SharedVarKind, ThresholdAutomaton, UpdateKind,
+    LinearCombination, LocationId, SharedVarKind, ThresholdAutomaton, UpdateKind,
 };
 
 fn mermaid_escape(input: &str) -> String {
@@ -93,7 +93,7 @@ fn optional_str(value: Option<&str>) -> &str {
 fn eval_linear_combination(lc: &LinearCombination, params: &[i64]) -> i64 {
     let mut value = lc.constant;
     for (coeff, pid) in &lc.terms {
-        value += coeff * params.get(*pid).copied().unwrap_or(0);
+        value += coeff * params.get(pid.as_usize()).copied().unwrap_or(0);
     }
     value
 }
@@ -147,7 +147,7 @@ fn render_crypto_provenance(
     pre_config: &Configuration,
     delivery: &MessageDeliveryEvent,
 ) {
-    let Some(spec) = ta.crypto_objects.get(&delivery.payload.family) else {
+    let Some(spec) = ta.security.crypto_objects.get(&delivery.payload.family) else {
         return;
     };
     let recipient_channel = delivery
@@ -287,9 +287,9 @@ pub fn render_trace_timeline(
     out.push_str(&config_snapshot(&trace.initial_config, ta));
 
     for (i, step) in trace.steps.iter().enumerate() {
-        let rule = &ta.rules[step.rule_id];
-        let from = &ta.locations[rule.from];
-        let to = &ta.locations[rule.to];
+        let rule = &ta.rules[step.rule_id.as_usize()];
+        let from = &ta.locations[rule.from.as_usize()];
+        let to = &ta.locations[rule.to.as_usize()];
         let pre_config = if i == 0 {
             &trace.initial_config
         } else {
@@ -308,7 +308,7 @@ pub fn render_trace_timeline(
         } else {
             out.push_str("  Updates:\n");
             for update in &rule.updates {
-                let var = &ta.shared_vars[update.var].name;
+                let var = &ta.shared_vars[update.var.as_usize()].name;
                 match &update.kind {
                     UpdateKind::Increment => {
                         out.push_str(&format!("    - {var} += {}\n", step.delta));
@@ -395,9 +395,9 @@ pub fn render_trace_mermaid(
     }
 
     for (idx, step) in trace.steps.iter().enumerate() {
-        let rule = &ta.rules[step.rule_id];
-        let from = &ta.locations[rule.from];
-        let to = &ta.locations[rule.to];
+        let rule = &ta.rules[step.rule_id.as_usize()];
+        let from = &ta.locations[rule.from.as_usize()];
+        let to = &ta.locations[rule.to.as_usize()];
         let from_id = participants
             .iter()
             .find(|(role, _)| role == &from.role)
@@ -426,7 +426,7 @@ pub fn render_trace_mermaid(
         out.push_str(&format!("    {}->>{}: {}\n", from_id, to_id, label));
 
         for update in &rule.updates {
-            let var_name = &ta.shared_vars[update.var].name;
+            let var_name = &ta.shared_vars[update.var.as_usize()].name;
             match &update.kind {
                 UpdateKind::Increment => out.push_str(&format!(
                     "    Note over {}: {} += {}\n",
@@ -654,7 +654,7 @@ fn emit_node(
     decided: &BTreeSet<usize>,
     indent: &str,
 ) {
-    let is_initial = ta.initial_locations.contains(&id);
+    let is_initial = ta.initial_locations.contains(&LocationId::from(id));
     let is_decided = decided.contains(&id);
 
     let fillcolor = if opts.highlight_initial && is_initial {
@@ -719,18 +719,18 @@ mod tests {
             phase: "commit".into(),
             local_vars: Default::default(),
         });
-        ta.initial_locations = vec![0];
+        ta.initial_locations = vec![0.into()];
         ta.add_rule(Rule {
-            from: 0,
-            to: 1,
+            from: 0.into(),
+            to: 1.into(),
             guard: Guard::single(GuardAtom::Threshold {
-                vars: vec![0],
+                vars: vec![0.into()],
                 op: CmpOp::Ge,
                 bound: LinearCombination::constant(1),
                 distinct: false,
             }),
             updates: vec![Update {
-                var: 0,
+                var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
         });
@@ -743,7 +743,7 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: 0.into(),
                 delta: 2,
                 deliveries: vec![MessageDeliveryEvent {
                     shared_var: 0,
@@ -800,7 +800,7 @@ mod tests {
             distinct: false,
             distinct_role: None,
         });
-        ta.crypto_objects.insert(
+        ta.security.crypto_objects.insert(
             "QC".into(),
             IrCryptoObjectSpec {
                 name: "QC".into(),
@@ -823,10 +823,10 @@ mod tests {
             phase: "done".into(),
             local_vars: Default::default(),
         });
-        ta.initial_locations = vec![0];
+        ta.initial_locations = vec![0.into()];
         ta.add_rule(Rule {
-            from: 0,
-            to: 1,
+            from: 0.into(),
+            to: 1.into(),
             guard: Guard::single(GuardAtom::Threshold {
                 vars: vec![vote_var],
                 op: CmpOp::Ge,
@@ -847,10 +847,10 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: 0.into(),
                 delta: 1,
                 deliveries: vec![MessageDeliveryEvent {
-                    shared_var: qc_var,
+                    shared_var: qc_var.into(),
                     shared_var_name: "cnt_QC@Replica#1<-Replica#0[value=true]".into(),
                     sender: MessageIdentity {
                         role: "Replica".into(),

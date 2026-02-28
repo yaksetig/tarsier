@@ -2,14 +2,75 @@ use indexmap::{IndexMap, IndexSet};
 use std::fmt;
 use thiserror::Error;
 
-/// A unique identifier for a location in the threshold automaton.
-pub type LocationId = usize;
-/// A unique identifier for a shared variable.
-pub type SharedVarId = usize;
-/// A unique identifier for a rule.
-pub type RuleId = usize;
-/// A unique identifier for a parameter.
-pub type ParamId = usize;
+macro_rules! define_id {
+    ($name:ident, $doc:literal) => {
+        #[doc = $doc]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+        #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
+        #[cfg_attr(feature = "serialize", serde(transparent))]
+        pub struct $name(usize);
+
+        impl $name {
+            pub const fn new(value: usize) -> Self {
+                Self(value)
+            }
+
+            pub const fn as_usize(self) -> usize {
+                self.0
+            }
+        }
+
+        impl From<usize> for $name {
+            fn from(value: usize) -> Self {
+                Self(value)
+            }
+        }
+
+        impl From<$name> for usize {
+            fn from(value: $name) -> Self {
+                value.0
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl PartialEq<usize> for $name {
+            fn eq(&self, other: &usize) -> bool {
+                self.0 == *other
+            }
+        }
+
+        impl PartialEq<$name> for usize {
+            fn eq(&self, other: &$name) -> bool {
+                *self == other.0
+            }
+        }
+
+        impl PartialOrd<usize> for $name {
+            fn partial_cmp(&self, other: &usize) -> Option<std::cmp::Ordering> {
+                self.0.partial_cmp(other)
+            }
+        }
+
+        impl PartialOrd<$name> for usize {
+            fn partial_cmp(&self, other: &$name) -> Option<std::cmp::Ordering> {
+                self.partial_cmp(&other.0)
+            }
+        }
+    };
+}
+
+define_id!(
+    LocationId,
+    "A unique identifier for a location in the threshold automaton."
+);
+define_id!(SharedVarId, "A unique identifier for a shared variable.");
+define_id!(RuleId, "A unique identifier for a rule.");
+define_id!(ParamId, "A unique identifier for a parameter.");
 
 /// Fault model used for environment behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -232,23 +293,18 @@ pub struct IrCryptoObjectSpec {
 /// Represents a parameterized system where N processes move between locations
 /// according to threshold-guarded rules. Counter abstraction tracks how many
 /// processes are in each location rather than individual process states.
-#[derive(Debug, Clone)]
-pub struct ThresholdAutomaton {
-    /// Named locations (role, phase, local-var valuation).
-    pub locations: Vec<Location>,
-    /// Which locations are initial (all processes start here).
-    pub initial_locations: Vec<LocationId>,
-    /// Shared variables (message counters, etc.).
-    pub shared_vars: Vec<SharedVar>,
-    /// Transition rules.
-    pub rules: Vec<Rule>,
-    /// Protocol parameters (n, t, f, etc.).
-    pub parameters: Vec<Parameter>,
+#[derive(Debug, Clone, Default)]
+pub struct ThresholdAutomatonConstraints {
     /// Resilience condition as a linear constraint.
     pub resilience_condition: Option<LinearConstraint>,
     /// Index of the parameter that bounds adversary (Byzantine) injections.
-    /// E.g., if `adversary { bound: f; }` and `f` is parameter index 2, this is Some(2).
     pub adversary_bound_param: Option<ParamId>,
+    /// Committee selection specifications.
+    pub committees: Vec<IrCommitteeSpec>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ThresholdAutomatonSemantics {
     /// Fault model selected by the protocol.
     pub fault_model: FaultModel,
     /// Timing model selected by the protocol.
@@ -267,6 +323,12 @@ pub struct ThresholdAutomaton {
     pub delivery_control: DeliveryControlMode,
     /// Scope for fault/drop budget constraints.
     pub fault_budget_scope: FaultBudgetScope,
+    /// Partial-order reduction mode.
+    pub por_mode: PorMode,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ThresholdAutomatonSecurity {
     /// Role identity/key semantics (explicit or inferred defaults).
     pub role_identities: IndexMap<String, RoleIdentityConfig>,
     /// Key ownership map (`key_name -> role`), derived from role identities.
@@ -277,10 +339,26 @@ pub struct ThresholdAutomaton {
     pub message_policies: IndexMap<String, MessagePolicy>,
     /// First-class crypto object declarations.
     pub crypto_objects: IndexMap<String, IrCryptoObjectSpec>,
-    /// Committee selection specifications.
-    pub committees: Vec<IrCommitteeSpec>,
-    /// Partial-order reduction mode.
-    pub por_mode: PorMode,
+}
+
+#[derive(Debug, Clone)]
+pub struct ThresholdAutomaton {
+    /// Named locations (role, phase, local-var valuation).
+    pub locations: Vec<Location>,
+    /// Which locations are initial (all processes start here).
+    pub initial_locations: Vec<LocationId>,
+    /// Shared variables (message counters, etc.).
+    pub shared_vars: Vec<SharedVar>,
+    /// Transition rules.
+    pub rules: Vec<Rule>,
+    /// Protocol parameters (n, t, f, etc.).
+    pub parameters: Vec<Parameter>,
+    /// Verification/model constraints (resilience, adversary bound, committees).
+    pub constraints: ThresholdAutomatonConstraints,
+    /// Fault/network/por semantics.
+    pub semantics: ThresholdAutomatonSemantics,
+    /// Identity, key, and per-message security policies.
+    pub security: ThresholdAutomatonSecurity,
 }
 
 /// A value that is either a reference to a protocol parameter or a concrete constant.
@@ -315,61 +393,75 @@ impl ThresholdAutomaton {
             shared_vars: Vec::new(),
             rules: Vec::new(),
             parameters: Vec::new(),
-            resilience_condition: None,
-            adversary_bound_param: None,
-            fault_model: FaultModel::Byzantine,
-            timing_model: TimingModel::Asynchronous,
-            gst_param: None,
-            value_abstraction: ValueAbstractionMode::Exact,
-            equivocation_mode: EquivocationMode::Full,
-            authentication_mode: AuthenticationMode::None,
-            network_semantics: NetworkSemantics::Classic,
-            delivery_control: DeliveryControlMode::LegacyCounter,
-            fault_budget_scope: FaultBudgetScope::LegacyCounter,
-            role_identities: IndexMap::new(),
-            key_ownership: IndexMap::new(),
-            compromised_keys: IndexSet::new(),
-            message_policies: IndexMap::new(),
-            crypto_objects: IndexMap::new(),
-            committees: Vec::new(),
-            por_mode: PorMode::Full,
+            constraints: ThresholdAutomatonConstraints::default(),
+            semantics: ThresholdAutomatonSemantics::default(),
+            security: ThresholdAutomatonSecurity::default(),
         }
     }
 
     pub fn add_location(&mut self, loc: Location) -> LocationId {
-        let id = self.locations.len();
+        let id = LocationId::from(self.locations.len());
         self.locations.push(loc);
         id
     }
 
     pub fn add_shared_var(&mut self, var: SharedVar) -> SharedVarId {
-        let id = self.shared_vars.len();
+        let id = SharedVarId::from(self.shared_vars.len());
         self.shared_vars.push(var);
         id
     }
 
     pub fn add_rule(&mut self, rule: Rule) -> RuleId {
-        let id = self.rules.len();
+        let id = RuleId::from(self.rules.len());
         self.rules.push(rule);
         id
     }
 
     pub fn add_parameter(&mut self, param: Parameter) -> ParamId {
-        let id = self.parameters.len();
+        let id = ParamId::from(self.parameters.len());
         self.parameters.push(param);
         id
     }
 
     pub fn find_param_by_name(&self, name: &str) -> Option<ParamId> {
-        self.parameters.iter().position(|p| p.name == name)
+        self.parameters
+            .iter()
+            .position(|p| p.name == name)
+            .map(ParamId::from)
     }
 
     pub fn find_shared_var_by_name(&self, name: &str) -> Option<SharedVarId> {
-        self.shared_vars.iter().position(|v| v.name == name)
+        self.shared_vars
+            .iter()
+            .position(|v| v.name == name)
+            .map(SharedVarId::from)
     }
 
     pub fn find_location_by_name(&self, name: &str) -> Option<LocationId> {
-        self.locations.iter().position(|l| l.name == name)
+        self.locations
+            .iter()
+            .position(|l| l.name == name)
+            .map(LocationId::from)
+    }
+
+    /// Return the number of control locations.
+    pub fn num_locations(&self) -> usize {
+        self.locations.len()
+    }
+
+    /// Return the number of shared variables.
+    pub fn num_shared_vars(&self) -> usize {
+        self.shared_vars.len()
+    }
+
+    /// Return the number of transition rules.
+    pub fn num_rules(&self) -> usize {
+        self.rules.len()
+    }
+
+    /// Return the number of symbolic parameters.
+    pub fn num_parameters(&self) -> usize {
+        self.parameters.len()
     }
 
     pub fn role_locations(&self, role: &str) -> Vec<LocationId> {
@@ -377,12 +469,13 @@ impl ThresholdAutomaton {
             .iter()
             .enumerate()
             .filter(|(_, loc)| loc.role == role)
-            .map(|(id, _)| id)
+            .map(|(id, _)| LocationId::from(id))
             .collect()
     }
 
     pub fn message_effective_authenticated(&self, message_family: &str) -> bool {
         match self
+            .security
             .message_policies
             .get(message_family)
             .map(|p| p.auth)
@@ -390,12 +483,15 @@ impl ThresholdAutomaton {
         {
             MessageAuthPolicy::Authenticated => true,
             MessageAuthPolicy::Unauthenticated => false,
-            MessageAuthPolicy::Inherit => self.authentication_mode == AuthenticationMode::Signed,
+            MessageAuthPolicy::Inherit => {
+                self.semantics.authentication_mode == AuthenticationMode::Signed
+            }
         }
     }
 
     pub fn message_effective_non_equivocating(&self, message_family: &str) -> bool {
         match self
+            .security
             .message_policies
             .get(message_family)
             .map(|p| p.equivocation)
@@ -403,16 +499,18 @@ impl ThresholdAutomaton {
         {
             MessageEquivocationPolicy::None => true,
             MessageEquivocationPolicy::Full => false,
-            MessageEquivocationPolicy::Inherit => self.equivocation_mode == EquivocationMode::None,
+            MessageEquivocationPolicy::Inherit => {
+                self.semantics.equivocation_mode == EquivocationMode::None
+            }
         }
     }
 
     pub fn key_owner(&self, key: &str) -> Option<&str> {
-        self.key_ownership.get(key).map(String::as_str)
+        self.security.key_ownership.get(key).map(String::as_str)
     }
 
     pub fn key_is_compromised(&self, key: &str) -> bool {
-        self.compromised_keys.contains(key)
+        self.security.compromised_keys.contains(key)
     }
 
     /// Validate internal consistency of the threshold automaton.
@@ -426,7 +524,7 @@ impl ThresholdAutomaton {
 
         // Check initial locations
         for &loc_id in &self.initial_locations {
-            if loc_id >= num_locs {
+            if loc_id.as_usize() >= num_locs {
                 return Err(ValidationError::InvalidInitialLocation {
                     location_id: loc_id,
                     max: num_locs.saturating_sub(1),
@@ -435,15 +533,16 @@ impl ThresholdAutomaton {
         }
 
         // Check rules
-        for (rule_id, rule) in self.rules.iter().enumerate() {
-            if rule.from >= num_locs {
+        for (rule_idx, rule) in self.rules.iter().enumerate() {
+            let rule_id = RuleId::from(rule_idx);
+            if rule.from.as_usize() >= num_locs {
                 return Err(ValidationError::InvalidRuleSource {
                     rule_id,
                     location_id: rule.from,
                     max: num_locs.saturating_sub(1),
                 });
             }
-            if rule.to >= num_locs {
+            if rule.to.as_usize() >= num_locs {
                 return Err(ValidationError::InvalidRuleTarget {
                     rule_id,
                     location_id: rule.to,
@@ -456,7 +555,7 @@ impl ThresholdAutomaton {
                 match atom {
                     GuardAtom::Threshold { vars, bound, .. } => {
                         for &var_id in vars {
-                            if var_id >= num_vars {
+                            if var_id.as_usize() >= num_vars {
                                 return Err(ValidationError::InvalidGuardVar {
                                     rule_id,
                                     var_id,
@@ -465,7 +564,7 @@ impl ThresholdAutomaton {
                             }
                         }
                         for &(_, param_id) in &bound.terms {
-                            if param_id >= num_params {
+                            if param_id.as_usize() >= num_params {
                                 return Err(ValidationError::InvalidGuardParam {
                                     rule_id,
                                     param_id,
@@ -479,7 +578,7 @@ impl ThresholdAutomaton {
 
             // Check updates
             for upd in &rule.updates {
-                if upd.var >= num_vars {
+                if upd.var.as_usize() >= num_vars {
                     return Err(ValidationError::InvalidUpdateVar {
                         rule_id,
                         var_id: upd.var,
@@ -488,7 +587,7 @@ impl ThresholdAutomaton {
                 }
                 if let UpdateKind::Set(ref lc) = upd.kind {
                     for &(_, param_id) in &lc.terms {
-                        if param_id >= num_params {
+                        if param_id.as_usize() >= num_params {
                             return Err(ValidationError::InvalidGuardParam {
                                 rule_id,
                                 param_id,
@@ -501,8 +600,8 @@ impl ThresholdAutomaton {
         }
 
         // Check adversary bound param
-        if let Some(param_id) = self.adversary_bound_param {
-            if param_id >= num_params {
+        if let Some(param_id) = self.constraints.adversary_bound_param {
+            if param_id.as_usize() >= num_params {
                 return Err(ValidationError::InvalidAdversaryParam {
                     param_id,
                     max: num_params.saturating_sub(1),
@@ -511,8 +610,8 @@ impl ThresholdAutomaton {
         }
 
         // Check GST param
-        if let Some(param_id) = self.gst_param {
-            if param_id >= num_params {
+        if let Some(param_id) = self.semantics.gst_param {
+            if param_id.as_usize() >= num_params {
                 return Err(ValidationError::InvalidGstParam {
                     param_id,
                     max: num_params.saturating_sub(1),
@@ -521,9 +620,9 @@ impl ThresholdAutomaton {
         }
 
         // Check committee bound params
-        for committee in &self.committees {
+        for committee in &self.constraints.committees {
             if let Some(param_id) = committee.bound_param {
-                if param_id >= num_params {
+                if param_id.as_usize() >= num_params {
                     return Err(ValidationError::InvalidCommitteeBoundParam {
                         name: committee.name.clone(),
                         param_id,
@@ -534,9 +633,9 @@ impl ThresholdAutomaton {
         }
 
         // Check resilience condition param IDs
-        if let Some(ref rc) = self.resilience_condition {
+        if let Some(ref rc) = self.constraints.resilience_condition {
             for &(_, param_id) in &rc.lhs.terms {
-                if param_id >= num_params {
+                if param_id.as_usize() >= num_params {
                     return Err(ValidationError::InvalidResilienceParam {
                         param_id,
                         max: num_params.saturating_sub(1),
@@ -544,7 +643,7 @@ impl ThresholdAutomaton {
                 }
             }
             for &(_, param_id) in &rc.rhs.terms {
-                if param_id >= num_params {
+                if param_id.as_usize() >= num_params {
                     return Err(ValidationError::InvalidResilienceParam {
                         param_id,
                         max: num_params.saturating_sub(1),
@@ -562,48 +661,48 @@ impl ThresholdAutomaton {
 pub enum ValidationError {
     #[error("Rule {rule_id} references invalid source location {location_id} (max: {max})")]
     InvalidRuleSource {
-        rule_id: usize,
-        location_id: usize,
+        rule_id: RuleId,
+        location_id: LocationId,
         max: usize,
     },
     #[error("Rule {rule_id} references invalid target location {location_id} (max: {max})")]
     InvalidRuleTarget {
-        rule_id: usize,
-        location_id: usize,
+        rule_id: RuleId,
+        location_id: LocationId,
         max: usize,
     },
     #[error("Rule {rule_id} guard references invalid shared var {var_id} (max: {max})")]
     InvalidGuardVar {
-        rule_id: usize,
-        var_id: usize,
+        rule_id: RuleId,
+        var_id: SharedVarId,
         max: usize,
     },
     #[error("Rule {rule_id} guard references invalid parameter {param_id} (max: {max})")]
     InvalidGuardParam {
-        rule_id: usize,
-        param_id: usize,
+        rule_id: RuleId,
+        param_id: ParamId,
         max: usize,
     },
     #[error("Rule {rule_id} update references invalid shared var {var_id} (max: {max})")]
     InvalidUpdateVar {
-        rule_id: usize,
-        var_id: usize,
+        rule_id: RuleId,
+        var_id: SharedVarId,
         max: usize,
     },
     #[error("Initial location {location_id} is out of bounds (max: {max})")]
-    InvalidInitialLocation { location_id: usize, max: usize },
+    InvalidInitialLocation { location_id: LocationId, max: usize },
     #[error("Adversary bound param {param_id} is out of bounds (max: {max})")]
-    InvalidAdversaryParam { param_id: usize, max: usize },
+    InvalidAdversaryParam { param_id: ParamId, max: usize },
     #[error("GST param {param_id} is out of bounds (max: {max})")]
-    InvalidGstParam { param_id: usize, max: usize },
+    InvalidGstParam { param_id: ParamId, max: usize },
     #[error("Committee '{name}' bound param {param_id} is out of bounds (max: {max})")]
     InvalidCommitteeBoundParam {
         name: String,
-        param_id: usize,
+        param_id: ParamId,
         max: usize,
     },
     #[error("Resilience condition references invalid parameter {param_id} (max: {max})")]
-    InvalidResilienceParam { param_id: usize, max: usize },
+    InvalidResilienceParam { param_id: ParamId, max: usize },
 }
 
 impl Default for ThresholdAutomaton {
@@ -619,13 +718,13 @@ impl fmt::Display for ThresholdAutomaton {
         for (i, p) in self.parameters.iter().enumerate() {
             writeln!(f, "    p{i}: {}", p.name)?;
         }
-        if let Some(ref rc) = self.resilience_condition {
+        if let Some(ref rc) = self.constraints.resilience_condition {
             writeln!(f, "  Resilience: {rc}")?;
         }
         writeln!(
             f,
             "  Fault model: {}",
-            match self.fault_model {
+            match self.semantics.fault_model {
                 FaultModel::Byzantine => "byzantine",
                 FaultModel::Crash => "crash",
                 FaultModel::Omission => "omission",
@@ -634,18 +733,22 @@ impl fmt::Display for ThresholdAutomaton {
         writeln!(
             f,
             "  Timing model: {}",
-            match self.timing_model {
+            match self.semantics.timing_model {
                 TimingModel::Asynchronous => "asynchronous",
                 TimingModel::PartialSynchrony => "partial_synchrony",
             }
         )?;
-        if let Some(pid) = self.gst_param {
-            writeln!(f, "  GST parameter: p{pid} ({})", self.parameters[pid].name)?;
+        if let Some(pid) = self.semantics.gst_param {
+            writeln!(
+                f,
+                "  GST parameter: p{pid} ({})",
+                self.parameters[pid.as_usize()].name
+            )?;
         }
         writeln!(
             f,
             "  Value abstraction: {}",
-            match self.value_abstraction {
+            match self.semantics.value_abstraction {
                 ValueAbstractionMode::Exact => "exact",
                 ValueAbstractionMode::Sign => "sign",
             }
@@ -653,7 +756,7 @@ impl fmt::Display for ThresholdAutomaton {
         writeln!(
             f,
             "  Byzantine equivocation: {}",
-            match self.equivocation_mode {
+            match self.semantics.equivocation_mode {
                 EquivocationMode::Full => "full",
                 EquivocationMode::None => "none",
             }
@@ -661,7 +764,7 @@ impl fmt::Display for ThresholdAutomaton {
         writeln!(
             f,
             "  Authentication: {}",
-            match self.authentication_mode {
+            match self.semantics.authentication_mode {
                 AuthenticationMode::None => "none",
                 AuthenticationMode::Signed => "signed",
             }
@@ -669,7 +772,7 @@ impl fmt::Display for ThresholdAutomaton {
         writeln!(
             f,
             "  Network semantics: {}",
-            match self.network_semantics {
+            match self.semantics.network_semantics {
                 NetworkSemantics::Classic => "classic",
                 NetworkSemantics::IdentitySelective => "identity_selective",
                 NetworkSemantics::CohortSelective => "cohort_selective",
@@ -679,7 +782,7 @@ impl fmt::Display for ThresholdAutomaton {
         writeln!(
             f,
             "  Delivery control: {}",
-            match self.delivery_control {
+            match self.semantics.delivery_control {
                 DeliveryControlMode::LegacyCounter => "legacy_counter",
                 DeliveryControlMode::PerRecipient => "per_recipient",
                 DeliveryControlMode::Global => "global",
@@ -688,15 +791,15 @@ impl fmt::Display for ThresholdAutomaton {
         writeln!(
             f,
             "  Fault budget scope: {}",
-            match self.fault_budget_scope {
+            match self.semantics.fault_budget_scope {
                 FaultBudgetScope::LegacyCounter => "legacy_counter",
                 FaultBudgetScope::PerRecipient => "per_recipient",
                 FaultBudgetScope::Global => "global",
             }
         )?;
-        if !self.role_identities.is_empty() {
+        if !self.security.role_identities.is_empty() {
             writeln!(f, "  Identities:")?;
-            for (role, cfg) in &self.role_identities {
+            for (role, cfg) in &self.security.role_identities {
                 match cfg.scope {
                     RoleIdentityScope::Role => {
                         writeln!(f, "    {role}: role (key={})", cfg.key_name)?;
@@ -708,25 +811,25 @@ impl fmt::Display for ThresholdAutomaton {
                 }
             }
         }
-        if !self.key_ownership.is_empty() {
+        if !self.security.key_ownership.is_empty() {
             writeln!(f, "  Key ownership:")?;
-            for (key, role) in &self.key_ownership {
-                let compromised = if self.compromised_keys.contains(key) {
+            for (key, role) in &self.security.key_ownership {
+                let compromised = if self.security.compromised_keys.contains(key) {
                     " (compromised)"
                 } else {
                     ""
                 };
                 writeln!(f, "    {key}: {role}{compromised}")?;
             }
-        } else if !self.compromised_keys.is_empty() {
+        } else if !self.security.compromised_keys.is_empty() {
             writeln!(f, "  Compromised keys:")?;
-            for key in &self.compromised_keys {
+            for key in &self.security.compromised_keys {
                 writeln!(f, "    {key}")?;
             }
         }
-        if !self.message_policies.is_empty() {
+        if !self.security.message_policies.is_empty() {
             writeln!(f, "  Message policies:")?;
-            for (msg, pol) in &self.message_policies {
+            for (msg, pol) in &self.security.message_policies {
                 let auth = match pol.auth {
                     MessageAuthPolicy::Inherit => "inherit",
                     MessageAuthPolicy::Authenticated => "authenticated",
@@ -740,9 +843,9 @@ impl fmt::Display for ThresholdAutomaton {
                 writeln!(f, "    {msg}: auth={auth}, equivocation={equiv}")?;
             }
         }
-        if !self.crypto_objects.is_empty() {
+        if !self.security.crypto_objects.is_empty() {
             writeln!(f, "  Crypto objects:")?;
-            for spec in self.crypto_objects.values() {
+            for spec in self.security.crypto_objects.values() {
                 let signer = spec
                     .signer_role
                     .as_deref()
@@ -762,7 +865,7 @@ impl fmt::Display for ThresholdAutomaton {
         }
         writeln!(f, "  Locations:")?;
         for (i, loc) in self.locations.iter().enumerate() {
-            let initial = if self.initial_locations.contains(&i) {
+            let initial = if self.initial_locations.contains(&LocationId::from(i)) {
                 " (initial)"
             } else {
                 ""
@@ -1105,7 +1208,7 @@ mod tests {
     #[test]
     fn threshold_automaton_new_has_full_por_mode() {
         let ta = ThresholdAutomaton::new();
-        assert_eq!(ta.por_mode, PorMode::Full);
+        assert_eq!(ta.semantics.por_mode, PorMode::Full);
     }
 
     /// Helper to build a minimal valid TA for validation tests.
@@ -1137,21 +1240,21 @@ mod tests {
             from: loc0,
             to: loc1,
             guard: Guard::single(GuardAtom::Threshold {
-                vars: vec![0],
+                vars: vec![SharedVarId::from(0)],
                 op: CmpOp::Ge,
-                bound: LinearCombination::param(0),
+                bound: LinearCombination::param(ParamId::from(0)),
                 distinct: false,
             }),
             updates: vec![Update {
-                var: 0,
+                var: SharedVarId::from(0),
                 kind: UpdateKind::Increment,
             }],
         });
-        ta.adversary_bound_param = Some(2); // f
-        ta.resilience_condition = Some(LinearConstraint {
-            lhs: LinearCombination::param(1), // t
+        ta.constraints.adversary_bound_param = Some(ParamId::from(2)); // f
+        ta.constraints.resilience_condition = Some(LinearConstraint {
+            lhs: LinearCombination::param(ParamId::from(1)), // t
             op: CmpOp::Lt,
-            rhs: LinearCombination::param(0), // n
+            rhs: LinearCombination::param(ParamId::from(0)), // n
         });
         ta
     }
@@ -1165,14 +1268,14 @@ mod tests {
     #[test]
     fn validate_invalid_initial_location() {
         let mut ta = minimal_ta();
-        ta.initial_locations.push(999);
+        ta.initial_locations.push(LocationId::from(999));
         let err = ta.validate().unwrap_err();
         assert!(matches!(
             err,
             ValidationError::InvalidInitialLocation {
-                location_id: 999,
+                location_id,
                 ..
-            }
+            } if location_id == LocationId::from(999)
         ));
     }
 
@@ -1180,8 +1283,8 @@ mod tests {
     fn validate_invalid_rule_source() {
         let mut ta = minimal_ta();
         ta.rules.push(Rule {
-            from: 999,
-            to: 0,
+            from: LocationId::from(999),
+            to: LocationId::from(0),
             guard: Guard::trivial(),
             updates: vec![],
         });
@@ -1189,9 +1292,9 @@ mod tests {
         assert!(matches!(
             err,
             ValidationError::InvalidRuleSource {
-                location_id: 999,
+                location_id,
                 ..
-            }
+            } if location_id == LocationId::from(999)
         ));
     }
 
@@ -1199,8 +1302,8 @@ mod tests {
     fn validate_invalid_rule_target() {
         let mut ta = minimal_ta();
         ta.rules.push(Rule {
-            from: 0,
-            to: 999,
+            from: LocationId::from(0),
+            to: LocationId::from(999),
             guard: Guard::trivial(),
             updates: vec![],
         });
@@ -1208,9 +1311,9 @@ mod tests {
         assert!(matches!(
             err,
             ValidationError::InvalidRuleTarget {
-                location_id: 999,
+                location_id,
                 ..
-            }
+            } if location_id == LocationId::from(999)
         ));
     }
 
@@ -1218,10 +1321,10 @@ mod tests {
     fn validate_invalid_guard_var() {
         let mut ta = minimal_ta();
         ta.rules.push(Rule {
-            from: 0,
-            to: 1,
+            from: LocationId::from(0),
+            to: LocationId::from(1),
             guard: Guard::single(GuardAtom::Threshold {
-                vars: vec![999],
+                vars: vec![SharedVarId::from(999)],
                 op: CmpOp::Ge,
                 bound: LinearCombination::constant(1),
                 distinct: false,
@@ -1231,7 +1334,10 @@ mod tests {
         let err = ta.validate().unwrap_err();
         assert!(matches!(
             err,
-            ValidationError::InvalidGuardVar { var_id: 999, .. }
+            ValidationError::InvalidGuardVar {
+                var_id,
+                ..
+            } if var_id == SharedVarId::from(999)
         ));
     }
 
@@ -1239,12 +1345,12 @@ mod tests {
     fn validate_invalid_guard_param() {
         let mut ta = minimal_ta();
         ta.rules.push(Rule {
-            from: 0,
-            to: 1,
+            from: LocationId::from(0),
+            to: LocationId::from(1),
             guard: Guard::single(GuardAtom::Threshold {
-                vars: vec![0],
+                vars: vec![SharedVarId::from(0)],
                 op: CmpOp::Ge,
-                bound: LinearCombination::param(999),
+                bound: LinearCombination::param(ParamId::from(999)),
                 distinct: false,
             }),
             updates: vec![],
@@ -1252,7 +1358,10 @@ mod tests {
         let err = ta.validate().unwrap_err();
         assert!(matches!(
             err,
-            ValidationError::InvalidGuardParam { param_id: 999, .. }
+            ValidationError::InvalidGuardParam {
+                param_id,
+                ..
+            } if param_id == ParamId::from(999)
         ));
     }
 
@@ -1260,73 +1369,173 @@ mod tests {
     fn validate_invalid_update_var() {
         let mut ta = minimal_ta();
         ta.rules.push(Rule {
-            from: 0,
-            to: 1,
+            from: LocationId::from(0),
+            to: LocationId::from(1),
             guard: Guard::trivial(),
             updates: vec![Update {
-                var: 999,
+                var: SharedVarId::from(999),
                 kind: UpdateKind::Increment,
             }],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
             err,
-            ValidationError::InvalidUpdateVar { var_id: 999, .. }
+            ValidationError::InvalidUpdateVar {
+                var_id,
+                ..
+            } if var_id == SharedVarId::from(999)
         ));
     }
 
     #[test]
     fn validate_invalid_adversary_param() {
         let mut ta = minimal_ta();
-        ta.adversary_bound_param = Some(999);
+        ta.constraints.adversary_bound_param = Some(ParamId::from(999));
         let err = ta.validate().unwrap_err();
         assert!(matches!(
             err,
-            ValidationError::InvalidAdversaryParam { param_id: 999, .. }
+            ValidationError::InvalidAdversaryParam {
+                param_id,
+                ..
+            } if param_id == ParamId::from(999)
         ));
     }
 
     #[test]
     fn validate_invalid_gst_param() {
         let mut ta = minimal_ta();
-        ta.gst_param = Some(999);
+        ta.semantics.gst_param = Some(ParamId::from(999));
         let err = ta.validate().unwrap_err();
         assert!(matches!(
             err,
-            ValidationError::InvalidGstParam { param_id: 999, .. }
+            ValidationError::InvalidGstParam {
+                param_id,
+                ..
+            } if param_id == ParamId::from(999)
         ));
     }
 
     #[test]
     fn validate_invalid_committee_bound_param() {
         let mut ta = minimal_ta();
-        ta.committees.push(IrCommitteeSpec {
+        ta.constraints.committees.push(IrCommitteeSpec {
             name: "test_committee".into(),
             population: ParamOrConst::Const(100),
             byzantine: ParamOrConst::Const(33),
             committee_size: ParamOrConst::Const(10),
             epsilon: Some(1e-9),
-            bound_param: Some(999),
+            bound_param: Some(ParamId::from(999)),
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
             err,
-            ValidationError::InvalidCommitteeBoundParam { param_id: 999, .. }
+            ValidationError::InvalidCommitteeBoundParam {
+                param_id,
+                ..
+            } if param_id == ParamId::from(999)
         ));
     }
 
     #[test]
     fn validate_invalid_resilience_param() {
         let mut ta = minimal_ta();
-        ta.resilience_condition = Some(LinearConstraint {
-            lhs: LinearCombination::param(999),
+        ta.constraints.resilience_condition = Some(LinearConstraint {
+            lhs: LinearCombination::param(ParamId::from(999)),
             op: CmpOp::Lt,
-            rhs: LinearCombination::param(0),
+            rhs: LinearCombination::param(ParamId::from(0)),
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
             err,
-            ValidationError::InvalidResilienceParam { param_id: 999, .. }
+            ValidationError::InvalidResilienceParam {
+                param_id,
+                ..
+            } if param_id == ParamId::from(999)
         ));
+    }
+
+    #[test]
+    fn lookup_helpers_find_existing_and_missing_symbols() {
+        let ta = minimal_ta();
+        assert_eq!(ta.find_param_by_name("n"), Some(ParamId::from(0)));
+        assert_eq!(ta.find_param_by_name("missing"), None);
+        assert_eq!(
+            ta.find_shared_var_by_name("msg_count"),
+            Some(SharedVarId::from(0))
+        );
+        assert_eq!(ta.find_shared_var_by_name("unknown_counter"), None);
+        assert_eq!(ta.find_location_by_name("Init"), Some(LocationId::from(0)));
+        assert_eq!(ta.find_location_by_name("unknown_location"), None);
+        assert_eq!(
+            ta.role_locations("R"),
+            vec![LocationId::from(0), LocationId::from(1)]
+        );
+        assert!(ta.role_locations("Other").is_empty());
+    }
+
+    #[test]
+    fn message_effective_policies_respect_overrides_and_global_defaults() {
+        let mut ta = minimal_ta();
+        ta.semantics.authentication_mode = AuthenticationMode::Signed;
+        ta.semantics.equivocation_mode = EquivocationMode::Full;
+
+        ta.security.message_policies.insert(
+            "Vote".into(),
+            MessagePolicy {
+                auth: MessageAuthPolicy::Unauthenticated,
+                equivocation: MessageEquivocationPolicy::None,
+            },
+        );
+        ta.security.message_policies.insert(
+            "Ack".into(),
+            MessagePolicy {
+                auth: MessageAuthPolicy::Authenticated,
+                equivocation: MessageEquivocationPolicy::Inherit,
+            },
+        );
+
+        assert!(!ta.message_effective_authenticated("Vote"));
+        assert!(ta.message_effective_non_equivocating("Vote"));
+        assert!(ta.message_effective_authenticated("Ack"));
+        assert!(!ta.message_effective_non_equivocating("Ack"));
+
+        // Unknown message families inherit global settings.
+        assert!(ta.message_effective_authenticated("Unknown"));
+        assert!(!ta.message_effective_non_equivocating("Unknown"));
+    }
+
+    #[test]
+    fn key_owner_helpers_report_owner_and_compromise_status() {
+        let mut ta = minimal_ta();
+        ta.security.key_ownership.insert("r_key".into(), "R".into());
+        ta.security.compromised_keys.insert("r_key".into());
+
+        assert_eq!(ta.key_owner("r_key"), Some("R"));
+        assert_eq!(ta.key_owner("missing_key"), None);
+        assert!(ta.key_is_compromised("r_key"));
+        assert!(!ta.key_is_compromised("other_key"));
+    }
+
+    #[test]
+    fn linear_combination_arithmetic_and_display_are_consistent() {
+        let lc = LinearCombination::constant(5)
+            .add(&LinearCombination {
+                constant: 0,
+                terms: vec![(2, ParamId::from(0)), (-1, ParamId::from(1))],
+            })
+            .sub(&LinearCombination::param(ParamId::from(0)));
+
+        assert_eq!(lc.constant, 5);
+        assert_eq!(
+            lc.terms,
+            vec![(1, ParamId::from(0)), (-1, ParamId::from(1))]
+        );
+        assert_eq!(format!("{lc}"), "5 + p0 - p1");
+
+        let zero = LinearCombination {
+            constant: 0,
+            terms: vec![(0, ParamId::from(3))],
+        };
+        assert_eq!(format!("{zero}"), "0");
     }
 }

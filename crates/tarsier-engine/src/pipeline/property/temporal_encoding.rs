@@ -1,6 +1,7 @@
 //! Memoized temporal encoding.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::property::*;
 
 /// Encode a (possibly temporal) quantified formula on a bounded trace suffix.
 #[cfg(test)]

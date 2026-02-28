@@ -1,3 +1,5 @@
+//! Governance command module wiring and subcommand dispatch.
+//
 // Command handlers for: CertSuite, CertifySafety, CertifyFairLiveness, CheckCertificate,
 //                        GenerateTrustReport, GovernancePipeline, VerifyGovernanceBundle
 //

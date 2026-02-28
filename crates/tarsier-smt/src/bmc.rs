@@ -1,3 +1,10 @@
+//! Verification drivers for bounded model checking (BMC), k-induction, and
+//! property-directed reachability (PDR/IC3).
+//!
+//! Each driver accepts a generic [`SmtSolver`] backend plus a
+//! [`CounterSystem`] / [`SafetyProperty`] pair, and returns a structured
+//! result indicating safety, a counterexample, or inconclusive.
+
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
@@ -24,26 +31,48 @@ fn deadline_exceeded(deadline: Option<Instant>) -> bool {
     }
 }
 
-/// Aggregated SMT profiling for one run.
+/// Aggregated SMT profiling counters for one verification run.
+///
+/// Stored in a thread-local and accumulated across iterative-deepening depths
+/// or k-induction iterations. Use [`reset_smt_run_profile`] before a run and
+/// [`take_smt_run_profile`] after to collect.
 #[derive(Debug, Clone, Default)]
 pub struct SmtRunProfile {
+    /// Number of encoding passes (one per depth or k value).
     pub encode_calls: u64,
+    /// Total wall-clock time spent encoding (milliseconds).
     pub encode_elapsed_ms: u128,
+    /// Number of solver check-sat calls.
     pub solve_calls: u64,
+    /// Total wall-clock time spent in solver check-sat (milliseconds).
     pub solve_elapsed_ms: u128,
+    /// Assertions considered before deduplication.
     pub assertion_candidates: u64,
+    /// Unique assertions actually sent to the solver.
     pub assertion_unique: u64,
+    /// Duplicate assertions filtered out.
     pub assertion_dedup_hits: u64,
+    /// Depths where incremental declaration reuse occurred.
     pub incremental_depth_reuse_steps: u64,
+    /// Variable declarations skipped due to incremental reuse.
     pub incremental_decl_reuse_hits: u64,
+    /// Assertions skipped due to incremental reuse.
     pub incremental_assertion_reuse_hits: u64,
+    /// Locations considered for symmetry reduction.
     pub symmetry_candidates: u64,
+    /// Locations pruned by symmetry.
     pub symmetry_pruned: u64,
+    /// Stutter-signature normalizations performed.
     pub stutter_signature_normalizations: u64,
+    /// PDR obligation cubes deduplicated.
     pub por_pending_obligation_dedup_hits: u64,
+    /// Dynamic ample-set queries issued.
     pub por_dynamic_ample_queries: u64,
+    /// Dynamic ample-set queries resolved as SAT quickly.
     pub por_dynamic_ample_fast_sat: u64,
+    /// Dynamic ample-set UNSAT results that triggered re-checks.
     pub por_dynamic_ample_unsat_rechecks: u64,
+    /// Re-checks that turned out SAT after initial UNSAT.
     pub por_dynamic_ample_unsat_recheck_sat: u64,
 }
 
@@ -51,16 +80,19 @@ thread_local! {
     static SMT_RUN_PROFILE: RefCell<SmtRunProfile> = RefCell::new(SmtRunProfile::default());
 }
 
+/// Reset the thread-local profiling counters to zero.
 pub fn reset_smt_run_profile() {
     SMT_RUN_PROFILE.with(|cell| {
         *cell.borrow_mut() = SmtRunProfile::default();
     });
 }
 
+/// Snapshot the current thread-local profiling counters (non-destructive).
 pub fn current_smt_run_profile() -> SmtRunProfile {
     SMT_RUN_PROFILE.with(|cell| cell.borrow().clone())
 }
 
+/// Take and reset the thread-local profiling counters in one step.
 pub fn take_smt_run_profile() -> SmtRunProfile {
     SMT_RUN_PROFILE.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
 }
@@ -161,6 +193,7 @@ fn record_por_dynamic_ample_unsat_recheck_sat() {
     });
 }
 
+/// Profiling wrapper around `check_sat_with_model` that records timing.
 fn check_sat_with_model_profiled<S: SmtSolver>(
     solver: &mut S,
     vars: &[(&str, &SmtSort)],
@@ -171,6 +204,7 @@ fn check_sat_with_model_profiled<S: SmtSolver>(
     out
 }
 
+/// Profiling wrapper around `check_sat` that records timing.
 fn check_sat_profiled<S: SmtSolver>(solver: &mut S) -> Result<SatResult, S::Error> {
     let started = Instant::now();
     let out = solver.check_sat();
@@ -178,6 +212,7 @@ fn check_sat_profiled<S: SmtSolver>(solver: &mut S) -> Result<SatResult, S::Erro
     out
 }
 
+/// Profiling wrapper around `check_sat_assuming` that records timing.
 fn check_sat_assuming_profiled<S: SmtSolver>(
     solver: &mut S,
     assumptions: &[String],
@@ -218,10 +253,10 @@ fn local_value_key(value: &LocalValue) -> String {
 }
 
 fn location_symmetry_key(cs: &CounterSystem, loc_id: usize) -> String {
-    let ta = &cs.automaton;
+    let ta = cs;
     let loc = &ta.locations[loc_id];
     let pid_var = ta
-        .role_identities
+        .security.role_identities
         .get(&loc.role)
         .and_then(|cfg| {
             if cfg.scope == RoleIdentityScope::Process {
@@ -247,7 +282,7 @@ fn location_symmetry_key(cs: &CounterSystem, loc_id: usize) -> String {
 }
 
 fn shared_var_symmetry_key(cs: &CounterSystem, var_id: usize) -> String {
-    let shared = &cs.automaton.shared_vars[var_id];
+    let shared = &cs.shared_vars[var_id];
     if shared.kind == SharedVarKind::MessageCounter {
         format!("msg|{}", wildcard_process_ids(&shared.name))
     } else {
@@ -791,12 +826,19 @@ pub fn run_k_induction_with_deadline<S: SmtSolver>(
     })
 }
 
+/// A single literal in a PDR cube: a state variable pinned to a concrete value.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct CubeLiteral {
+    /// Index into the flattened state-variable list (locations, then shared vars).
     state_var_idx: usize,
+    /// Concrete value (booleans encoded as 0/1).
     value: i64,
 }
 
+/// A conjunction of [`CubeLiteral`]s representing a set of concrete states.
+///
+/// In PDR, cubes are used to represent bad states that must be blocked.
+/// A blocking clause is the negation of a cube.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct Cube {
     lits: Vec<CubeLiteral>,
@@ -883,6 +925,11 @@ impl Cube {
     }
 }
 
+/// One frame in the PDR frame sequence F_0, F_1, …, F_k.
+///
+/// Each frame stores a set of cubes that have been blocked (proved unreachable
+/// at that depth). Convergence is detected when two adjacent frames have
+/// identical blocked-cube sets.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct PdrFrame {
     blocked_cubes: HashSet<Cube>,
@@ -918,6 +965,7 @@ impl PdrFrame {
     }
 }
 
+/// Summary of a rule's effect on state, used for dynamic ample-set computation.
 #[derive(Debug, Clone)]
 struct PdrRuleEffect {
     from_loc: usize,
@@ -926,6 +974,10 @@ struct PdrRuleEffect {
     delta_var: String,
 }
 
+/// Pre-computed encoding artifacts shared across all PDR frames and queries.
+///
+/// Built once from k=0 and k=1 induction encodings plus the BMC depth-0
+/// encoding, then reused throughout the PDR loop.
 #[derive(Debug, Clone)]
 struct PdrArtifacts {
     declarations: Vec<(String, SmtSort)>,
@@ -993,17 +1045,20 @@ fn build_pdr_artifacts(cs: &CounterSystem, property: &SafetyProperty) -> Option<
     symmetry_templates_post.push("time".into());
 
     let rule_effects = cs
-        .automaton
         .rules
         .iter()
         .enumerate()
         .map(|(rule_id, rule)| {
-            let mut updated_shared_vars = rule.updates.iter().map(|u| u.var).collect::<Vec<_>>();
+            let mut updated_shared_vars = rule
+                .updates
+                .iter()
+                .map(|u| u.var.as_usize())
+                .collect::<Vec<_>>();
             updated_shared_vars.sort_unstable();
             updated_shared_vars.dedup();
             PdrRuleEffect {
-                from_loc: rule.from,
-                to_loc: rule.to,
+                from_loc: rule.from.as_usize(),
+                to_loc: rule.to.as_usize(),
                 updated_shared_vars,
                 delta_var: pdr_delta_var(rule_id),
             }
@@ -1022,7 +1077,7 @@ fn build_pdr_artifacts(cs: &CounterSystem, property: &SafetyProperty) -> Option<
         num_locations,
         num_shared_vars,
         rule_effects,
-        por_mode: cs.automaton.por_mode,
+        por_mode: cs.semantics.por_mode,
     })
 }
 
@@ -1054,18 +1109,21 @@ fn assert_frame<S: SmtSolver>(
     Ok(())
 }
 
+/// Result of a PDR cube-extraction query: SAT yields a concrete cube.
 enum CubeQueryResult {
     Sat(Cube),
     Unsat,
     Unknown(String),
 }
 
+/// Simplified SAT result without model extraction.
 enum SatQueryResult {
     Sat,
     Unsat,
     Unknown(String),
 }
 
+/// Which set of base constraints is currently loaded into the solver.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PdrQueryBase {
     None,
@@ -1073,6 +1131,8 @@ enum PdrQueryBase {
     Transition,
 }
 
+/// Manages solver interactions for PDR, lazily loading state or transition
+/// constraints as needed and tracking assumption variables for UNSAT cores.
 struct PdrQueryEngine<'a, S: SmtSolver> {
     solver: &'a mut S,
     artifacts: &'a PdrArtifacts,
@@ -1733,6 +1793,7 @@ fn add_blocking_cube_up_to(frames: &mut [PdrFrame], level: usize, cube: Cube) {
     }
 }
 
+/// Result of the recursive obligation-blocking loop in PDR.
 enum BlockingOutcome {
     Blocked,
     Counterexample,
@@ -2193,7 +2254,7 @@ pub fn run_pdr_with_certificate_with_deadline<S: SmtSolver>(
     run_pdr_internal(solver, cs, property, max_k, extra_assertions, deadline)
 }
 
-/// Backward-compatible alias for the previous function name.
+/// Backward-compatible alias for [`run_pdr`].
 pub fn run_pdr_lite<S: SmtSolver>(
     solver: &mut S,
     cs: &CounterSystem,

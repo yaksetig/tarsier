@@ -2,7 +2,8 @@
 
 use std::time::{Duration, Instant};
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
 pub(crate) fn deadline_exceeded(deadline: Option<Instant>) -> bool {
     match deadline {
@@ -61,7 +62,8 @@ pub(crate) fn options_with_remaining_timeout(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
     #[test]
     fn deadline_exceeded_none_returns_false() {

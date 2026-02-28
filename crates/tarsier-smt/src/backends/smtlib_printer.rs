@@ -1,7 +1,12 @@
+//! SMT-LIB2 serialization for [`SmtTerm`] and [`SmtSort`].
+//!
+//! Used by the cvc5 subprocess backend to emit commands, and for
+//! assertion deduplication keys in the incremental BMC driver.
+
 use crate::sorts::SmtSort;
 use crate::terms::SmtTerm;
 
-/// Print an SmtTerm as SMT-LIB2 format.
+/// Serialize an [`SmtTerm`] to its SMT-LIB2 string representation.
 pub fn to_smtlib(term: &SmtTerm) -> String {
     match term {
         SmtTerm::Var(name) => name.clone(),

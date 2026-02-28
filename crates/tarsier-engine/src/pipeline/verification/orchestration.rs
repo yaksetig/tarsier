@@ -1,6 +1,7 @@
 //! Top-level verification entry points and CEGAR loop drivers.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
 pub fn verify(
     source: &str,
@@ -54,10 +55,10 @@ pub fn verify_all_properties(
     let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
     let has_committees = !committee_summaries.is_empty();
     let committee_bounds: Vec<(usize, u64)> = ta
-        .committees
+        .constraints.committees
         .iter()
         .zip(committee_summaries.iter())
-        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
         .collect();
     let committee_failure_bound = if has_committees {
         Some(committee_summaries.iter().map(|s| s.epsilon).sum::<f64>())
@@ -189,7 +190,7 @@ pub fn verify_all_properties(
                         );
 
                         let property = SafetyProperty::Termination {
-                            goal_locs: sorted_goals,
+                            goal_locs: sorted_goals.iter().copied().map(Into::into).collect(),
                         };
                         let preview_encoding = encode_bmc(&cs, &property, options.max_depth);
                         let (constraint_summary, constraint_payload) =
@@ -303,10 +304,10 @@ pub(crate) fn verify_program(
 
     // Collect per-committee (param_id, b_max) bounds for SMT injection.
     let committee_bounds: Vec<(usize, u64)> = ta
-        .committees
+        .constraints.committees
         .iter()
         .zip(committee_summaries.iter())
-        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
         .collect();
 
     if has_committees && committee_bounds.is_empty() {
@@ -821,10 +822,10 @@ pub(crate) fn prove_safety_for_ta(
     let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
     let has_committees = !committee_summaries.is_empty();
     let committee_bounds: Vec<(usize, u64)> = ta
-        .committees
+        .constraints.committees
         .iter()
         .zip(committee_summaries.iter())
-        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
         .collect();
 
     if has_committees && committee_bounds.is_empty() {
@@ -1104,10 +1105,10 @@ pub fn prove_safety_with_cegar(
         let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
         let has_committees = !committee_summaries.is_empty();
         let committee_bounds: Vec<(usize, u64)> = ta
-            .committees
+            .constraints.committees
             .iter()
             .zip(committee_summaries.iter())
-            .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+            .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
             .collect();
 
         if has_committees && committee_bounds.is_empty() {
@@ -1746,10 +1747,10 @@ pub fn check_liveness(
 
         // Collect per-committee (param_id, b_max) bounds for SMT injection
         let committee_bounds: Vec<(usize, u64)> = ta
-            .committees
+            .constraints.committees
             .iter()
             .zip(committee_summaries.iter())
-            .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+            .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
             .collect();
 
         if has_committees && committee_bounds.is_empty() {
@@ -1771,7 +1772,9 @@ pub fn check_liveness(
                 ));
                 }
 
-                let property = SafetyProperty::Termination { goal_locs };
+                let property = SafetyProperty::Termination {
+                    goal_locs: goal_locs.iter().copied().map(Into::into).collect(),
+                };
                 if let Some(ref path) = options.dump_smt {
                     let extra = committee_bound_assertions(&committee_bounds);
                     dump_smt_to_file(&cs, &property, options.max_depth, path, &extra);
@@ -1834,7 +1837,7 @@ pub fn check_liveness(
                 if let Some(ref path) = options.dump_smt {
                     let smt = query_to_smt2_script(&encoding.declarations, &encoding.assertions);
                     if let Err(e) = std::fs::write(path, smt) {
-                        eprintln!("Warning: could not write SMT dump to {path}: {e}");
+                        tracing::warn!("could not write SMT dump to {path}: {e}");
                     } else {
                         info!("SMT dump written to {path}");
                     }
@@ -2488,10 +2491,10 @@ pub(crate) fn prove_fair_liveness_for_ta(
     let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
     let has_committees = !committee_summaries.is_empty();
     let committee_bounds: Vec<(usize, u64)> = ta
-        .committees
+        .constraints.committees
         .iter()
         .zip(committee_summaries.iter())
-        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+        .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
         .collect();
 
     if has_committees && committee_bounds.is_empty() {
@@ -2615,10 +2618,10 @@ pub fn check_fair_liveness_with_mode(
         let committee_summaries = analyze_and_constrain_committees(&mut ta)?;
         let has_committees = !committee_summaries.is_empty();
         let committee_bounds: Vec<(usize, u64)> = ta
-            .committees
+            .constraints.committees
             .iter()
             .zip(committee_summaries.iter())
-            .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid, summary.b_max)))
+            .filter_map(|(spec, summary)| spec.bound_param.map(|pid| (pid.as_usize(), summary.b_max)))
             .collect();
 
         if has_committees && committee_bounds.is_empty() {

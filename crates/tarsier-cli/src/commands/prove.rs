@@ -110,15 +110,17 @@ pub(crate) fn gst_assumptions_json(source: &str, filename: &str) -> Value {
         .and_then(|program| tarsier_engine::pipeline::lower(&program))
     {
         Ok(ta) => {
-            let gst_parameter = ta
-                .gst_param
-                .and_then(|pid| ta.parameters.get(pid).map(|param| param.name.clone()));
+            let gst_parameter = ta.semantics.gst_param.and_then(|pid| {
+                ta.parameters
+                    .get(pid.as_usize())
+                    .map(|param| param.name.clone())
+            });
             let requires_gst = matches!(
-                ta.timing_model,
+                ta.semantics.timing_model,
                 tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
             );
             json!({
-                "timing_model": format!("{:?}", ta.timing_model),
+                "timing_model": format!("{:?}", ta.semantics.timing_model),
                 "requires_gst": requires_gst,
                 "gst_parameter": gst_parameter,
                 "post_gst_assumed_for_fairness": requires_gst,
@@ -227,21 +229,21 @@ pub(crate) fn run_prove_command(
     format: String,
     cli_network_mode: CliNetworkSemanticsMode,
 ) -> miette::Result<()> {
-    let output_format = parse_output_format(&format);
+    let output_format = parse_output_format(&format)?;
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness);
+    let soundness_mode = parse_soundness_mode(&soundness)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
 
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver),
+        solver: parse_solver_choice(&solver)?,
         max_depth: k,
         timeout_secs: timeout,
         dump_smt: None,
         soundness: soundness_mode,
-        proof_engine: parse_proof_engine(&engine),
+        proof_engine: parse_proof_engine(&engine)?,
     };
-    let fairness = parse_fairness_mode(&fairness);
+    let fairness = parse_fairness_mode(&fairness)?;
     let prove_target = detect_prove_auto_target(&source, &filename)?;
 
     if prove_target == ProveAutoTarget::FairLiveness {
@@ -301,19 +303,19 @@ pub(crate) fn run_prove_fair_command(
 ) -> miette::Result<()> {
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness);
-    let output_format = parse_output_format(&format);
+    let soundness_mode = parse_soundness_mode(&soundness)?;
+    let output_format = parse_output_format(&format)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
 
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver),
+        solver: parse_solver_choice(&solver)?,
         max_depth: k,
         timeout_secs: timeout,
         dump_smt: None,
         soundness: soundness_mode,
         proof_engine: ProofEngine::Pdr,
     };
-    let fairness = parse_fairness_mode(&fairness);
+    let fairness = parse_fairness_mode(&fairness)?;
 
     if portfolio {
         run_prove_fair_portfolio(
@@ -362,15 +364,15 @@ pub(crate) fn run_prove_round_command(
 
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(&soundness);
+    let soundness_mode = parse_soundness_mode(&soundness)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver),
+        solver: parse_solver_choice(&solver)?,
         max_depth: k,
         timeout_secs: timeout,
         dump_smt: None,
         soundness: soundness_mode,
-        proof_engine: parse_proof_engine(&engine),
+        proof_engine: parse_proof_engine(&engine)?,
     };
 
     let proved = tarsier_engine::pipeline::prove_safety_with_round_abstraction(
@@ -381,7 +383,7 @@ pub(crate) fn run_prove_round_command(
     )
     .into_diagnostic()?;
 
-    match parse_output_format(&format) {
+    match parse_output_format(&format)? {
         OutputFormat::Text => {
             println!(
                 "{}",
@@ -447,11 +449,11 @@ pub(crate) fn run_prove_fair_round_command(
     }
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let fairness = parse_fairness_mode(&fairness);
-    let soundness_mode = parse_soundness_mode(&soundness);
+    let fairness = parse_fairness_mode(&fairness)?;
+    let soundness_mode = parse_soundness_mode(&soundness)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness_mode, cli_network_mode)?;
     let options = PipelineOptions {
-        solver: parse_solver_choice(&solver),
+        solver: parse_solver_choice(&solver)?,
         max_depth: k,
         timeout_secs: timeout,
         dump_smt: None,
@@ -468,7 +470,7 @@ pub(crate) fn run_prove_fair_round_command(
     )
     .into_diagnostic()?;
 
-    match parse_output_format(&format) {
+    match parse_output_format(&format)? {
         OutputFormat::Text => {
             println!(
                 "{}",
@@ -652,36 +654,30 @@ fn run_prove_fair_liveness_branch(
         }
     } else {
         let result = if let Some(report_path) = cegar_report_out.clone() {
-            match tarsier_engine::pipeline::prove_fair_liveness_with_cegar_report(
+            let report = tarsier_engine::pipeline::prove_fair_liveness_with_cegar_report(
                 source,
                 filename,
                 options,
                 fairness,
                 cegar_iters,
-            ) {
-                Ok(report) => {
-                    let diagnostics = tarsier_engine::pipeline::take_run_diagnostics();
-                    let result = report.final_result.clone();
-                    let artifact = json!({
-                        "schema_version": 1,
-                        "file": filename,
-                        "mode": "prove",
-                        "prove_target": "fair_liveness",
-                        "result": unbounded_fair_result_kind(&result),
-                        "details": unbounded_fair_result_details(&result),
-                        "output": format!("{result}"),
-                        "cegar": unbounded_fair_cegar_report_details(&report),
-                        "abstractions": run_diagnostics_details(&diagnostics),
-                    });
-                    write_json_artifact(&report_path, &artifact)?;
-                    println!("CEGAR proof report written to {}", report_path.display());
-                    result
-                }
-                Err(e) => {
-                    eprintln!("Error: {e}");
-                    std::process::exit(1);
-                }
-            }
+            )
+            .map_err(|e| miette::miette!("Error: {e}"))?;
+            let diagnostics = tarsier_engine::pipeline::take_run_diagnostics();
+            let result = report.final_result.clone();
+            let artifact = json!({
+                "schema_version": 1,
+                "file": filename,
+                "mode": "prove",
+                "prove_target": "fair_liveness",
+                "result": unbounded_fair_result_kind(&result),
+                "details": unbounded_fair_result_details(&result),
+                "output": format!("{result}"),
+                "cegar": unbounded_fair_cegar_report_details(&report),
+                "abstractions": run_diagnostics_details(&diagnostics),
+            });
+            write_json_artifact(&report_path, &artifact)?;
+            println!("CEGAR proof report written to {}", report_path.display());
+            result
         } else {
             let run = if cegar_iters > 0 {
                 tarsier_engine::pipeline::prove_fair_liveness_with_cegar(
@@ -696,13 +692,7 @@ fn run_prove_fair_liveness_branch(
                     source, filename, options, fairness,
                 )
             };
-            match run {
-                Ok(result) => result,
-                Err(e) => {
-                    eprintln!("Error: {e}");
-                    std::process::exit(1);
-                }
-            }
+            run.map_err(|e| miette::miette!("Error: {e}"))?
         };
         match output_format {
             OutputFormat::Json => {
@@ -738,15 +728,12 @@ fn run_prove_fair_liveness_branch(
             match result {
                 UnboundedFairLivenessResult::LiveProved { .. } => {
                     let cert =
-                        match tarsier_engine::pipeline::generate_fair_liveness_certificate_with_mode(
+                        tarsier_engine::pipeline::generate_fair_liveness_certificate_with_mode(
                             source, filename, options, fairness,
-                        ) {
-                            Ok(cert) => cert,
-                            Err(e) => {
-                                eprintln!("Error generating fair-liveness certificate: {e}");
-                                std::process::exit(1);
-                            }
-                        };
+                        )
+                        .map_err(|e| {
+                            miette::miette!("Error generating fair-liveness certificate: {e}")
+                        })?;
                     let bundle = certificate_bundle_from_fair_liveness(&cert);
                     write_certificate_bundle(&out, &bundle, false, false)?;
                 }
@@ -892,35 +879,29 @@ fn run_prove_safety_single(
     output_format: OutputFormat,
 ) -> miette::Result<()> {
     let result = if let Some(report_path) = cegar_report_out.clone() {
-        match tarsier_engine::pipeline::prove_safety_with_cegar_report(
+        let report = tarsier_engine::pipeline::prove_safety_with_cegar_report(
             source,
             filename,
             options,
             cegar_iters,
-        ) {
-            Ok(report) => {
-                let diagnostics = tarsier_engine::pipeline::take_run_diagnostics();
-                let result = report.final_result.clone();
-                let artifact = json!({
-                    "schema_version": 1,
-                    "file": filename,
-                    "mode": "prove",
-                    "prove_target": "safety",
-                    "result": unbounded_safety_result_kind(&result),
-                    "details": unbounded_safety_result_details(&result),
-                    "output": format!("{result}"),
-                    "cegar": unbounded_safety_cegar_report_details(&report),
-                    "abstractions": run_diagnostics_details(&diagnostics),
-                });
-                write_json_artifact(&report_path, &artifact)?;
-                println!("CEGAR proof report written to {}", report_path.display());
-                result
-            }
-            Err(e) => {
-                eprintln!("Error: {e}");
-                std::process::exit(1);
-            }
-        }
+        )
+        .map_err(|e| miette::miette!("Error: {e}"))?;
+        let diagnostics = tarsier_engine::pipeline::take_run_diagnostics();
+        let result = report.final_result.clone();
+        let artifact = json!({
+            "schema_version": 1,
+            "file": filename,
+            "mode": "prove",
+            "prove_target": "safety",
+            "result": unbounded_safety_result_kind(&result),
+            "details": unbounded_safety_result_details(&result),
+            "output": format!("{result}"),
+            "cegar": unbounded_safety_cegar_report_details(&report),
+            "abstractions": run_diagnostics_details(&diagnostics),
+        });
+        write_json_artifact(&report_path, &artifact)?;
+        println!("CEGAR proof report written to {}", report_path.display());
+        result
     } else {
         let run = if cegar_iters > 0 {
             tarsier_engine::pipeline::prove_safety_with_cegar(
@@ -932,13 +913,7 @@ fn run_prove_safety_single(
         } else {
             tarsier_engine::pipeline::prove_safety(source, filename, options)
         };
-        match run {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("Error: {e}");
-                std::process::exit(1);
-            }
-        }
+        run.map_err(|e| miette::miette!("Error: {e}"))?
     };
     match output_format {
         OutputFormat::Json => {
@@ -974,15 +949,10 @@ fn run_prove_safety_single(
         match result {
             UnboundedSafetyResult::Safe { .. }
             | UnboundedSafetyResult::ProbabilisticallySafe { .. } => {
-                let cert = match tarsier_engine::pipeline::generate_safety_certificate(
+                let cert = tarsier_engine::pipeline::generate_safety_certificate(
                     source, filename, options,
-                ) {
-                    Ok(cert) => cert,
-                    Err(e) => {
-                        eprintln!("Error generating certificate: {e}");
-                        std::process::exit(1);
-                    }
-                };
+                )
+                .map_err(|e| miette::miette!("Error generating certificate: {e}"))?;
                 let bundle = certificate_bundle_from_safety(&cert);
                 write_certificate_bundle(&out, &bundle, false, false)?;
             }
@@ -1137,35 +1107,29 @@ fn run_prove_fair_single(
     output_format: OutputFormat,
 ) -> miette::Result<()> {
     let result = if let Some(report_path) = cegar_report_out.clone() {
-        match tarsier_engine::pipeline::prove_fair_liveness_with_cegar_report(
+        let report = tarsier_engine::pipeline::prove_fair_liveness_with_cegar_report(
             source,
             filename,
             options,
             fairness,
             cegar_iters,
-        ) {
-            Ok(report) => {
-                let diagnostics = tarsier_engine::pipeline::take_run_diagnostics();
-                let result = report.final_result.clone();
-                let artifact = json!({
-                    "schema_version": 1,
-                    "file": filename,
-                    "mode": "prove-fair",
-                    "result": unbounded_fair_result_kind(&result),
-                    "details": unbounded_fair_result_details(&result),
-                    "output": format!("{result}"),
-                    "cegar": unbounded_fair_cegar_report_details(&report),
-                    "abstractions": run_diagnostics_details(&diagnostics),
-                });
-                write_json_artifact(&report_path, &artifact)?;
-                println!("CEGAR proof report written to {}", report_path.display());
-                result
-            }
-            Err(e) => {
-                eprintln!("Error: {e}");
-                std::process::exit(1);
-            }
-        }
+        )
+        .map_err(|e| miette::miette!("Error: {e}"))?;
+        let diagnostics = tarsier_engine::pipeline::take_run_diagnostics();
+        let result = report.final_result.clone();
+        let artifact = json!({
+            "schema_version": 1,
+            "file": filename,
+            "mode": "prove-fair",
+            "result": unbounded_fair_result_kind(&result),
+            "details": unbounded_fair_result_details(&result),
+            "output": format!("{result}"),
+            "cegar": unbounded_fair_cegar_report_details(&report),
+            "abstractions": run_diagnostics_details(&diagnostics),
+        });
+        write_json_artifact(&report_path, &artifact)?;
+        println!("CEGAR proof report written to {}", report_path.display());
+        result
     } else {
         let run = if cegar_iters > 0 {
             tarsier_engine::pipeline::prove_fair_liveness_with_cegar(
@@ -1180,13 +1144,7 @@ fn run_prove_fair_single(
                 source, filename, options, fairness,
             )
         };
-        match run {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("Error: {e}");
-                std::process::exit(1);
-            }
-        }
+        run.map_err(|e| miette::miette!("Error: {e}"))?
     };
     match output_format {
         OutputFormat::Json => {
@@ -1220,16 +1178,10 @@ fn run_prove_fair_single(
     if let Some(out) = cert_out {
         match result {
             UnboundedFairLivenessResult::LiveProved { .. } => {
-                let cert =
-                    match tarsier_engine::pipeline::generate_fair_liveness_certificate_with_mode(
-                        source, filename, options, fairness,
-                    ) {
-                        Ok(cert) => cert,
-                        Err(e) => {
-                            eprintln!("Error generating fair-liveness certificate: {e}");
-                            std::process::exit(1);
-                        }
-                    };
+                let cert = tarsier_engine::pipeline::generate_fair_liveness_certificate_with_mode(
+                    source, filename, options, fairness,
+                )
+                .map_err(|e| miette::miette!("Error generating fair-liveness certificate: {e}"))?;
                 let bundle = certificate_bundle_from_fair_liveness(&cert);
                 write_certificate_bundle(&out, &bundle, false, false)?;
             }

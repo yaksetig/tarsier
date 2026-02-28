@@ -6,8 +6,11 @@ use crate::terms::SmtTerm;
 /// Result of a satisfiability check.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SatResult {
+    /// The formula is satisfiable; a model may be available.
     Sat,
+    /// The formula is unsatisfiable.
     Unsat,
+    /// The solver could not determine satisfiability (e.g., timeout).
     Unknown(String),
 }
 
@@ -17,13 +20,17 @@ pub struct Model {
     pub values: HashMap<String, ModelValue>,
 }
 
+/// A single variable assignment in a satisfying model.
 #[derive(Debug, Clone)]
 pub enum ModelValue {
+    /// Integer-valued variable.
     Int(i64),
+    /// Boolean-valued variable.
     Bool(bool),
 }
 
 impl Model {
+    /// Look up an integer variable's value, returning `None` if missing or wrong sort.
     pub fn get_int(&self, name: &str) -> Option<i64> {
         match self.values.get(name) {
             Some(ModelValue::Int(n)) => Some(*n),
@@ -31,6 +38,7 @@ impl Model {
         }
     }
 
+    /// Look up a boolean variable's value, returning `None` if missing or wrong sort.
     pub fn get_bool(&self, name: &str) -> Option<bool> {
         match self.values.get(name) {
             Some(ModelValue::Bool(b)) => Some(*b),

@@ -1,3 +1,5 @@
+//! Conformance command handlers and report/rendering helpers.
+//
 // Command handlers for: ConformanceCheck, ConformanceReplay, ConformanceObligations, ConformanceSuite
 //
 // These commands handle runtime trace conformance checking, replay-based
@@ -18,7 +20,7 @@ use tarsier_proof_kernel::sha256_hex_bytes;
 
 use super::helpers::{
     parse_conformance_adapter, parse_conformance_mode, parse_output_format, parse_solver_choice,
-    parse_soundness_mode,
+    parse_soundness_mode, report_with_exit_code,
 };
 use crate::OutputFormat;
 
@@ -522,7 +524,7 @@ pub(crate) fn run_conformance_check_command(
 
     let trace_source = fs::read_to_string(trace).into_diagnostic()?;
     let runtime_trace = tarsier_conformance::adapters::adapt_trace(
-        parse_conformance_adapter(adapter),
+        parse_conformance_adapter(adapter)?,
         &trace_source,
     )
     .map_err(|e| miette::miette!("Trace adapter error: {e}"))?;
@@ -530,7 +532,7 @@ pub(crate) fn run_conformance_check_command(
     let checker = tarsier_conformance::checker::ConformanceChecker::new_with_mode(
         &ta,
         &runtime_trace.params,
-        parse_conformance_mode(checker_mode),
+        parse_conformance_mode(checker_mode)?,
     );
     let result = checker.check(&runtime_trace);
 
@@ -547,7 +549,10 @@ pub(crate) fn run_conformance_check_command(
                 v.process_id, v.event_sequence, v.kind, v.message
             );
         }
-        std::process::exit(1);
+        return Err(miette::miette!(
+            "Conformance check failed with {} violation(s).",
+            result.violations.len()
+        ));
     }
 
     Ok(())
@@ -568,9 +573,9 @@ pub(crate) fn run_conformance_replay_command(
 ) -> miette::Result<()> {
     let source = fs::read_to_string(file).into_diagnostic()?;
     let filename = file.display().to_string();
-    let soundness_mode = parse_soundness_mode(soundness);
+    let soundness_mode = parse_soundness_mode(soundness)?;
     let options = PipelineOptions {
-        solver: parse_solver_choice(solver),
+        solver: parse_solver_choice(solver)?,
         max_depth: depth,
         timeout_secs: timeout,
         dump_smt: None,
@@ -657,7 +662,10 @@ pub(crate) fn run_conformance_replay_command(
                 v.process_id, v.event_sequence, v.kind, v.message
             );
         }
-        std::process::exit(1);
+        return Err(miette::miette!(
+            "Conformance replay failed with {} violation(s).",
+            result.violations.len()
+        ));
     }
 
     if let Some(export_path) = export_trace {
@@ -726,7 +734,7 @@ pub(crate) fn run_conformance_suite_command(
     out: Option<&PathBuf>,
     artifact_dir: Option<&Path>,
 ) -> miette::Result<()> {
-    let output_format = parse_output_format(format);
+    let output_format = parse_output_format(format)?;
 
     let report = run_conformance_suite(manifest, artifact_dir)?;
     let report_json_value = serde_json::to_value(&report).into_diagnostic()?;
@@ -743,7 +751,10 @@ pub(crate) fn run_conformance_suite_command(
     }
 
     if report.overall != "pass" {
-        std::process::exit(2);
+        return Err(report_with_exit_code(
+            2,
+            format!("Conformance suite reported overall='{}'.", report.overall),
+        ));
     }
 
     Ok(())

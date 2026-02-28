@@ -1,3 +1,5 @@
+//! Governance certificate-suite manifest parsing and validation.
+//
 // Cert suite manifest validation functions.
 
 use std::collections::{BTreeMap, HashSet};

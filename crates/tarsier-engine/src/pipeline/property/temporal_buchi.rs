@@ -1,6 +1,7 @@
 //! Büchi monitor compilation.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::property::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TemporalExpansionOutcome {

@@ -1,7 +1,9 @@
-/// SMT sorts.
+/// SMT sorts supported by the encoding (QF_LIA fragment).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SmtSort {
+    /// Boolean sort.
     Bool,
+    /// Unbounded integer sort.
     Int,
 }
 

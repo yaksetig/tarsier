@@ -1,17 +1,18 @@
 //! Location grouping, guard parsing, reachability.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::property::*;
 
 pub(crate) fn graph_reachable_locations(ta: &ThresholdAutomaton) -> HashSet<usize> {
     let mut reachable: HashSet<usize> = HashSet::new();
-    let mut stack: Vec<usize> = ta.initial_locations.clone();
+    let mut stack: Vec<usize> = ta.initial_locations.iter().map(|id| id.as_usize()).collect();
     while let Some(lid) = stack.pop() {
         if !reachable.insert(lid) {
             continue;
         }
         for rule in &ta.rules {
-            if rule.from == lid && !reachable.contains(&rule.to) {
-                stack.push(rule.to);
+            if rule.from.as_usize() == lid && !reachable.contains(&rule.to.as_usize()) {
+                stack.push(rule.to.as_usize());
             }
         }
     }

@@ -47,7 +47,7 @@ pub fn extract_agreement_property(ta: &ThresholdAutomaton) -> SafetyProperty {
         .iter()
         .enumerate()
         .filter(|(_, loc)| loc.local_vars.get("decided") == Some(&LocalValue::Bool(true)))
-        .map(|(id, _)| id)
+        .map(|(id, _)| LocationId::from(id))
         .collect();
 
     let mut conflicting_pairs = Vec::new();
@@ -57,7 +57,7 @@ pub fn extract_agreement_property(ta: &ThresholdAutomaton) -> SafetyProperty {
     let mut phase_groups: std::collections::HashMap<String, Vec<LocationId>> =
         std::collections::HashMap::new();
     for &d in &decided_locs {
-        let phase = ta.locations[d].phase.clone();
+        let phase = ta.locations[d.as_usize()].phase.clone();
         phase_groups.entry(phase).or_default().push(d);
     }
 
@@ -118,8 +118,14 @@ mod tests {
             SafetyProperty::Agreement { conflicting_pairs } => {
                 // Two locations in v0 and one in v1 => 2 x 1 pairs.
                 assert_eq!(conflicting_pairs.len(), 2);
-                assert!(conflicting_pairs.contains(&(1, 3)) || conflicting_pairs.contains(&(3, 1)));
-                assert!(conflicting_pairs.contains(&(2, 3)) || conflicting_pairs.contains(&(3, 2)));
+                assert!(
+                    conflicting_pairs.contains(&(LocationId::from(1), LocationId::from(3)))
+                        || conflicting_pairs.contains(&(LocationId::from(3), LocationId::from(1)))
+                );
+                assert!(
+                    conflicting_pairs.contains(&(LocationId::from(2), LocationId::from(3)))
+                        || conflicting_pairs.contains(&(LocationId::from(3), LocationId::from(2)))
+                );
             }
             other => panic!("unexpected property variant: {other:?}"),
         }
@@ -165,7 +171,10 @@ mod tests {
     #[test]
     fn invariant_property_preserves_bad_location_sets() {
         let ta = ThresholdAutomaton::new();
-        let bad_sets = vec![vec![1, 2], vec![3]];
+        let bad_sets = vec![
+            vec![LocationId::from(1), LocationId::from(2)],
+            vec![LocationId::from(3)],
+        ];
         let prop = extract_invariant_property(&ta, bad_sets.clone());
 
         match prop {

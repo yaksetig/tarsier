@@ -8,12 +8,12 @@ const PBFT_CORE: &str = include_str!("../../../examples/library/pbft_core.trs");
 fn parse_and_lower(source: &str, filename: &str) -> CounterSystem {
     let program = tarsier_dsl::parse(source, filename).unwrap();
     let ta = tarsier_ir::lowering::lower(&program).unwrap();
-    CounterSystem::new(ta)
+    ta
 }
 
 fn bench_encode_bmc_trivial_depth3(c: &mut Criterion) {
     let cs = parse_and_lower(TRIVIAL_LIVE, "trivial_live.trs");
-    let property = extract_agreement_property(&cs.automaton);
+    let property = extract_agreement_property(&cs);
     c.bench_function("encode_bmc_trivial_depth3", |b| {
         b.iter(|| tarsier_smt::encoder::encode_bmc(black_box(&cs), black_box(&property), 3))
     });
@@ -21,7 +21,7 @@ fn bench_encode_bmc_trivial_depth3(c: &mut Criterion) {
 
 fn bench_encode_bmc_pbft_depth3(c: &mut Criterion) {
     let cs = parse_and_lower(PBFT_CORE, "pbft_core.trs");
-    let property = extract_agreement_property(&cs.automaton);
+    let property = extract_agreement_property(&cs);
     c.bench_function("encode_bmc_pbft_depth3", |b| {
         b.iter(|| tarsier_smt::encoder::encode_bmc(black_box(&cs), black_box(&property), 3))
     });
@@ -29,7 +29,7 @@ fn bench_encode_bmc_pbft_depth3(c: &mut Criterion) {
 
 fn bench_encode_bmc_pbft_depth5(c: &mut Criterion) {
     let cs = parse_and_lower(PBFT_CORE, "pbft_core.trs");
-    let property = extract_agreement_property(&cs.automaton);
+    let property = extract_agreement_property(&cs);
     c.bench_function("encode_bmc_pbft_depth5", |b| {
         b.iter(|| tarsier_smt::encoder::encode_bmc(black_box(&cs), black_box(&property), 5))
     });

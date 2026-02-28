@@ -29,25 +29,79 @@ use crate::{
     VisualizeCheck, VisualizeFormat,
 };
 
-pub(crate) fn parse_soundness_mode(raw: &str) -> SoundnessMode {
-    match raw {
-        "strict" => SoundnessMode::Strict,
-        "permissive" => SoundnessMode::Permissive,
-        other => {
-            eprintln!("Unknown soundness mode: {other}. Use 'strict' or 'permissive'.");
-            std::process::exit(1);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CliParseError {
+    message: String,
+}
+
+impl CliParseError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
         }
     }
 }
 
-pub(crate) fn parse_proof_engine(raw: &str) -> ProofEngine {
-    match raw {
-        "kinduction" => ProofEngine::KInduction,
-        "pdr" => ProofEngine::Pdr,
-        other => {
-            eprintln!("Unknown proof engine: {other}. Use 'kinduction' or 'pdr'.");
-            std::process::exit(1);
+impl std::fmt::Display for CliParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for CliParseError {}
+impl miette::Diagnostic for CliParseError {}
+
+pub(crate) type CliParseResult<T> = Result<T, CliParseError>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CliExitError {
+    pub(crate) code: i32,
+    message: String,
+}
+
+impl CliExitError {
+    pub(crate) fn new(code: i32, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
         }
+    }
+}
+
+impl std::fmt::Display for CliExitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for CliExitError {}
+impl miette::Diagnostic for CliExitError {}
+
+pub(crate) fn report_with_exit_code(code: i32, message: impl Into<String>) -> miette::Report {
+    miette::Report::new(CliExitError::new(code, message))
+}
+
+pub(crate) fn exit_code_from_report(report: &miette::Report) -> Option<i32> {
+    report.downcast_ref::<CliExitError>().map(|err| err.code)
+}
+
+pub(crate) fn parse_soundness_mode(raw: &str) -> CliParseResult<SoundnessMode> {
+    match raw {
+        "strict" => Ok(SoundnessMode::Strict),
+        "permissive" => Ok(SoundnessMode::Permissive),
+        other => Err(CliParseError::new(format!(
+            "Unknown soundness mode: {other}. Use 'strict' or 'permissive'."
+        ))),
+    }
+}
+
+pub(crate) fn parse_proof_engine(raw: &str) -> CliParseResult<ProofEngine> {
+    match raw {
+        "kinduction" => Ok(ProofEngine::KInduction),
+        "pdr" => Ok(ProofEngine::Pdr),
+        other => Err(CliParseError::new(format!(
+            "Unknown proof engine: {other}. Use 'kinduction' or 'pdr'."
+        ))),
     }
 }
 
@@ -62,83 +116,80 @@ pub(crate) fn parse_manifest_proof_engine(raw: &str) -> Result<ProofEngine, Stri
     }
 }
 
-pub(crate) fn parse_solver_choice(raw: &str) -> SolverChoice {
+pub(crate) fn parse_solver_choice(raw: &str) -> CliParseResult<SolverChoice> {
     match raw {
-        "z3" => SolverChoice::Z3,
-        "cvc5" => SolverChoice::Cvc5,
-        other => {
-            eprintln!("Unknown solver: {other}. Use 'z3' or 'cvc5'.");
-            std::process::exit(1);
-        }
+        "z3" => Ok(SolverChoice::Z3),
+        "cvc5" => Ok(SolverChoice::Cvc5),
+        other => Err(CliParseError::new(format!(
+            "Unknown solver: {other}. Use 'z3' or 'cvc5'."
+        ))),
     }
 }
 
-pub(crate) fn parse_analysis_mode(raw: &str) -> AnalysisMode {
+pub(crate) fn parse_analysis_mode(raw: &str) -> CliParseResult<AnalysisMode> {
     match raw {
-        "quick" => AnalysisMode::Quick,
-        "standard" => AnalysisMode::Standard,
-        "proof" => AnalysisMode::Proof,
-        "audit" => AnalysisMode::Audit,
-        other => {
-            eprintln!("Unknown mode: {other}. Use 'quick', 'standard', 'proof', or 'audit'.");
-            std::process::exit(1);
-        }
+        "quick" => Ok(AnalysisMode::Quick),
+        "standard" => Ok(AnalysisMode::Standard),
+        "proof" => Ok(AnalysisMode::Proof),
+        "audit" => Ok(AnalysisMode::Audit),
+        other => Err(CliParseError::new(format!(
+            "Unknown mode: {other}. Use 'quick', 'standard', 'proof', or 'audit'."
+        ))),
     }
 }
 
-pub(crate) fn parse_output_format(raw: &str) -> OutputFormat {
+pub(crate) fn parse_output_format(raw: &str) -> CliParseResult<OutputFormat> {
     match raw {
-        "text" => OutputFormat::Text,
-        "json" => OutputFormat::Json,
-        other => {
-            eprintln!("Unknown output format: {other}. Use 'text' or 'json'.");
-            std::process::exit(1);
-        }
+        "text" => Ok(OutputFormat::Text),
+        "json" => Ok(OutputFormat::Json),
+        other => Err(CliParseError::new(format!(
+            "Unknown output format: {other}. Use 'text' or 'json'."
+        ))),
     }
 }
 
-pub(crate) fn parse_conformance_adapter(raw: &str) -> tarsier_conformance::adapters::AdapterKind {
+pub(crate) fn parse_conformance_adapter(
+    raw: &str,
+) -> CliParseResult<tarsier_conformance::adapters::AdapterKind> {
     use tarsier_conformance::adapters::AdapterKind;
     match raw.parse::<AdapterKind>() {
-        Ok(kind) => kind,
-        Err(err) => {
-            eprintln!("{err}");
-            std::process::exit(1);
-        }
+        Ok(kind) => Ok(kind),
+        Err(err) => Err(CliParseError::new(err.to_string())),
     }
 }
 
-pub(crate) fn parse_conformance_mode(raw: &str) -> tarsier_conformance::checker::ConformanceMode {
+pub(crate) fn parse_conformance_mode(
+    raw: &str,
+) -> CliParseResult<tarsier_conformance::checker::ConformanceMode> {
     match raw.trim().to_ascii_lowercase().as_str() {
-        "permissive" => tarsier_conformance::checker::ConformanceMode::Permissive,
-        "strict" => tarsier_conformance::checker::ConformanceMode::Strict,
-        other => {
-            eprintln!("Unknown checker mode: {other}. Use 'permissive' or 'strict'.");
-            std::process::exit(1);
-        }
+        "permissive" => Ok(tarsier_conformance::checker::ConformanceMode::Permissive),
+        "strict" => Ok(tarsier_conformance::checker::ConformanceMode::Strict),
+        other => Err(CliParseError::new(format!(
+            "Unknown checker mode: {other}. Use 'permissive' or 'strict'."
+        ))),
     }
 }
 
-pub(crate) fn parse_cli_network_semantics_mode(raw: &str) -> CliNetworkSemanticsMode {
+pub(crate) fn parse_cli_network_semantics_mode(
+    raw: &str,
+) -> CliParseResult<CliNetworkSemanticsMode> {
     match raw {
-        "dsl" => CliNetworkSemanticsMode::Dsl,
-        "faithful" => CliNetworkSemanticsMode::Faithful,
-        other => {
-            eprintln!("Unknown network semantics mode: {other}. Use 'dsl' or 'faithful'.");
-            std::process::exit(1);
-        }
+        "dsl" => Ok(CliNetworkSemanticsMode::Dsl),
+        "faithful" => Ok(CliNetworkSemanticsMode::Faithful),
+        other => Err(CliParseError::new(format!(
+            "Unknown network semantics mode: {other}. Use 'dsl' or 'faithful'."
+        ))),
     }
 }
 
-pub(crate) fn parse_cli_por_mode(raw: &str) -> Option<PorMode> {
+pub(crate) fn parse_cli_por_mode(raw: &str) -> CliParseResult<Option<PorMode>> {
     match raw {
-        "full" => None, // default -- no override
-        "static" | "static_only" => Some(PorMode::Static),
-        "off" | "none" | "disabled" => Some(PorMode::Off),
-        other => {
-            eprintln!("Unknown POR mode: {other}. Use 'full', 'static', or 'off'.");
-            std::process::exit(1);
-        }
+        "full" => Ok(None), // default -- no override
+        "static" | "static_only" => Ok(Some(PorMode::Static)),
+        "off" | "none" | "disabled" => Ok(Some(PorMode::Off)),
+        other => Err(CliParseError::new(format!(
+            "Unknown POR mode: {other}. Use 'full', 'static', or 'off'."
+        ))),
     }
 }
 
@@ -149,19 +200,16 @@ pub(crate) fn cli_network_mode_name(mode: CliNetworkSemanticsMode) -> &'static s
     }
 }
 
-pub(crate) fn parse_visualize_check(raw: &str) -> VisualizeCheck {
+pub(crate) fn parse_visualize_check(raw: &str) -> CliParseResult<VisualizeCheck> {
     match raw {
-        "verify" => VisualizeCheck::Verify,
-        "liveness" => VisualizeCheck::Liveness,
-        "fair-liveness" | "fair_liveness" => VisualizeCheck::FairLiveness,
-        "prove" => VisualizeCheck::Prove,
-        "prove-fair" | "prove_fair" => VisualizeCheck::ProveFair,
-        other => {
-            eprintln!(
-                "Unknown visualize check: {other}. Use 'verify', 'liveness', 'fair-liveness', 'prove', or 'prove-fair'."
-            );
-            std::process::exit(1);
-        }
+        "verify" => Ok(VisualizeCheck::Verify),
+        "liveness" => Ok(VisualizeCheck::Liveness),
+        "fair-liveness" | "fair_liveness" => Ok(VisualizeCheck::FairLiveness),
+        "prove" => Ok(VisualizeCheck::Prove),
+        "prove-fair" | "prove_fair" => Ok(VisualizeCheck::ProveFair),
+        other => Err(CliParseError::new(format!(
+            "Unknown visualize check: {other}. Use 'verify', 'liveness', 'fair-liveness', 'prove', or 'prove-fair'."
+        ))),
     }
 }
 
@@ -175,18 +223,15 @@ pub(crate) fn visualize_check_name(check: VisualizeCheck) -> &'static str {
     }
 }
 
-pub(crate) fn parse_visualize_format(raw: &str) -> VisualizeFormat {
+pub(crate) fn parse_visualize_format(raw: &str) -> CliParseResult<VisualizeFormat> {
     match raw {
-        "timeline" => VisualizeFormat::Timeline,
-        "mermaid" => VisualizeFormat::Mermaid,
-        "markdown" => VisualizeFormat::Markdown,
-        "json" => VisualizeFormat::Json,
-        other => {
-            eprintln!(
-                "Unknown visualize format: {other}. Use 'timeline', 'mermaid', 'markdown', or 'json'."
-            );
-            std::process::exit(1);
-        }
+        "timeline" => Ok(VisualizeFormat::Timeline),
+        "mermaid" => Ok(VisualizeFormat::Mermaid),
+        "markdown" => Ok(VisualizeFormat::Markdown),
+        "json" => Ok(VisualizeFormat::Json),
+        other => Err(CliParseError::new(format!(
+            "Unknown visualize format: {other}. Use 'timeline', 'mermaid', 'markdown', or 'json'."
+        ))),
     }
 }
 
@@ -199,50 +244,49 @@ pub(crate) fn visualize_format_name(format: VisualizeFormat) -> &'static str {
     }
 }
 
-pub(crate) fn parse_fairness_mode(raw: &str) -> FairnessMode {
+pub(crate) fn parse_fairness_mode(raw: &str) -> CliParseResult<FairnessMode> {
     match raw {
-        "weak" => FairnessMode::Weak,
-        "strong" => FairnessMode::Strong,
-        other => {
-            eprintln!("Unknown fairness mode: {other}. Use 'weak' or 'strong'.");
-            std::process::exit(1);
-        }
+        "weak" => Ok(FairnessMode::Weak),
+        "strong" => Ok(FairnessMode::Strong),
+        other => Err(CliParseError::new(format!(
+            "Unknown fairness mode: {other}. Use 'weak' or 'strong'."
+        ))),
     }
 }
 
-pub(crate) fn parse_faithful_fallback_floor(raw: &str) -> Option<FaithfulFallbackFloor> {
+pub(crate) fn parse_faithful_fallback_floor(
+    raw: &str,
+) -> CliParseResult<Option<FaithfulFallbackFloor>> {
     match raw {
-        "off" | "none" | "disabled" => None,
-        "identity" | "faithful" => Some(FaithfulFallbackFloor::IdentitySelective),
-        "classic" => Some(FaithfulFallbackFloor::Classic),
-        other => {
-            eprintln!(
-                "Unknown faithful fallback mode: {other}. Use 'off', 'identity', or 'classic'."
-            );
-            std::process::exit(1);
-        }
+        "off" | "none" | "disabled" => Ok(None),
+        "identity" | "faithful" => Ok(Some(FaithfulFallbackFloor::IdentitySelective)),
+        "classic" => Ok(Some(FaithfulFallbackFloor::Classic)),
+        other => Err(CliParseError::new(format!(
+            "Unknown faithful fallback mode: {other}. Use 'off', 'identity', or 'classic'."
+        ))),
     }
 }
 
-pub(crate) fn execution_controls_from_cli(cli: &Cli) -> PipelineExecutionControls {
-    let faithful_fallback =
-        parse_faithful_fallback_floor(&cli.faithful_fallback).map(|floor| FaithfulFallbackConfig {
+pub(crate) fn execution_controls_from_cli(cli: &Cli) -> CliParseResult<PipelineExecutionControls> {
+    let faithful_fallback = parse_faithful_fallback_floor(&cli.faithful_fallback)?.map(|floor| {
+        FaithfulFallbackConfig {
             max_locations: cli.fallback_max_locations,
             max_shared_vars: cli.fallback_max_shared_vars,
             max_message_counters: cli.fallback_max_message_counters,
             floor,
-        });
+        }
+    });
     let liveness_memory_budget_mb = if cli.liveness_memory_budget_mb == 0 {
         None
     } else {
         Some(cli.liveness_memory_budget_mb)
     };
-    let por_mode_override = parse_cli_por_mode(&cli.por_mode);
-    PipelineExecutionControls {
+    let por_mode_override = parse_cli_por_mode(&cli.por_mode)?;
+    Ok(PipelineExecutionControls {
         faithful_fallback,
         liveness_memory_budget_mb,
         por_mode_override,
-    }
+    })
 }
 
 pub(crate) fn sandbox_config_from_cli(cli: &Cli) -> tarsier_engine::sandbox::SandboxConfig {
@@ -1582,26 +1626,20 @@ pub(crate) fn run_committee_command(
         epsilon,
     };
 
-    match tarsier_prob::analyze_committee(&spec) {
-        Ok(analysis) => {
-            println!("Committee Analysis:");
-            println!("  Population: {} ({} Byzantine)", population, byzantine);
-            println!("  Committee size: {}", size);
-            println!("  Expected Byzantine: {:.1}", analysis.expected_byzantine);
-            println!(
-                "  Max Byzantine in committee: {} (P[exceed] <= {:.0e})",
-                analysis.b_max, epsilon
-            );
-            println!(
-                "  Honest majority: {} of {}",
-                analysis.honest_majority, size
-            );
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let analysis =
+        tarsier_prob::analyze_committee(&spec).map_err(|e| miette::miette!("Error: {e}"))?;
+    println!("Committee Analysis:");
+    println!("  Population: {} ({} Byzantine)", population, byzantine);
+    println!("  Committee size: {}", size);
+    println!("  Expected Byzantine: {:.1}", analysis.expected_byzantine);
+    println!(
+        "  Max Byzantine in committee: {} (P[exceed] <= {:.0e})",
+        analysis.b_max, epsilon
+    );
+    println!(
+        "  Honest majority: {} of {}",
+        analysis.honest_majority, size
+    );
     Ok(())
 }
 
@@ -1621,11 +1659,10 @@ pub(crate) fn run_assist_command(
                 println!("{tmpl}");
             }
             None => {
-                eprintln!(
+                return Err(miette::miette!(
                     "Unknown property template '{}'. Available: agreement, validity, termination, liveness, integrity",
                     prop_kind
-                );
-                std::process::exit(1);
+                ));
             }
         }
     } else {

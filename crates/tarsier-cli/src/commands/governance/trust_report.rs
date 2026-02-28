@@ -1,3 +1,5 @@
+//! Governance trust-report synthesis from verification artifacts.
+//
 // Trust report generation.
 
 use tarsier_proof_kernel::CERTIFICATE_SCHEMA_VERSION;

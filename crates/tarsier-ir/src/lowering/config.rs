@@ -300,8 +300,8 @@ pub(super) fn validate_compromised_keys(
 pub(super) fn validate_identity_and_key_invariants(
     ta: &ThresholdAutomaton,
 ) -> Result<(), LoweringError> {
-    for (role, cfg) in &ta.role_identities {
-        match ta.key_ownership.get(&cfg.key_name) {
+    for (role, cfg) in &ta.security.role_identities {
+        match ta.security.key_ownership.get(&cfg.key_name) {
             Some(owner) if owner == role => {}
             Some(owner) => {
                 return Err(LoweringError::Unsupported(format!(
@@ -317,12 +317,12 @@ pub(super) fn validate_identity_and_key_invariants(
             }
         }
     }
-    validate_compromised_keys(&ta.compromised_keys, &ta.key_ownership)?;
+    validate_compromised_keys(&ta.security.compromised_keys, &ta.security.key_ownership)?;
 
     for (rule_id, rule) in ta.rules.iter().enumerate() {
-        let from_loc = &ta.locations[rule.from];
-        let to_loc = &ta.locations[rule.to];
-        let Some(identity_cfg) = ta.role_identities.get(&from_loc.role) else {
+        let from_loc = &ta.locations[rule.from.as_usize()];
+        let to_loc = &ta.locations[rule.to.as_usize()];
+        let Some(identity_cfg) = ta.security.role_identities.get(&from_loc.role) else {
             continue;
         };
         if identity_cfg.scope != RoleIdentityScope::Process {

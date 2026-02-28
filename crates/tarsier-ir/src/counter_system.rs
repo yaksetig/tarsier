@@ -1,43 +1,11 @@
 use crate::threshold_automaton::{RuleId, ThresholdAutomaton};
 use std::fmt;
 
-/// A counter system derived from a threshold automaton.
+/// Counter-system view used by SMT encoding and trace extraction.
 ///
-/// Instead of tracking individual process states, we track counters:
-/// how many processes are in each location (kappa), and the values
-/// of shared variables (gamma).
-#[derive(Debug, Clone)]
-pub struct CounterSystem {
-    /// Reference to the underlying threshold automaton.
-    pub automaton: ThresholdAutomaton,
-}
-
-impl CounterSystem {
-    /// Construct a counter-system wrapper from a threshold automaton.
-    pub fn new(automaton: ThresholdAutomaton) -> Self {
-        Self { automaton }
-    }
-
-    /// Return the number of control locations in the automaton.
-    pub fn num_locations(&self) -> usize {
-        self.automaton.locations.len()
-    }
-
-    /// Return the number of shared integer variables.
-    pub fn num_shared_vars(&self) -> usize {
-        self.automaton.shared_vars.len()
-    }
-
-    /// Return the number of transition rules.
-    pub fn num_rules(&self) -> usize {
-        self.automaton.rules.len()
-    }
-
-    /// Return the number of symbolic parameters.
-    pub fn num_parameters(&self) -> usize {
-        self.automaton.parameters.len()
-    }
-}
+/// This is an alias to the core threshold-automaton model: counter semantics
+/// are represented directly on `ThresholdAutomaton` without an extra wrapper.
+pub type CounterSystem = ThresholdAutomaton;
 
 /// A configuration of the counter system at a specific step.
 #[derive(Debug, Clone)]
@@ -301,6 +269,54 @@ fn write_config(f: &mut fmt::Formatter<'_>, config: &Configuration) -> fmt::Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::threshold_automaton::{
+        Guard, Location, Parameter, Rule, SharedVar, SharedVarKind, ThresholdAutomaton,
+    };
+
+    #[test]
+    fn configuration_new_initializes_zeroed_vectors() {
+        let cfg = Configuration::new(2, 3, 4);
+        assert_eq!(cfg.kappa, vec![0, 0]);
+        assert_eq!(cfg.gamma, vec![0, 0, 0]);
+        assert_eq!(cfg.params, vec![0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn counter_system_accessors_reflect_underlying_automaton_sizes() {
+        let mut ta = ThresholdAutomaton::new();
+        ta.add_parameter(Parameter { name: "n".into() });
+        ta.add_parameter(Parameter { name: "t".into() });
+        ta.add_location(Location {
+            name: "L0".into(),
+            role: "R".into(),
+            phase: "p0".into(),
+            local_vars: Default::default(),
+        });
+        ta.add_location(Location {
+            name: "L1".into(),
+            role: "R".into(),
+            phase: "p1".into(),
+            local_vars: Default::default(),
+        });
+        ta.add_shared_var(SharedVar {
+            name: "cnt_M".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        ta.add_rule(Rule {
+            from: 0.into(),
+            to: 1.into(),
+            guard: Guard::trivial(),
+            updates: vec![],
+        });
+
+        let cs: CounterSystem = ta;
+        assert_eq!(cs.num_locations(), 2);
+        assert_eq!(cs.num_shared_vars(), 1);
+        assert_eq!(cs.num_rules(), 1);
+        assert_eq!(cs.num_parameters(), 2);
+    }
 
     #[test]
     fn trace_display_includes_sender_recipient_payload_and_auth_fields_by_default() {
@@ -312,7 +328,7 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: 0.into(),
                 delta: 1,
                 deliveries: vec![MessageDeliveryEvent {
                     shared_var: 0,
@@ -365,5 +381,94 @@ mod tests {
         assert!(rendered.contains("auth.key_owner=Replica"));
         assert!(rendered.contains("auth.key_compromised=false"));
         assert!(rendered.contains("auth.provenance=OwnedKey"));
+    }
+
+    #[test]
+    fn trace_display_includes_por_status_and_empty_deliveries_marker() {
+        let trace = Trace {
+            initial_config: Configuration {
+                kappa: vec![1],
+                gamma: vec![],
+                params: vec![],
+            },
+            steps: vec![TraceStep {
+                smt_step: 7,
+                rule_id: 3.into(),
+                delta: 2,
+                deliveries: vec![],
+                config: Configuration {
+                    kappa: vec![1],
+                    gamma: vec![],
+                    params: vec![],
+                },
+                por_status: Some("active".into()),
+            }],
+            param_values: vec![],
+        };
+
+        let rendered = format!("{trace}");
+        assert!(rendered.contains("fire rule r3 (k=7, delta=2) [active]"));
+        assert!(rendered.contains("deliveries: (none)"));
+    }
+
+    #[test]
+    fn trace_display_falls_back_for_missing_identity_and_auth_metadata() {
+        let trace = Trace {
+            initial_config: Configuration {
+                kappa: vec![1],
+                gamma: vec![0],
+                params: vec![],
+            },
+            steps: vec![TraceStep {
+                smt_step: 0,
+                rule_id: 0.into(),
+                delta: 1,
+                deliveries: vec![MessageDeliveryEvent {
+                    shared_var: 0,
+                    shared_var_name: "cnt_Forge".into(),
+                    sender: MessageIdentity {
+                        role: "Byzantine".into(),
+                        process: None,
+                        key: None,
+                    },
+                    recipient: MessageIdentity {
+                        role: "Replica".into(),
+                        process: None,
+                        key: None,
+                    },
+                    payload: MessagePayloadVariant {
+                        family: "Forge".into(),
+                        fields: vec![],
+                        variant: "Forge".into(),
+                    },
+                    count: 1,
+                    kind: MessageEventKind::Forge,
+                    auth: MessageAuthMetadata {
+                        authenticated_channel: false,
+                        signature_key: None,
+                        key_owner_role: None,
+                        key_compromised: false,
+                        provenance: SignatureProvenance::Unknown,
+                    },
+                }],
+                config: Configuration {
+                    kappa: vec![1],
+                    gamma: vec![1],
+                    params: vec![],
+                },
+                por_status: None,
+            }],
+            param_values: vec![],
+        };
+
+        let rendered = format!("{trace}");
+        assert!(rendered.contains("sender=Byzantine"));
+        assert!(rendered.contains("sender.key=-"));
+        assert!(rendered.contains("recipient=Replica"));
+        assert!(rendered.contains("recipient.key=-"));
+        assert!(rendered.contains("payload.fields=(none)"));
+        assert!(rendered.contains("auth.channel=unauthenticated"));
+        assert!(rendered.contains("auth.signature_key=-"));
+        assert!(rendered.contains("auth.key_owner=-"));
     }
 }

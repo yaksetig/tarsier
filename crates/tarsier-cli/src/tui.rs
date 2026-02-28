@@ -305,9 +305,9 @@ fn draw_deliveries_panel(f: &mut Frame, area: Rect, state: &ExploreState) {
 
         // Show rule info
         if let Some(ta) = &state.ta {
-            let rule = &ta.rules[step.rule_id];
-            let from = &ta.locations[rule.from].name;
-            let to = &ta.locations[rule.to].name;
+            let rule = &ta.rules[step.rule_id.as_usize()];
+            let from = &ta.locations[rule.from.as_usize()].name;
+            let to = &ta.locations[rule.to.as_usize()].name;
             lines.push(Line::from(Span::styled(
                 format!("Rule r{} x{}", step.rule_id, step.delta),
                 Style::default().add_modifier(Modifier::BOLD),
@@ -422,7 +422,7 @@ mod tests {
                 steps: vec![
                     TraceStep {
                         smt_step: 0,
-                        rule_id: 0,
+                        rule_id: 0.into(),
                         delta: 1,
                         deliveries: vec![],
                         config: Configuration {
@@ -434,7 +434,7 @@ mod tests {
                     },
                     TraceStep {
                         smt_step: 1,
-                        rule_id: 0,
+                        rule_id: 0.into(),
                         delta: 1,
                         deliveries: vec![],
                         config: Configuration {

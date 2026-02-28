@@ -258,6 +258,8 @@ pub fn validate_manifest_files(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn valid_manifest() -> ConformanceManifest {
         ConformanceManifest {
@@ -277,6 +279,17 @@ mod tests {
                 notes: Some("A test".into()),
             }],
         }
+    }
+
+    fn fresh_temp_dir(prefix: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after epoch")
+            .as_nanos();
+        path.push(format!("tarsier_manifest_tests_{prefix}_{nonce}"));
+        fs::create_dir_all(&path).expect("temp dir should be created");
+        path
     }
 
     #[test]
@@ -499,5 +512,55 @@ mod tests {
         let manifest: ConformanceManifest = serde_json::from_str(json).unwrap();
         assert_eq!(manifest.entries[0].trace_adapter, "runtime");
         assert_eq!(manifest.entries[0].checker_mode, "permissive");
+    }
+
+    #[test]
+    fn uppercase_sha256_is_accepted() {
+        let mut m = valid_manifest();
+        m.entries[0].model_sha256 = Some("A".repeat(64));
+        let errors = validate_manifest(&m);
+        assert!(
+            errors.is_empty(),
+            "uppercase hex SHA-256 should be valid: {:?}",
+            errors.iter().map(|e| &e.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn validate_manifest_files_reports_missing_inputs() {
+        let m = valid_manifest();
+        let base_dir = fresh_temp_dir("missing");
+        let errors = validate_manifest_files(&m, &base_dir);
+
+        assert_eq!(errors.len(), 2, "expected both protocol and trace errors");
+        assert!(errors
+            .iter()
+            .any(|e| e.message.contains("protocol_file 'protocol.trs' not found")));
+        assert!(errors
+            .iter()
+            .any(|e| e.message.contains("trace_file 'trace.json' not found")));
+
+        fs::remove_dir_all(&base_dir).expect("temp dir cleanup should succeed");
+    }
+
+    #[test]
+    fn validate_manifest_files_accepts_existing_inputs() {
+        let m = valid_manifest();
+        let base_dir = fresh_temp_dir("existing");
+        fs::write(
+            base_dir.join("protocol.trs"),
+            "protocol P { role R { phase s {} } }",
+        )
+        .expect("protocol file write should succeed");
+        fs::write(base_dir.join("trace.json"), "{}").expect("trace file write should succeed");
+
+        let errors = validate_manifest_files(&m, &base_dir);
+        assert!(
+            errors.is_empty(),
+            "existing files should validate: {:?}",
+            errors.iter().map(|e| &e.message).collect::<Vec<_>>()
+        );
+
+        fs::remove_dir_all(&base_dir).expect("temp dir cleanup should succeed");
     }
 }

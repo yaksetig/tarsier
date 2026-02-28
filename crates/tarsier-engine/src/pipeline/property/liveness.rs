@@ -1,6 +1,7 @@
 //! Liveness spec extraction.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::property::*;
 
 /// Extract and validate one liveness declaration into an executable liveness spec.
 pub(crate) fn extract_liveness_spec_from_decl(

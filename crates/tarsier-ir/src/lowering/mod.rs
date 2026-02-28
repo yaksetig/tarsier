@@ -195,7 +195,7 @@ pub fn lower_interface_assumption(
         .parameters
         .iter()
         .enumerate()
-        .map(|(i, p)| (p.name.clone(), i))
+        .map(|(i, p)| (p.name.clone(), ParamId::from(i)))
         .collect();
     let lhs = lower_linear_expr_to_lc(&assumption.lhs, &param_map)?;
     let rhs = lower_linear_expr_to_lc(&assumption.rhs, &param_map)?;
@@ -238,7 +238,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         let lhs = lower_linear_expr_to_lc(&res.condition.lhs, &param_ids)?;
         let rhs = lower_linear_expr_to_lc(&res.condition.rhs, &param_ids)?;
         let op = lower_cmp_op(res.condition.op);
-        ta.resilience_condition = Some(LinearConstraint { lhs, op, rhs });
+        ta.constraints.resilience_condition = Some(LinearConstraint { lhs, op, rhs });
     }
 
     // 2b. Set adversary/fault/timing/value-abstraction configuration
@@ -246,44 +246,44 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         match item.key.as_str() {
             "bound" => {
                 if let Some(&pid) = param_ids.get(&item.value) {
-                    ta.adversary_bound_param = Some(pid);
+                    ta.constraints.adversary_bound_param = Some(pid);
                 } else {
                     return Err(LoweringError::UnknownParameter(item.value.clone()));
                 }
             }
             "model" => {
-                ta.fault_model = parse_fault_model(&item.value)?;
+                ta.semantics.fault_model = parse_fault_model(&item.value)?;
             }
             "timing" => {
-                ta.timing_model = parse_timing_model(&item.value)?;
+                ta.semantics.timing_model = parse_timing_model(&item.value)?;
             }
             "gst" => {
                 if let Some(&pid) = param_ids.get(&item.value) {
-                    ta.gst_param = Some(pid);
+                    ta.semantics.gst_param = Some(pid);
                 } else {
                     return Err(LoweringError::UnknownParameter(item.value.clone()));
                 }
             }
             "values" | "value_abstraction" => {
-                ta.value_abstraction = parse_value_abstraction_mode(&item.value)?;
+                ta.semantics.value_abstraction = parse_value_abstraction_mode(&item.value)?;
             }
             "equivocation" => {
-                ta.equivocation_mode = parse_equivocation_mode(&item.value)?;
+                ta.semantics.equivocation_mode = parse_equivocation_mode(&item.value)?;
             }
             "auth" | "authentication" => {
-                ta.authentication_mode = parse_authentication_mode(&item.value)?;
+                ta.semantics.authentication_mode = parse_authentication_mode(&item.value)?;
             }
             "network" => {
-                ta.network_semantics = parse_network_semantics(&item.value)?;
+                ta.semantics.network_semantics = parse_network_semantics(&item.value)?;
             }
             "delivery" | "delivery_scope" => {
-                ta.delivery_control = parse_delivery_control_mode(&item.value)?;
+                ta.semantics.delivery_control = parse_delivery_control_mode(&item.value)?;
             }
             "faults" | "fault_scope" | "fault_budget" => {
-                ta.fault_budget_scope = parse_fault_budget_scope(&item.value)?;
+                ta.semantics.fault_budget_scope = parse_fault_budget_scope(&item.value)?;
             }
             "por" | "por_mode" => {
-                ta.por_mode = parse_por_mode(&item.value)?;
+                ta.semantics.por_mode = parse_por_mode(&item.value)?;
             }
             "compromise" | "compromised" | "compromised_key" | "compromised_keys" => {
                 compromised_keys_from_adversary.insert(item.value.clone());
@@ -295,13 +295,13 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             }
         }
     }
-    if ta.timing_model == TimingModel::PartialSynchrony && ta.gst_param.is_none() {
+    if ta.semantics.timing_model == TimingModel::PartialSynchrony && ta.semantics.gst_param.is_none() {
         return Err(LoweringError::Unsupported(
             "timing: partial_synchrony requires `adversary { gst: <param>; }`".into(),
         ));
     }
-    if ta.delivery_control != DeliveryControlMode::LegacyCounter
-        && ta.network_semantics == NetworkSemantics::Classic
+    if ta.semantics.delivery_control != DeliveryControlMode::LegacyCounter
+        && ta.semantics.network_semantics == NetworkSemantics::Classic
     {
         return Err(LoweringError::Unsupported(
             "delivery controls require non-classic network semantics. \
@@ -309,11 +309,11 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                 .into(),
         ));
     }
-    ta.role_identities = build_role_identity_configs(proto, ta.network_semantics)?;
-    ta.key_ownership = build_key_ownership(&ta.role_identities)?;
-    validate_compromised_keys(&compromised_keys_from_adversary, &ta.key_ownership)?;
-    ta.compromised_keys = compromised_keys_from_adversary;
-    ta.message_policies = build_message_policy_overrides(proto)?;
+    ta.security.role_identities = build_role_identity_configs(proto, ta.semantics.network_semantics)?;
+    ta.security.key_ownership = build_key_ownership(&ta.security.role_identities)?;
+    validate_compromised_keys(&compromised_keys_from_adversary, &ta.security.key_ownership)?;
+    ta.security.compromised_keys = compromised_keys_from_adversary;
+    ta.security.message_policies = build_message_policy_overrides(proto)?;
 
     // 2c. Process committee declarations
     for committee in &proto.committees {
@@ -347,7 +347,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                 },
                 "bound_param" => match &item.value {
                     ast::CommitteeValue::Param(name) => {
-                        if let Some(&pid) = param_ids.get(name) {
+                        if let Some(&pid) = param_ids.get(name.as_str()) {
                             bound_param = Some(pid);
                         } else {
                             return Err(LoweringError::UnknownParameter(name.clone()));
@@ -388,7 +388,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             ))
         })?;
 
-        ta.committees.push(IrCommitteeSpec {
+        ta.constraints.committees.push(IrCommitteeSpec {
             name: committee.name.clone(),
             population,
             byzantine,
@@ -399,7 +399,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
     }
 
     // 3. Add shared variables for each message type (expanded by field values)
-    let mut message_infos = build_message_infos(&proto.messages, &enum_defs, ta.value_abstraction)?;
+    let mut message_infos = build_message_infos(&proto.messages, &enum_defs, ta.semantics.value_abstraction)?;
     let mut crypto_objects: IndexMap<String, CryptoObjectInfo> = IndexMap::new();
     for object in &proto.crypto_objects {
         let source_info = message_infos
@@ -444,7 +444,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                 conflict_policy,
             },
         );
-        ta.crypto_objects.insert(
+        ta.security.crypto_objects.insert(
             object.name.clone(),
             IrCryptoObjectSpec {
                 name: object.name.clone(),
@@ -456,7 +456,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             },
         );
         // Crypto objects are authenticated by default unless explicitly overridden.
-        ta.message_policies
+        ta.security.message_policies
             .entry(object.name.clone())
             .or_insert(MessagePolicy {
                 auth: MessageAuthPolicy::Authenticated,
@@ -471,10 +471,10 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         );
     }
     let role_names: Vec<String> = proto.roles.iter().map(|r| r.node.name.clone()).collect();
-    let use_cohort_selective_channels = ta.network_semantics == NetworkSemantics::CohortSelective;
-    let use_process_selective_channels = ta.network_semantics == NetworkSemantics::ProcessSelective;
+    let use_cohort_selective_channels = ta.semantics.network_semantics == NetworkSemantics::CohortSelective;
+    let use_process_selective_channels = ta.semantics.network_semantics == NetworkSemantics::ProcessSelective;
     let role_process_identity_var: IndexMap<String, String> = ta
-        .role_identities
+        .security.role_identities
         .iter()
         .filter_map(|(role, cfg)| {
             if cfg.scope == RoleIdentityScope::Process {
@@ -530,7 +530,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             for recipient in channels {
                 for values in &combos {
                     let sender_candidates: Vec<Option<&str>> =
-                        if ta.network_semantics == NetworkSemantics::Classic {
+                        if ta.semantics.network_semantics == NetworkSemantics::Classic {
                             vec![None]
                         } else {
                             all_sender_channels
@@ -559,7 +559,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         }
     }
 
-    let crash_counter_var = if ta.fault_model == FaultModel::Crash {
+    let crash_counter_var = if ta.semantics.fault_model == FaultModel::Crash {
         if ta.find_shared_var_by_name(INTERNAL_CRASH_COUNTER).is_some() {
             return Err(LoweringError::Unsupported(format!(
                 "Internal crash counter name collision for '{INTERNAL_CRASH_COUNTER}'"
@@ -581,7 +581,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
     for role in &proto.roles {
         let role_decl = &role.node;
         let process_identity_var = ta
-            .role_identities
+            .security.role_identities
             .get(&role_decl.name)
             .and_then(|cfg| {
                 if cfg.scope == RoleIdentityScope::Process {
@@ -668,7 +668,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             }
         }
 
-        if ta.fault_model == FaultModel::Crash {
+        if ta.semantics.fault_model == FaultModel::Crash {
             if local_var_types.contains_key(INTERNAL_ALIVE_VAR) {
                 return Err(LoweringError::Unsupported(format!(
                     "Local variable name collision with internal crash-state variable '{INTERNAL_ALIVE_VAR}'"
@@ -882,7 +882,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         for flag in justify_flag_by_object.values() {
             initial_values.insert(flag.clone(), LocalValue::Bool(false));
         }
-        if ta.fault_model == FaultModel::Crash {
+        if ta.semantics.fault_model == FaultModel::Crash {
             initial_values.insert(INTERNAL_ALIVE_VAR.into(), LocalValue::Bool(true));
         }
 
@@ -891,7 +891,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             if let Some(locs) = location_map.get(init) {
                 // Find the location(s) matching initial variable values
                 for &lid in locs {
-                    let loc = &ta.locations[lid];
+                    let loc = &ta.locations[lid.as_usize()];
                     let is_initial = initial_values
                         .iter()
                         .all(|(name, expected)| loc.local_vars.get(name) == Some(expected));
@@ -1024,8 +1024,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                     // Create rules for each matching (from, to) location pair,
                     // filtering source locations by local guard requirements.
                     for &from_lid in &from_locs {
-                        let from_loc = &ta.locations[from_lid];
-                        if ta.fault_model == FaultModel::Crash
+                        let from_loc = &ta.locations[from_lid.as_usize()];
+                        if ta.semantics.fault_model == FaultModel::Crash
                             && from_loc.local_vars.get(INTERNAL_ALIVE_VAR)
                                 != Some(&LocalValue::Bool(true))
                         {
@@ -1044,11 +1044,11 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                         let current_recipient_channel = recipient_channel_for_location(
                             &role_decl.name,
                             &from_loc.local_vars,
-                            ta.network_semantics,
+                            ta.semantics.network_semantics,
                             &process_identity_var,
                         )?;
                         let sender_channel_opt =
-                            if ta.network_semantics == NetworkSemantics::Classic {
+                            if ta.semantics.network_semantics == NetworkSemantics::Classic {
                                 None
                             } else {
                                 Some(current_recipient_channel.as_str())
@@ -1316,7 +1316,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                 )));
                             }
                             if ta
-                                .role_identities
+                                .security.role_identities
                                 .get(&role_decl.name)
                                 .map(|cfg| cfg.scope == RoleIdentityScope::Process)
                                 .unwrap_or(false)
@@ -1357,7 +1357,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
 
                         // Find matching target location.
                         for &to_lid in to_locs {
-                            let to_loc = &ta.locations[to_lid];
+                            let to_loc = &ta.locations[to_lid.as_usize()];
                             if to_loc.local_vars == target_vars {
                                 ta.add_rule(Rule {
                                     from: from_lid,
@@ -1405,15 +1405,15 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                         .cloned()
                         .unwrap_or_default();
                     for &from_lid in &from_locs {
-                        let from_loc = &ta.locations[from_lid];
-                        if ta.fault_model == FaultModel::Crash
+                        let from_loc = &ta.locations[from_lid.as_usize()];
+                        if ta.semantics.fault_model == FaultModel::Crash
                             && from_loc.local_vars.get(INTERNAL_ALIVE_VAR)
                                 != Some(&LocalValue::Bool(true))
                         {
                             continue;
                         }
                         let current_view = match from_loc.local_vars.get(&pm.view_var) {
-                            Some(LocalValue::Int(v)) => *v,
+                            Some(LocalValue::Int(v)) => v,
                             _ => {
                                 return Err(LoweringError::Unsupported(format!(
                                     "Pacemaker view variable '{}' is not integer-valued",
@@ -1435,7 +1435,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                         }
 
                         for &to_lid in start_locs {
-                            let to_loc = &ta.locations[to_lid];
+                            let to_loc = &ta.locations[to_lid.as_usize()];
                             if to_loc.local_vars == target_vars {
                                 ta.add_rule(Rule {
                                     from: from_lid,
@@ -1458,7 +1458,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         // - a crash transition can move any alive process to the matching
         //   dead location in the same phase
         // - each crash increments `__crashed_count`; encoder bounds it by `f`
-        if ta.fault_model == FaultModel::Crash {
+        if ta.semantics.fault_model == FaultModel::Crash {
             let crash_counter_var = crash_counter_var.ok_or_else(|| {
                 LoweringError::Unsupported("crash model requires internal crash counter".into())
             })?;
@@ -1468,7 +1468,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                     .cloned()
                     .unwrap_or_default();
                 for &from_lid in &phase_locs {
-                    let from_loc = &ta.locations[from_lid];
+                    let from_loc = &ta.locations[from_lid.as_usize()];
                     if from_loc.local_vars.get(INTERNAL_ALIVE_VAR) != Some(&LocalValue::Bool(true))
                     {
                         continue;
@@ -1478,7 +1478,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                     target_vars.insert(INTERNAL_ALIVE_VAR.into(), LocalValue::Bool(false));
 
                     for &to_lid in &phase_locs {
-                        let to_loc = &ta.locations[to_lid];
+                        let to_loc = &ta.locations[to_lid.as_usize()];
                         if to_loc.local_vars == target_vars {
                             ta.add_rule(Rule {
                                 from: from_lid,

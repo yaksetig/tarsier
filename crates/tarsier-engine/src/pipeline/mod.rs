@@ -3,7 +3,6 @@
 #![allow(clippy::result_large_err)]
 // Submodules use `use super::*` to access these imports; the unused_imports lint
 // fires because the items are not referenced directly in this file.
-#![allow(unused_imports)]
 
 use serde::Serialize;
 use sha2::Sha256;
@@ -533,6 +532,7 @@ pub(crate) mod analysis;
 pub(crate) mod certification;
 pub(crate) mod diagnostics;
 pub(crate) mod property;
+pub mod stages;
 pub(crate) mod verification;
 
 use diagnostics::push_phase_profile;
@@ -567,6 +567,11 @@ pub use certification::{
     generate_safety_certificate,
 };
 
+pub use stages::{
+    parse_lower_abstract, AbstractStage, ComposedStage, LowerStage, ParseInput, ParseStage,
+    PipelineStage, PipelineStageExt,
+};
+
 // Re-export the execution controls and diagnostics functions
 // (already pub in this module)
 
@@ -581,7 +586,7 @@ mod tests {
     use super::diagnostics::*;
     use super::property::*;
     use super::verification::*;
-    use super::*;
+    use crate::pipeline::*;
 
     #[test]
     fn remaining_timeout_rounds_up_to_one_second() {
@@ -979,7 +984,7 @@ protocol FallbackBudget {
         };
         let ta = lower_with_controls(&program, "test.fallback", controls)
             .expect("lowering with fallback should succeed");
-        assert_eq!(ta.network_semantics, NetworkSemantics::IdentitySelective);
+        assert_eq!(ta.semantics.network_semantics, NetworkSemantics::IdentitySelective);
 
         let diag = take_run_diagnostics();
         assert!(
@@ -1034,7 +1039,7 @@ protocol NoFallback {
             PipelineExecutionControls::default(),
         )
         .expect("lowering should succeed");
-        assert_eq!(ta.network_semantics, NetworkSemantics::ProcessSelective);
+        assert_eq!(ta.semantics.network_semantics, NetworkSemantics::ProcessSelective);
         let diag = take_run_diagnostics();
         let lowering = diag
             .lowerings
@@ -2604,7 +2609,7 @@ protocol TemporalFailing {
             steps: vec![
                 TraceStep {
                     smt_step: 0,
-                    rule_id: 0,
+                    rule_id: 0.into(),
                     delta: 1,
                     deliveries: vec![],
                     config: Configuration {
@@ -2616,7 +2621,7 @@ protocol TemporalFailing {
                 },
                 TraceStep {
                     smt_step: 1,
-                    rule_id: 0,
+                    rule_id: 0.into(),
                     delta: 1,
                     deliveries: vec![],
                     config: Configuration {
@@ -2673,7 +2678,7 @@ protocol CtiConcreteClassification {
             model_values.insert(format!("p_{pid}"), ModelValue::Int(value));
         }
         for loc_id in 0..ta.locations.len() {
-            let value = if ta.initial_locations.contains(&loc_id) {
+            let value = if ta.initial_locations.contains(&loc_id.into()) {
                 1
             } else {
                 0

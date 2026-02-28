@@ -2,7 +2,7 @@
 
 use sha2::Digest; // trait needed for Sha256::new()/update()/finalize()
 
-use super::*;
+use crate::pipeline::*;
 
 pub(super) fn push_lowering_diagnostic(diag: LoweringDiagnostic) {
     RUN_DIAGNOSTICS.with(|cell| {
@@ -135,7 +135,11 @@ pub(super) fn push_smt_profile(context: &str, profile: SmtRunProfile) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        liveness_memory_budget_bytes, liveness_memory_budget_reason, push_reduction_note,
+        push_smt_profile, record_property_compilation, sha256_hex_text,
+    };
+    use crate::pipeline::*;
 
     fn test_property_decl() -> ast::PropertyDecl {
         let src = r#"

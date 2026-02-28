@@ -1,6 +1,7 @@
 //! SMT variable naming, term construction, and fair-lasso encoding helpers.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
 pub(crate) fn run_single_depth_bmc_encoding<S: SmtSolver>(
     solver: &mut S,
@@ -78,7 +79,7 @@ pub(crate) fn one_hot_assertion(vars: &[String]) -> SmtTerm {
 pub(crate) fn encode_lc_term(lc: &LinearCombination) -> SmtTerm {
     let mut result = SmtTerm::int(lc.constant);
     for &(coeff, pid) in &lc.terms {
-        let pv = SmtTerm::var(pdr_param_var(pid));
+        let pv = SmtTerm::var(pdr_param_var(pid.as_usize()));
         let scaled = if coeff == 1 {
             pv
         } else {
@@ -100,7 +101,7 @@ pub(crate) fn encode_guard_atom_enabled_at_step(atom: &GuardAtom, step: usize) -
             let lhs = if *distinct {
                 let mut terms: Vec<SmtTerm> = Vec::with_capacity(vars.len());
                 for var in vars {
-                    let gv = SmtTerm::var(pdr_gamma_var(step, *var));
+                    let gv = SmtTerm::var(pdr_gamma_var(step, var.as_usize()));
                     terms.push(SmtTerm::Ite(
                         Box::new(gv.gt(SmtTerm::int(0))),
                         Box::new(SmtTerm::int(1)),
@@ -119,7 +120,7 @@ pub(crate) fn encode_guard_atom_enabled_at_step(atom: &GuardAtom, step: usize) -
             } else {
                 let mut sum = SmtTerm::int(0);
                 for var in vars {
-                    sum = sum.add(SmtTerm::var(pdr_gamma_var(step, *var)));
+                    sum = sum.add(SmtTerm::var(pdr_gamma_var(step, var.as_usize())));
                 }
                 sum
             };
@@ -253,7 +254,7 @@ pub(crate) fn build_fair_lasso_encoding(
     target: &FairLivenessTarget,
     fairness: FairnessMode,
 ) -> Result<tarsier_smt::encoder::BmcEncoding, PipelineError> {
-    let ta = &cs.automaton;
+    let ta = cs;
     let dummy_property = SafetyProperty::Agreement {
         conflicting_pairs: Vec::new(),
     };
@@ -310,11 +311,12 @@ pub(crate) fn build_fair_lasso_encoding(
         }
     }
 
-    if ta.timing_model == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony {
-        if let Some(gst_pid) = ta.gst_param {
+    if ta.semantics.timing_model == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony {
+        if let Some(gst_pid) = ta.semantics.gst_param {
             // Fair lasso must be fully post-GST to represent steady-state behavior.
             step_encoding.assertions.push(
-                SmtTerm::var(pdr_param_var(gst_pid)).le(SmtTerm::var(pdr_time_var(loop_start))),
+                SmtTerm::var(pdr_param_var(gst_pid.as_usize()))
+                    .le(SmtTerm::var(pdr_time_var(loop_start))),
             );
         }
     }
@@ -331,11 +333,11 @@ pub(crate) fn build_fair_lasso_encoding(
                     .iter()
                     .map(|a| encode_guard_atom_enabled_at_step(a, step))
                     .collect::<Vec<_>>();
-                if ta.timing_model == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
+                if ta.semantics.timing_model == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
                 {
-                    if let Some(gst_pid) = ta.gst_param {
+                    if let Some(gst_pid) = ta.semantics.gst_param {
                         atoms.push(
-                            SmtTerm::var(pdr_param_var(gst_pid))
+                            SmtTerm::var(pdr_param_var(gst_pid.as_usize()))
                                 .le(SmtTerm::var(pdr_time_var(step))),
                         );
                     }
@@ -375,7 +377,8 @@ pub(crate) fn build_fair_lasso_encoding(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::pipeline::*;
+use crate::pipeline::verification::*;
 
     #[test]
     fn pdr_param_var_format() {
@@ -469,7 +472,7 @@ mod tests {
     fn encode_lc_term_single_term_coeff_1() {
         let lc = LinearCombination {
             constant: 0,
-            terms: vec![(1, 0)],
+            terms: vec![(1, 0.into())],
         };
         let result = encode_lc_term(&lc);
         // (+ 0 p_0) since coeff is 1, no multiplication
@@ -481,7 +484,7 @@ mod tests {
     fn encode_lc_term_with_coefficient() {
         let lc = LinearCombination {
             constant: 1,
-            terms: vec![(2, 0)],
+            terms: vec![(2, 0.into())],
         };
         let result = encode_lc_term(&lc);
         // (+ 1 (* 2 p_0))
@@ -493,7 +496,7 @@ mod tests {
     fn encode_lc_term_multiple_terms() {
         let lc = LinearCombination {
             constant: 5,
-            terms: vec![(1, 0), (3, 1)],
+            terms: vec![(1, 0.into()), (3, 1.into())],
         };
         let result = encode_lc_term(&lc);
         // (+ (+ 5 p_0) (* 3 p_1))
@@ -506,7 +509,7 @@ mod tests {
     #[test]
     fn encode_guard_atom_ge_non_distinct() {
         let atom = GuardAtom::Threshold {
-            vars: vec![0, 1],
+            vars: vec![0.into(), 1.into()],
             op: CmpOp::Ge,
             bound: LinearCombination {
                 constant: 1,
@@ -527,7 +530,7 @@ mod tests {
     #[test]
     fn encode_guard_atom_ne_operator() {
         let atom = GuardAtom::Threshold {
-            vars: vec![0],
+            vars: vec![0.into()],
             op: CmpOp::Ne,
             bound: LinearCombination {
                 constant: 0,

@@ -1,7 +1,8 @@
 //! `build_quantified_state_predicate_term*` functions.
 
 use super::super::verification::pdr_kappa_var;
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::property::*;
 
 /// Encode a quantified state predicate at one time-step.
 pub(crate) fn build_quantified_state_predicate_term_with_bindings(

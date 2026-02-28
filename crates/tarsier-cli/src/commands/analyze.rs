@@ -33,7 +33,7 @@ use crate::{
 
 use super::helpers::{
     make_options, parse_analysis_mode, parse_fairness_mode, parse_output_format,
-    parse_solver_choice, parse_soundness_mode, sandbox_read_source,
+    parse_solver_choice, parse_soundness_mode, report_with_exit_code, sandbox_read_source,
 };
 
 // ---------------------------------------------------------------------------
@@ -2199,21 +2199,16 @@ pub(crate) fn run_analyze_command(args: AnalyzeCommandArgs<'_>) -> miette::Resul
         .collect();
 
         if !advanced_flags_used.is_empty() {
-            eprintln!(
-                "Error: {} {} advanced-only in beginner profile.",
+            return Err(miette::miette!(
+                "{} {} advanced-only in beginner profile.\nHint: Use --advanced to unlock, or use --profile pro for full control.\nExample: tarsier analyze {} --advanced --depth 20",
                 advanced_flags_used.join(", "),
                 if advanced_flags_used.len() == 1 {
                     "is"
                 } else {
                     "are"
-                }
-            );
-            eprintln!("Hint: Use --advanced to unlock, or use --profile pro for full control.");
-            eprintln!(
-                "Example: tarsier analyze {} --advanced --depth 20",
+                },
                 file.display()
-            );
-            std::process::exit(1);
+            ));
         }
     }
 
@@ -2230,8 +2225,9 @@ pub(crate) fn run_analyze_command(args: AnalyzeCommandArgs<'_>) -> miette::Resul
             "safety+liveness" => "proof",
             "release" => "audit",
             other => {
-                eprintln!("Error: unknown goal '{other}'. Valid goals: bughunt, safety, safety+liveness, release");
-                std::process::exit(1);
+                return Err(miette::miette!(
+                    "Unknown goal '{other}'. Valid goals: bughunt, safety, safety+liveness, release"
+                ));
             }
         }
         .to_string()
@@ -2266,12 +2262,12 @@ pub(crate) fn run_analyze_command(args: AnalyzeCommandArgs<'_>) -> miette::Resul
         _ => (10, 12, 300, "strict", "weak", "z3"),
     };
 
-    let eff_mode = parse_analysis_mode(&effective_mode_str);
-    let eff_solver = parse_solver_choice(solver.as_deref().unwrap_or(default_solver));
-    let eff_soundness = parse_soundness_mode(soundness.as_deref().unwrap_or(default_soundness));
+    let eff_mode = parse_analysis_mode(&effective_mode_str)?;
+    let eff_solver = parse_solver_choice(solver.as_deref().unwrap_or(default_solver))?;
+    let eff_soundness = parse_soundness_mode(soundness.as_deref().unwrap_or(default_soundness))?;
     validate_cli_network_semantics_mode(&source, &filename, eff_soundness, cli_network_mode)?;
-    let eff_fairness = parse_fairness_mode(fairness.as_deref().unwrap_or(default_fairness));
-    let output_format = parse_output_format(format);
+    let eff_fairness = parse_fairness_mode(fairness.as_deref().unwrap_or(default_fairness))?;
+    let output_format = parse_output_format(format)?;
     let cfg = LayerRunCfg {
         solver: eff_solver,
         depth: depth.unwrap_or(default_depth),
@@ -2325,7 +2321,10 @@ pub(crate) fn run_analyze_command(args: AnalyzeCommandArgs<'_>) -> miette::Resul
     }
 
     if report.overall != "pass" {
-        std::process::exit(2);
+        return Err(report_with_exit_code(
+            2,
+            format!("Analysis reported overall='{}'.", report.overall),
+        ));
     }
 
     Ok(())

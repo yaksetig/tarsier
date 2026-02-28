@@ -9,7 +9,7 @@ use tarsier_smt::solver::Model;
 
 /// Extract a counterexample trace from a SAT model.
 pub fn extract_trace(cs: &CounterSystem, model: &Model, depth: usize) -> Trace {
-    let ta = &cs.automaton;
+    let ta = cs;
     let num_locs = cs.num_locations();
     let num_svars = cs.num_shared_vars();
     let num_params = cs.num_parameters();
@@ -28,7 +28,7 @@ pub fn extract_trace(cs: &CounterSystem, model: &Model, depth: usize) -> Trace {
     let initial_config = extract_config(model, 0, num_locs, num_svars, &param_vals);
 
     // Determine POR annotation for trace steps
-    let por_status = match ta.por_mode {
+    let por_status = match ta.semantics.por_mode {
         PorMode::Off => None,
         PorMode::Static => Some("active (static POR)".to_string()),
         PorMode::Full => Some("active (full POR)".to_string()),
@@ -58,7 +58,7 @@ pub fn extract_trace(cs: &CounterSystem, model: &Model, depth: usize) -> Trace {
                 }
                 steps.push(TraceStep {
                     smt_step: k,
-                    rule_id: r,
+                    rule_id: r.into(),
                     delta,
                     deliveries,
                     config,
@@ -113,9 +113,9 @@ pub fn format_trace(trace: &Trace, ta: &ThresholdAutomaton) -> String {
         } else {
             &trace.steps[i - 1].config
         };
-        let rule = &ta.rules[step.rule_id];
-        let from_name = &ta.locations[rule.from].name;
-        let to_name = &ta.locations[rule.to].name;
+        let rule = &ta.rules[step.rule_id.as_usize()];
+        let from_name = &ta.locations[rule.from.as_usize()].name;
+        let to_name = &ta.locations[rule.to.as_usize()].name;
         let por_tag = match &step.por_status {
             Some(status) => format!(" [{status}]"),
             None => String::new(),
@@ -179,7 +179,7 @@ fn eval_linear_combination(
 ) -> i64 {
     let mut value = lc.constant;
     for (coeff, pid) in &lc.terms {
-        value += coeff * params.get(*pid).copied().unwrap_or(0);
+        value += coeff * params.get(pid.as_usize()).copied().unwrap_or(0);
     }
     value
 }
@@ -199,7 +199,7 @@ fn crypto_summary_for_delivery(
     pre_config: &Configuration,
     delivery: &MessageDeliveryEvent,
 ) -> Option<String> {
-    let spec = ta.crypto_objects.get(&delivery.payload.family)?;
+    let spec = ta.security.crypto_objects.get(&delivery.payload.family)?;
     let recipient_channel = delivery
         .recipient
         .process
@@ -314,7 +314,7 @@ fn identity_from_recipient_channel(
         .map(|(r, p)| (r.to_string(), Some(p.to_string())))
         .unwrap_or_else(|| (recipient_channel.to_string(), None));
     let key = ta
-        .role_identities
+        .security.role_identities
         .get(&role)
         .map(|cfg| cfg.key_name.clone());
     MessageIdentity { role, process, key }
@@ -326,7 +326,7 @@ fn identity_from_sender_channel(ta: &ThresholdAutomaton, sender_channel: &str) -
         .map(|(r, p)| (r.to_string(), Some(p.to_string())))
         .unwrap_or_else(|| (sender_channel.to_string(), None));
     let key = ta
-        .role_identities
+        .security.role_identities
         .get(&role)
         .map(|cfg| cfg.key_name.clone());
     MessageIdentity { role, process, key }
@@ -334,7 +334,7 @@ fn identity_from_sender_channel(ta: &ThresholdAutomaton, sender_channel: &str) -
 
 fn identity_from_location(ta: &ThresholdAutomaton, loc_id: usize) -> MessageIdentity {
     let loc = &ta.locations[loc_id];
-    let cfg = ta.role_identities.get(&loc.role);
+    let cfg = ta.security.role_identities.get(&loc.role);
     let process = cfg.and_then(|cfg| {
         if cfg.scope != RoleIdentityScope::Process {
             return None;
@@ -422,7 +422,7 @@ fn auth_metadata_for_forge(ta: &ThresholdAutomaton, message_family: &str) -> Mes
         };
     }
 
-    if let Some(key) = ta.compromised_keys.iter().next() {
+    if let Some(key) = ta.security.compromised_keys.iter().next() {
         return MessageAuthMetadata {
             authenticated_channel: true,
             signature_key: Some(key.clone()),
@@ -452,7 +452,7 @@ fn extract_rule_delivery_events(
         if !matches!(update.kind, UpdateKind::Increment) {
             continue;
         }
-        let Some(shared) = ta.shared_vars.get(update.var) else {
+        let Some(shared) = ta.shared_vars.get(update.var.as_usize()) else {
             continue;
         };
         if shared.kind != SharedVarKind::MessageCounter {
@@ -466,11 +466,11 @@ fn extract_rule_delivery_events(
         let sender = sender_channel
             .as_deref()
             .map(|channel| identity_from_sender_channel(ta, channel))
-            .unwrap_or_else(|| identity_from_location(ta, rule.from));
+            .unwrap_or_else(|| identity_from_location(ta, rule.from.as_usize()));
         let recipient = identity_from_recipient_channel(ta, &recipient_channel);
         let auth = auth_metadata_for_owned_sender(ta, &sender, &payload.family);
         events.push(MessageDeliveryEvent {
-            shared_var: update.var,
+            shared_var: update.var.as_usize(),
             shared_var_name: shared.name.clone(),
             sender: sender.clone(),
             recipient: recipient.clone(),
@@ -480,7 +480,7 @@ fn extract_rule_delivery_events(
             auth: auth.clone(),
         });
         events.push(MessageDeliveryEvent {
-            shared_var: update.var,
+            shared_var: update.var.as_usize(),
             shared_var_name: shared.name.clone(),
             sender,
             recipient,
@@ -683,11 +683,11 @@ mod tests {
             to,
             guard: Guard::trivial(),
             updates: vec![Update {
-                var: 0,
+                var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
         });
-        ta.role_identities.insert(
+        ta.security.role_identities.insert(
             "Replica".to_string(),
             RoleIdentityConfig {
                 scope: RoleIdentityScope::Process,
@@ -695,9 +695,9 @@ mod tests {
                 key_name: "replica_key".to_string(),
             },
         );
-        ta.key_ownership
+        ta.security.key_ownership
             .insert("replica_key".to_string(), "Replica".to_string());
-        ta.authentication_mode = if authenticated {
+        ta.semantics.authentication_mode = if authenticated {
             AuthenticationMode::Signed
         } else {
             AuthenticationMode::None
@@ -805,12 +805,12 @@ mod tests {
         assert!(owned.authenticated_channel);
         assert!(!owned.key_compromised);
 
-        ta.compromised_keys.insert("replica_key".to_string());
+        ta.security.compromised_keys.insert("replica_key".to_string());
         let compromised = auth_metadata_for_owned_sender(&ta, &sender, "Vote");
         assert_eq!(compromised.provenance, SignatureProvenance::CompromisedKey);
         assert!(compromised.key_compromised);
 
-        ta.message_policies.insert(
+        ta.security.message_policies.insert(
             "Vote".to_string(),
             MessagePolicy {
                 auth: MessageAuthPolicy::Unauthenticated,
@@ -833,12 +833,12 @@ mod tests {
         assert_eq!(byz.provenance, SignatureProvenance::ByzantineSigner);
         assert!(byz.authenticated_channel);
 
-        ta.compromised_keys.insert("replica_key".to_string());
+        ta.security.compromised_keys.insert("replica_key".to_string());
         let compromised = auth_metadata_for_forge(&ta, "Vote");
         assert_eq!(compromised.provenance, SignatureProvenance::CompromisedKey);
         assert_eq!(compromised.signature_key.as_deref(), Some("replica_key"));
 
-        ta.authentication_mode = AuthenticationMode::None;
+        ta.semantics.authentication_mode = AuthenticationMode::None;
         let unauth = auth_metadata_for_forge(&ta, "Vote");
         assert_eq!(
             unauth.provenance,
@@ -949,8 +949,8 @@ mod tests {
     #[test]
     fn extract_trace_builds_steps_and_por_annotation() {
         let mut ta = make_ta("cnt_Vote@Replica#1<-Replica#0[view=1]", true);
-        ta.por_mode = PorMode::Static;
-        let cs = CounterSystem::new(ta);
+        ta.semantics.por_mode = PorMode::Static;
+        let cs = ta;
         let model = test_model(&[
             ("p_0", ModelValue::Int(4)),
             ("kappa_0_0", ModelValue::Int(1)),
@@ -978,15 +978,15 @@ mod tests {
     fn extract_trace_attaches_global_adversary_effects_only_once_per_step() {
         let mut ta = make_ta("cnt_Vote@Replica#1<-Replica#0[view=1]", true);
         ta.add_rule(Rule {
-            from: 0,
-            to: 1,
+            from: 0.into(),
+            to: 1.into(),
             guard: Guard::trivial(),
             updates: vec![Update {
-                var: 0,
+                var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
         });
-        let cs = CounterSystem::new(ta);
+        let cs = ta;
         let model = test_model(&[
             ("p_0", ModelValue::Int(4)),
             ("kappa_0_0", ModelValue::Int(1)),
@@ -1019,7 +1019,7 @@ mod tests {
             distinct: false,
             distinct_role: None,
         });
-        ta.crypto_objects.insert(
+        ta.security.crypto_objects.insert(
             "QC".to_string(),
             IrCryptoObjectSpec {
                 name: "QC".to_string(),
@@ -1039,7 +1039,7 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: 0.into(),
                 delta: 1,
                 deliveries: vec![MessageDeliveryEvent {
                     shared_var: 0,
@@ -1098,7 +1098,7 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: 0.into(),
                 delta: 1,
                 deliveries: vec![],
                 config: Configuration {
@@ -1179,7 +1179,7 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: 0.into(),
                 delta: 1,
                 deliveries: vec![],
                 config: Configuration {
@@ -1206,7 +1206,7 @@ mod tests {
             },
             steps: vec![TraceStep {
                 smt_step: 0,
-                rule_id: 0,
+                rule_id: 0.into(),
                 delta: 1,
                 deliveries: vec![],
                 config: Configuration {
@@ -1292,7 +1292,7 @@ mod tests {
         // 3 + 2*p0 - 1*p1
         let lc = LinearCombination {
             constant: 3,
-            terms: vec![(2, 0), (-1, 1)],
+            terms: vec![(2, 0.into()), (-1, 1.into())],
         };
         assert_eq!(eval_linear_combination(&lc, &[5, 7]), 3 + 2 * 5 - 7);
     }
@@ -1301,7 +1301,7 @@ mod tests {
     fn eval_linear_combination_missing_param_defaults_to_zero() {
         let lc = LinearCombination {
             constant: 10,
-            terms: vec![(5, 99)], // param index 99 does not exist
+            terms: vec![(5, 99.into())], // param index 99 does not exist
         };
         assert_eq!(eval_linear_combination(&lc, &[1, 2, 3]), 10);
     }

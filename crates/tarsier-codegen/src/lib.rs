@@ -35,6 +35,12 @@ pub enum CodegenError {
     Unsupported(String),
 }
 
+impl From<std::fmt::Error> for CodegenError {
+    fn from(_: std::fmt::Error) -> Self {
+        CodegenError::Unsupported("internal write error (should be unreachable)".into())
+    }
+}
+
 /// Provenance metadata embedded as a header comment in generated artifacts.
 #[derive(Debug, Clone)]
 pub struct ProvenanceInfo {

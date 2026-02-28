@@ -1,10 +1,11 @@
 //! Committee analysis, quantitative analysis functions, round erasure abstraction.
 
 use sha2::Digest; // trait needed for Sha256::new()/update()/finalize()
+use tarsier_ir::threshold_automaton::{LocationId, ParamId, SharedVarId};
 
 use super::property::resolve_param_or_const;
 use super::verification::lower_with_active_controls;
-use super::*;
+use crate::pipeline::*;
 
 pub(super) fn base_message_name(name: &str) -> Option<String> {
     let stripped = name.strip_prefix("cnt_")?;
@@ -133,28 +134,13 @@ pub(super) fn apply_round_erasure_abstraction(
         shared_vars: Vec::new(),
         rules: Vec::new(),
         parameters: ta.parameters.clone(),
-        resilience_condition: ta.resilience_condition.clone(),
-        adversary_bound_param: ta.adversary_bound_param,
-        fault_model: ta.fault_model,
-        timing_model: ta.timing_model,
-        gst_param: ta.gst_param,
-        value_abstraction: ta.value_abstraction,
-        equivocation_mode: ta.equivocation_mode,
-        authentication_mode: ta.authentication_mode,
-        network_semantics: ta.network_semantics,
-        delivery_control: ta.delivery_control,
-        fault_budget_scope: ta.fault_budget_scope,
-        role_identities: ta.role_identities.clone(),
-        key_ownership: ta.key_ownership.clone(),
-        compromised_keys: ta.compromised_keys.clone(),
-        message_policies: ta.message_policies.clone(),
-        crypto_objects: ta.crypto_objects.clone(),
-        committees: ta.committees.clone(),
-        por_mode: ta.por_mode,
+        constraints: ta.constraints.clone(),
+        semantics: ta.semantics.clone(),
+        security: ta.security.clone(),
     };
 
-    let mut shared_map: Vec<usize> = vec![0; ta.shared_vars.len()];
-    let mut shared_key_to_new: HashMap<SharedMergeKey, usize> = HashMap::new();
+    let mut shared_map: Vec<SharedVarId> = vec![SharedVarId::default(); ta.shared_vars.len()];
+    let mut shared_key_to_new: HashMap<SharedMergeKey, SharedVarId> = HashMap::new();
     for (old_id, shared) in ta.shared_vars.iter().enumerate() {
         let key = if shared.kind == SharedVarKind::MessageCounter {
             let erased_name = erase_round_fields_from_message_counter_name(&shared.name, &erased);
@@ -166,7 +152,7 @@ pub(super) fn apply_round_erasure_abstraction(
         if let Some(&new_id) = shared_key_to_new.get(&key) {
             shared_map[old_id] = new_id;
             if shared.kind == SharedVarKind::MessageCounter {
-                let existing = &mut abstract_ta.shared_vars[new_id];
+                let existing = &mut abstract_ta.shared_vars[new_id.as_usize()];
                 existing.distinct &= shared.distinct;
                 if existing.distinct {
                     if existing.distinct_role != shared.distinct_role {
@@ -184,7 +170,7 @@ pub(super) fn apply_round_erasure_abstraction(
             SharedMergeKey::MessageCounter(name) => name.clone(),
             SharedMergeKey::Unique(_) => shared.name.clone(),
         };
-        let new_id = abstract_ta.shared_vars.len();
+        let new_id = SharedVarId::from(abstract_ta.shared_vars.len());
         abstract_ta
             .shared_vars
             .push(tarsier_ir::threshold_automaton::SharedVar {
@@ -197,8 +183,8 @@ pub(super) fn apply_round_erasure_abstraction(
         shared_map[old_id] = new_id;
     }
 
-    let mut loc_map: Vec<usize> = vec![0; ta.locations.len()];
-    let mut loc_key_to_new: HashMap<LocationMergeKey, usize> = HashMap::new();
+    let mut loc_map: Vec<LocationId> = vec![LocationId::default(); ta.locations.len()];
+    let mut loc_key_to_new: HashMap<LocationMergeKey, LocationId> = HashMap::new();
     for (old_id, loc) in ta.locations.iter().enumerate() {
         let key = build_location_merge_key(loc, &erased);
         if let Some(&new_id) = loc_key_to_new.get(&key) {
@@ -208,7 +194,7 @@ pub(super) fn apply_round_erasure_abstraction(
 
         let mut local_vars = loc.local_vars.clone();
         local_vars.retain(|name, _| !is_erased_var_name(name, &erased));
-        let new_id = abstract_ta.locations.len();
+        let new_id = LocationId::from(abstract_ta.locations.len());
         abstract_ta
             .locations
             .push(tarsier_ir::threshold_automaton::Location {
@@ -221,22 +207,22 @@ pub(super) fn apply_round_erasure_abstraction(
         loc_map[old_id] = new_id;
     }
 
-    let mut initial_set: HashSet<usize> = HashSet::new();
+    let mut initial_set: HashSet<LocationId> = HashSet::new();
     for old_init in &ta.initial_locations {
-        if let Some(&mapped) = loc_map.get(*old_init) {
+        if let Some(&mapped) = loc_map.get(old_init.as_usize()) {
             initial_set.insert(mapped);
         }
     }
-    let mut initial_locations: Vec<usize> = initial_set.into_iter().collect();
-    initial_locations.sort_unstable();
+    let mut initial_locations: Vec<LocationId> = initial_set.into_iter().collect();
+    initial_locations.sort_by_key(|id| id.as_usize());
     abstract_ta.initial_locations = initial_locations;
 
     abstract_ta.rules = ta
         .rules
         .iter()
         .map(|rule| tarsier_ir::threshold_automaton::Rule {
-            from: loc_map[rule.from],
-            to: loc_map[rule.to],
+            from: loc_map[rule.from.as_usize()],
+            to: loc_map[rule.to.as_usize()],
             guard: tarsier_ir::threshold_automaton::Guard {
                 atoms: rule
                     .guard
@@ -249,7 +235,10 @@ pub(super) fn apply_round_erasure_abstraction(
                             bound,
                             distinct,
                         } => GuardAtom::Threshold {
-                            vars: vars.iter().map(|v| shared_map[*v]).collect(),
+                            vars: vars
+                                .iter()
+                                .map(|v| shared_map[v.as_usize()])
+                                .collect(),
                             op: *op,
                             bound: bound.clone(),
                             distinct: *distinct,
@@ -261,7 +250,7 @@ pub(super) fn apply_round_erasure_abstraction(
                 .updates
                 .iter()
                 .map(|update| tarsier_ir::threshold_automaton::Update {
-                    var: shared_map[update.var],
+                    var: shared_map[update.var.as_usize()],
                     kind: update.kind.clone(),
                 })
                 .collect(),
@@ -461,7 +450,7 @@ pub(super) fn analyze_and_constrain_committees(
 ) -> Result<Vec<CommitteeAnalysisSummary>, PipelineError> {
     let mut summaries = Vec::new();
 
-    for committee in &ta.committees.clone() {
+    for committee in &ta.constraints.committees.clone() {
         let epsilon = committee.epsilon.unwrap_or(1e-9);
 
         // Resolve population, byzantine, committee_size to concrete values
@@ -510,18 +499,18 @@ pub(super) fn analyze_and_constrain_committees(
     // If no explicit adversary bound was set, allow a single committee-bound
     // parameter to drive adversary injections. Multiple committee bound params
     // are ambiguous and must be disambiguated explicitly by the model.
-    if ta.adversary_bound_param.is_none() {
-        let mut candidate_params: HashSet<usize> = HashSet::new();
-        for c in &ta.committees {
+    if ta.constraints.adversary_bound_param.is_none() {
+        let mut candidate_params: HashSet<ParamId> = HashSet::new();
+        for c in &ta.constraints.committees {
             if let Some(pid) = c.bound_param {
                 candidate_params.insert(pid);
             }
         }
         if candidate_params.len() == 1 {
             let pid = *candidate_params.iter().next().expect("len() checked");
-            ta.adversary_bound_param = Some(pid);
+            ta.constraints.adversary_bound_param = Some(pid);
             info!(
-                param = %ta.parameters[pid].name,
+                param = %ta.parameters[pid.as_usize()].name,
                 "Using committee-derived adversary bound parameter"
             );
         } else if candidate_params.len() > 1 {
@@ -570,8 +559,8 @@ pub fn comm_complexity(
         Some(committee_summaries.iter().map(|c| c.epsilon).sum())
     };
     let reject_probabilistic_extrapolation_async_no_gst = raw_total_finality_failure.is_some()
-        && ta.timing_model == tarsier_ir::threshold_automaton::TimingModel::Asynchronous
-        && ta.gst_param.is_none();
+        && ta.semantics.timing_model == tarsier_ir::threshold_automaton::TimingModel::Asynchronous
+        && ta.semantics.gst_param.is_none();
     let total_finality_failure = if reject_probabilistic_extrapolation_async_no_gst {
         None
     } else {
@@ -595,18 +584,18 @@ pub fn comm_complexity(
 
     let n_param = ta
         .find_param_by_name("n")
-        .map(|id| ta.parameters[id].name.clone());
+        .map(|id| ta.parameters[id.as_usize()].name.clone());
     let n_label = n_param.clone().unwrap_or_else(|| "n".into());
     let adv_param = ta
-        .adversary_bound_param
-        .map(|id| ta.parameters[id].name.clone());
+        .constraints.adversary_bound_param
+        .map(|id| ta.parameters[id.as_usize()].name.clone());
     let min_decision_steps = {
-        let decision_locs: Vec<usize> = ta
+        let decision_locs: Vec<LocationId> = ta
             .locations
             .iter()
             .enumerate()
             .filter_map(|(loc_id, loc)| match loc.local_vars.get("decided") {
-                Some(LocalValue::Bool(true)) => Some(loc_id),
+                Some(LocalValue::Bool(true)) => Some(loc_id.into()),
                 _ => None,
             })
             .collect();
@@ -614,22 +603,23 @@ pub fn comm_complexity(
             None
         } else {
             let mut dist = vec![usize::MAX; ta.locations.len()];
-            let mut queue = VecDeque::new();
+            let mut queue: VecDeque<LocationId> = VecDeque::new();
             for &start in &ta.initial_locations {
-                if start < dist.len() && dist[start] == usize::MAX {
-                    dist[start] = 0;
+                let start_idx = start.as_usize();
+                if start_idx < dist.len() && dist[start_idx] == usize::MAX {
+                    dist[start_idx] = 0;
                     queue.push_back(start);
                 }
             }
 
             while let Some(current) = queue.pop_front() {
-                let next_dist = dist[current].saturating_add(1);
+                let next_dist = dist[current.as_usize()].saturating_add(1);
                 for rule in &ta.rules {
                     if rule.from != current {
                         continue;
                     }
-                    if dist[rule.to] == usize::MAX {
-                        dist[rule.to] = next_dist;
+                    if dist[rule.to.as_usize()] == usize::MAX {
+                        dist[rule.to.as_usize()] = next_dist;
                         queue.push_back(rule.to);
                     }
                 }
@@ -638,7 +628,7 @@ pub fn comm_complexity(
             decision_locs
                 .into_iter()
                 .filter_map(|id| {
-                    let d = dist[id];
+                    let d = dist[id.as_usize()];
                     (d != usize::MAX).then_some(d)
                 })
                 .min()
@@ -660,7 +650,7 @@ pub fn comm_complexity(
         let mut per_type: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
         for upd in &rule.updates {
-            if ta.shared_vars[upd.var].kind != SharedVarKind::MessageCounter {
+            if ta.shared_vars[upd.var.as_usize()].kind != SharedVarKind::MessageCounter {
                 continue;
             }
             if !matches!(
@@ -670,7 +660,7 @@ pub fn comm_complexity(
                 continue;
             }
             total += 1;
-            if let Some(base) = base_message_name(&ta.shared_vars[upd.var].name) {
+            if let Some(base) = base_message_name(&ta.shared_vars[upd.var.as_usize()].name) {
                 *per_type.entry(base).or_insert(0) += 1;
             }
         }
@@ -684,7 +674,7 @@ pub fn comm_complexity(
             }
         }
 
-        let sender_role = ta.locations[rule.from].role.clone();
+        let sender_role = ta.locations[rule.from.as_usize()].role.clone();
         let role_entry = max_by_role.entry(sender_role.clone()).or_insert(0);
         if total > *role_entry {
             *role_entry = total;
@@ -712,7 +702,7 @@ pub fn comm_complexity(
     for role in &sender_roles {
         let role_param = format!("n_{}", role.to_lowercase());
         if let Some(pid) = ta.find_param_by_name(&role_param) {
-            role_population_labels.insert(role.clone(), ta.parameters[pid].name.clone());
+            role_population_labels.insert(role.clone(), ta.parameters[pid.as_usize()].name.clone());
         } else if single_role_model {
             role_population_labels.insert(role.clone(), n_label.clone());
         }
@@ -816,9 +806,9 @@ pub fn comm_complexity(
     let total_message_counters = family_counter_counts.values().sum::<usize>();
     let total_family_recipient_groups = family_recipient_group_counts.values().sum::<usize>();
 
-    let byzantine_faults = ta.fault_model == FaultModel::Byzantine;
-    let signed_or_no_equiv = ta.authentication_mode == AuthenticationMode::Signed
-        || ta.equivocation_mode == EquivocationMode::None;
+    let byzantine_faults = ta.semantics.fault_model == FaultModel::Byzantine;
+    let signed_or_no_equiv = ta.semantics.authentication_mode == AuthenticationMode::Signed
+        || ta.semantics.equivocation_mode == EquivocationMode::None;
 
     let adversary_multiplier_total = if byzantine_faults {
         if signed_or_no_equiv {
@@ -954,10 +944,10 @@ pub fn comm_complexity(
     let mut max_by_phase: std::collections::HashMap<String, usize> =
         std::collections::HashMap::new();
     for rule in &ta.rules {
-        let phase = ta.locations[rule.from].phase.clone();
+        let phase = ta.locations[rule.from.as_usize()].phase.clone();
         let mut total = 0usize;
         for upd in &rule.updates {
-            if ta.shared_vars[upd.var].kind != SharedVarKind::MessageCounter {
+            if ta.shared_vars[upd.var.as_usize()].kind != SharedVarKind::MessageCounter {
                 continue;
             }
             if !matches!(
@@ -987,12 +977,12 @@ pub fn comm_complexity(
 
     // --- Model assumptions (item 2) ---
     let model_assumptions = ModelAssumptions {
-        fault_model: format!("{:?}", ta.fault_model),
-        timing_model: format!("{:?}", ta.timing_model),
-        authentication_mode: format!("{:?}", ta.authentication_mode),
-        equivocation_mode: format!("{:?}", ta.equivocation_mode),
-        network_semantics: format!("{:?}", ta.network_semantics),
-        gst_param: ta.gst_param.map(|id| ta.parameters[id].name.clone()),
+        fault_model: format!("{:?}", ta.semantics.fault_model),
+        timing_model: format!("{:?}", ta.semantics.timing_model),
+        authentication_mode: format!("{:?}", ta.semantics.authentication_mode),
+        equivocation_mode: format!("{:?}", ta.semantics.equivocation_mode),
+        network_semantics: format!("{:?}", ta.semantics.network_semantics),
+        gst_param: ta.semantics.gst_param.map(|id| ta.parameters[id.as_usize()].name.clone()),
     };
 
     // --- Model metadata (item 7) ---
@@ -1030,8 +1020,8 @@ pub fn comm_complexity(
 
     // --- Assumption notes (item 8) ---
     let mut assumption_notes = Vec::new();
-    if ta.timing_model == tarsier_ir::threshold_automaton::TimingModel::Asynchronous
-        && ta.gst_param.is_none()
+    if ta.semantics.timing_model == tarsier_ir::threshold_automaton::TimingModel::Asynchronous
+        && ta.semantics.gst_param.is_none()
     {
         if reject_probabilistic_extrapolation_async_no_gst {
             assumption_notes.push(AssumptionNote {
@@ -1069,7 +1059,7 @@ pub fn comm_complexity(
                 .into(),
         });
     }
-    if ta.fault_model == FaultModel::Crash {
+    if ta.semantics.fault_model == FaultModel::Crash {
         assumption_notes.push(AssumptionNote {
             level: "note".into(),
             message: "Crash fault model: adversary injection bounds are zero \
@@ -1591,7 +1581,16 @@ pub fn comm_complexity(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        add_bounds, analyze_and_constrain_committees, apply_round_erasure_abstraction,
+        base_message_name, build_location_merge_key, ensure_n_parameter,
+        erase_round_fields_from_message_counter_name, format_bound, format_scaled_term,
+        format_sum_bounds, geometric_rounds_for_confidence, is_erased_var_name,
+        message_family_and_recipient_from_counter_name, normalize_erased_var_names,
+        push_prob_sample, push_prob_sensitivity_point, quantile,
+        quantitative_reproducibility_fingerprint, scale_bound_by_depth, sha256_hex,
+    };
+    use crate::pipeline::*;
     use std::collections::BTreeMap;
     use tarsier_ir::threshold_automaton::{
         CmpOp, Guard, IrCommitteeSpec, LinearCombination, Location, Parameter, Rule, SharedVar,
@@ -1620,7 +1619,7 @@ mod tests {
         ta.locations.push(mk_location("l0", 1, false));
         ta.locations.push(mk_location("l1", 2, false));
         ta.locations.push(mk_location("l2", 2, true));
-        ta.initial_locations = vec![0, 1];
+        ta.initial_locations = vec![0.into(), 1.into()];
         ta.shared_vars.push(SharedVar {
             name: "cnt_Vote@R[round=1,value=true]".to_string(),
             kind: SharedVarKind::MessageCounter,
@@ -1640,11 +1639,11 @@ mod tests {
             distinct_role: None,
         });
         ta.rules.push(Rule {
-            from: 0,
-            to: 2,
+            from: 0.into(),
+            to: 2.into(),
             guard: Guard {
                 atoms: vec![GuardAtom::Threshold {
-                    vars: vec![0, 1],
+                    vars: vec![0.into(), 1.into()],
                     op: CmpOp::Ge,
                     bound: LinearCombination::constant(1),
                     distinct: false,
@@ -1652,15 +1651,15 @@ mod tests {
             },
             updates: vec![
                 Update {
-                    var: 0,
+                    var: 0.into(),
                     kind: UpdateKind::Increment,
                 },
                 Update {
-                    var: 1,
+                    var: 1.into(),
                     kind: UpdateKind::Increment,
                 },
                 Update {
-                    var: 2,
+                    var: 2.into(),
                     kind: UpdateKind::Increment,
                 },
             ],
@@ -1903,19 +1902,19 @@ mod tests {
         ta.parameters.push(Parameter {
             name: "f".to_string(),
         });
-        ta.committees.push(IrCommitteeSpec {
+        ta.constraints.committees.push(IrCommitteeSpec {
             name: "c1".to_string(),
             population: ParamOrConst::Const(100),
             byzantine: ParamOrConst::Const(33),
             committee_size: ParamOrConst::Const(25),
             epsilon: Some(1e-6),
-            bound_param: Some(1),
+            bound_param: Some(1.into()),
         });
 
         let summaries =
             analyze_and_constrain_committees(&mut ta).expect("single bound param should succeed");
         assert_eq!(summaries.len(), 1);
-        assert_eq!(ta.adversary_bound_param, Some(1));
+        assert_eq!(ta.constraints.adversary_bound_param, Some(1.into()));
 
         let mut ambiguous = ThresholdAutomaton::new();
         ambiguous.parameters.push(Parameter {
@@ -1924,21 +1923,21 @@ mod tests {
         ambiguous.parameters.push(Parameter {
             name: "f2".to_string(),
         });
-        ambiguous.committees.push(IrCommitteeSpec {
+        ambiguous.constraints.committees.push(IrCommitteeSpec {
             name: "c1".to_string(),
             population: ParamOrConst::Const(100),
             byzantine: ParamOrConst::Const(33),
             committee_size: ParamOrConst::Const(25),
             epsilon: Some(1e-6),
-            bound_param: Some(0),
+            bound_param: Some(0.into()),
         });
-        ambiguous.committees.push(IrCommitteeSpec {
+        ambiguous.constraints.committees.push(IrCommitteeSpec {
             name: "c2".to_string(),
             population: ParamOrConst::Const(100),
             byzantine: ParamOrConst::Const(33),
             committee_size: ParamOrConst::Const(25),
             epsilon: Some(1e-6),
-            bound_param: Some(1),
+            bound_param: Some(1.into()),
         });
 
         let err = analyze_and_constrain_committees(&mut ambiguous)

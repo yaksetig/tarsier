@@ -1,0 +1,41 @@
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+
+# Common build environment needed by z3/cmake integration.
+build_env := "CMAKE_POLICY_VERSION_MINIMUM=3.5"
+
+# Show available tasks.
+default:
+    @just --list
+
+# Run formatting checks.
+fmt-check:
+    cargo fmt --check
+
+# Format the repository.
+fmt:
+    cargo fmt --all
+
+# Run clippy with warnings denied.
+clippy:
+    {{build_env}} cargo clippy --all-targets -- -D warnings
+
+# Run fast compile checks.
+check:
+    {{build_env}} cargo check --all-targets
+
+# Run all tests.
+test:
+    {{build_env}} cargo test --all-targets
+
+# Run the deterministic property-pipeline proptest target.
+proptest:
+    {{build_env}} PROPTEST_CASES=48 PROPTEST_RNG_ALGORITHM=cc PROPTEST_RNG_SEED=246813579 cargo test -p tarsier-engine --test property_pipeline_proptest -- --nocapture
+
+# Run completion evidence validation scripts.
+validate:
+    python3 scripts/validate_final_completion.py
+    python3 scripts/validate_final_completion.py --strict-evidence
+
+# Local "CI-like" gate for common contributor checks.
+ci: fmt-check clippy test
+

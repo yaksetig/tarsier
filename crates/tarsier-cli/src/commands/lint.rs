@@ -1,3 +1,5 @@
+//! Lint command pipeline, diagnostics, and fix suggestion helpers.
+//
 // Command handler for: Lint
 //
 // Extracts lint-related types, helpers, and the main lint pipeline from main.rs
@@ -11,7 +13,9 @@ use serde::Serialize;
 use tarsier_dsl::ast::Span as DslSpan;
 use tarsier_engine::pipeline::SoundnessMode;
 
-use super::helpers::{parse_output_format, parse_soundness_mode, sandbox_read_source};
+use super::helpers::{
+    parse_output_format, parse_soundness_mode, report_with_exit_code, sandbox_read_source,
+};
 use crate::{CliNetworkSemanticsMode, OutputFormat};
 
 // ---------------------------------------------------------------------------
@@ -1092,9 +1096,9 @@ pub(crate) fn run_lint_command(
 ) -> miette::Result<()> {
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let soundness = parse_soundness_mode(&soundness);
+    let soundness = parse_soundness_mode(&soundness)?;
     crate::validate_cli_network_semantics_mode(&source, &filename, soundness, cli_network_mode)?;
-    let output_format = parse_output_format(&format);
+    let output_format = parse_output_format(&format)?;
     let report = lint_protocol_file(&source, &filename, soundness);
     let report_json_value = serde_json::to_value(&report).into_diagnostic()?;
     let report_json = serde_json::to_string_pretty(&report_json_value).into_diagnostic()?;
@@ -1110,7 +1114,7 @@ pub(crate) fn run_lint_command(
     }
 
     if report.issues.iter().any(|i| i.severity == "error") {
-        std::process::exit(2);
+        return Err(report_with_exit_code(2, "Lint found one or more errors."));
     }
 
     Ok(())

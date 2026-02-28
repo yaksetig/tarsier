@@ -1,3 +1,5 @@
+//! Lowering regression tests from DSL to threshold automaton IR.
+
 use super::*;
 use tarsier_dsl::parse;
 
@@ -36,7 +38,7 @@ role Process {
     // 2 rules (one for decided=false→done/decided=true, one for decided=true→done/decided=true)
     assert_eq!(ta.rules.len(), 2);
     // Resilience condition present
-    assert!(ta.resilience_condition.is_some());
+    assert!(ta.constraints.resilience_condition.is_some());
 }
 
 #[test]
@@ -76,7 +78,9 @@ role Replica {
     let send_rules: Vec<_> = ta
         .rules
         .iter()
-        .filter(|rule| ta.locations[rule.from].role == "Leader" && !rule.updates.is_empty())
+        .filter(|rule| {
+            ta.locations[rule.from.as_usize()].role == "Leader" && !rule.updates.is_empty()
+        })
         .collect();
     assert!(
         !send_rules.is_empty(),
@@ -125,7 +129,9 @@ role Replica {
     let send_rules: Vec<_> = ta
         .rules
         .iter()
-        .filter(|rule| ta.locations[rule.from].role == "Leader" && !rule.updates.is_empty())
+        .filter(|rule| {
+            ta.locations[rule.from.as_usize()].role == "Leader" && !rule.updates.is_empty()
+        })
         .collect();
     assert!(
         !send_rules.is_empty(),
@@ -307,8 +313,8 @@ role Process {
         "expected at least one send rule in the model"
     );
     assert!(send_rules.iter().all(|r| {
-        ta.locations[r.from].local_vars.get(flag) == Some(&LocalValue::Bool(false))
-            && ta.locations[r.to].local_vars.get(flag) == Some(&LocalValue::Bool(true))
+        ta.locations[r.from.as_usize()].local_vars.get(flag) == Some(&LocalValue::Bool(false))
+            && ta.locations[r.to.as_usize()].local_vars.get(flag) == Some(&LocalValue::Bool(true))
     }));
 }
 
@@ -334,7 +340,7 @@ role R {
 
     // int(sign) x nat(sign) = 3 x 2 = 6 abstract counters.
     assert_eq!(ta.shared_vars.len(), 6);
-    assert_eq!(ta.value_abstraction, ValueAbstractionMode::Sign);
+    assert_eq!(ta.semantics.value_abstraction, ValueAbstractionMode::Sign);
 }
 
 #[test]
@@ -358,10 +364,10 @@ role R {
 "#;
     let prog = parse(src, "partial_sync_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.fault_model, FaultModel::Omission);
-    assert_eq!(ta.timing_model, TimingModel::PartialSynchrony);
-    let gst = ta.gst_param.expect("gst param should be set");
-    assert_eq!(ta.parameters[gst].name, "gst");
+    assert_eq!(ta.semantics.fault_model, FaultModel::Omission);
+    assert_eq!(ta.semantics.timing_model, TimingModel::PartialSynchrony);
+    let gst = ta.semantics.gst_param.expect("gst param should be set");
+    assert_eq!(ta.parameters[gst.as_usize()].name, "gst");
 }
 
 #[test]
@@ -380,7 +386,7 @@ role R {
 "#;
     let prog = parse(src, "eq_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.equivocation_mode, EquivocationMode::None);
+    assert_eq!(ta.semantics.equivocation_mode, EquivocationMode::None);
 }
 
 #[test]
@@ -404,7 +410,7 @@ role R {
 "#;
     let prog = parse(src, "auth_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.authentication_mode, AuthenticationMode::Signed);
+    assert_eq!(ta.semantics.authentication_mode, AuthenticationMode::Signed);
     assert!(
         ta.locations
             .iter()
@@ -441,11 +447,11 @@ role R {
     let prog = parse(src, "msg_policies.trs").unwrap();
     let ta = lower(&prog).unwrap();
 
-    let vote_policy = ta.message_policies.get("Vote").expect("Vote policy");
+    let vote_policy = ta.security.message_policies.get("Vote").expect("Vote policy");
     assert_eq!(vote_policy.auth, MessageAuthPolicy::Authenticated);
     assert_eq!(vote_policy.equivocation, MessageEquivocationPolicy::None);
 
-    let ping_policy = ta.message_policies.get("Ping").expect("Ping policy");
+    let ping_policy = ta.security.message_policies.get("Ping").expect("Ping policy");
     assert_eq!(ping_policy.auth, MessageAuthPolicy::Unauthenticated);
     assert_eq!(ping_policy.equivocation, MessageEquivocationPolicy::Full);
 
@@ -483,7 +489,7 @@ role R {
 "#;
     let prog = parse(src, "net_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.network_semantics, NetworkSemantics::IdentitySelective);
+    assert_eq!(ta.semantics.network_semantics, NetworkSemantics::IdentitySelective);
 }
 
 #[test]
@@ -508,8 +514,8 @@ role R {
 "#;
     let prog = parse(src, "delivery_fault_scope_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.delivery_control, DeliveryControlMode::PerRecipient);
-    assert_eq!(ta.fault_budget_scope, FaultBudgetScope::Global);
+    assert_eq!(ta.semantics.delivery_control, DeliveryControlMode::PerRecipient);
+    assert_eq!(ta.semantics.fault_budget_scope, FaultBudgetScope::Global);
 }
 
 #[test]
@@ -565,7 +571,7 @@ role R {
 "#;
     let prog = parse(src, "process_selective_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.network_semantics, NetworkSemantics::ProcessSelective);
+    assert_eq!(ta.semantics.network_semantics, NetworkSemantics::ProcessSelective);
 
     let recipient0_vars: std::collections::HashSet<usize> = ta
         .shared_vars
@@ -603,10 +609,11 @@ role R {
             .all(|loc| !loc.local_vars.contains_key(INTERNAL_DELIVERY_LANE_VAR)),
         "process-selective mode should not inject cohort lane locals"
     );
-    let mut initial_pids = std::collections::HashSet::new();
+    let mut initial_pids: std::collections::HashSet<i64> = std::collections::HashSet::new();
     for lid in &ta.initial_locations {
-        if let Some(LocalValue::Int(pid)) =
-            ta.locations[*lid].local_vars.get(DEFAULT_PROCESS_ID_VAR)
+        if let Some(LocalValue::Int(pid)) = ta.locations[lid.as_usize()]
+            .local_vars
+            .get(DEFAULT_PROCESS_ID_VAR)
         {
             initial_pids.insert(*pid);
         }
@@ -618,21 +625,21 @@ role R {
 
     let mut guarded_vars = std::collections::HashSet::new();
     for rule in &ta.rules {
-        if ta.locations[rule.from].phase != "s" {
+        if ta.locations[rule.from.as_usize()].phase != "s" {
             continue;
         }
-        let from_pid = match ta.locations[rule.from]
+        let from_pid = match ta.locations[rule.from.as_usize()]
             .local_vars
             .get(DEFAULT_PROCESS_ID_VAR)
         {
-            Some(LocalValue::Int(pid)) => *pid,
+            Some(LocalValue::Int(pid)) => pid,
             _ => continue,
         };
         if let Some(atom) = rule.guard.atoms.first() {
             let GuardAtom::Threshold { vars, .. } = atom;
             for var in vars {
-                guarded_vars.insert(*var);
-                let counter_name = &ta.shared_vars[*var].name;
+                guarded_vars.insert(var.as_usize());
+                let counter_name = &ta.shared_vars[var.as_usize()].name;
                 assert!(
                     counter_name.contains(&format!("@R#{from_pid}<-")),
                     "guard should read recipient-scoped identity deliveries for pid {from_pid}: {counter_name}"
@@ -675,7 +682,7 @@ role R {
     let prog = parse(src, "process_selective_identity_var.trs").unwrap();
     let ta = lower(&prog).unwrap();
 
-    assert_eq!(ta.network_semantics, NetworkSemantics::ProcessSelective);
+    assert_eq!(ta.semantics.network_semantics, NetworkSemantics::ProcessSelective);
     assert!(
         ta.locations
             .iter()
@@ -742,22 +749,22 @@ role Replica {
         .rules
         .iter()
         .filter(|rule| {
-            let from = &ta.locations[rule.from];
+            let from = &ta.locations[rule.from.as_usize()];
             from.role == "Leader" && from.phase == "s" && !rule.updates.is_empty()
         })
         .collect();
     assert!(!send_rules.is_empty(), "expected sender rules from Leader");
 
     for rule in send_rules {
-        let from = &ta.locations[rule.from];
+        let from = &ta.locations[rule.from.as_usize()];
         let sender_pid = match from.local_vars.get("leader_id") {
-            Some(LocalValue::Int(pid)) => *pid,
+            Some(LocalValue::Int(pid)) => pid,
             other => panic!("missing leader identity on sender location: {other:?}"),
         };
         let updated_names: std::collections::HashSet<String> = rule
             .updates
             .iter()
-            .map(|u| ta.shared_vars[u.var].name.clone())
+            .map(|u| ta.shared_vars[u.var.as_usize()].name.clone())
             .collect();
         let expected: std::collections::HashSet<String> = [
             format!("cnt_Vote@Replica#0<-Leader#{sender_pid}"),
@@ -816,9 +823,10 @@ role Replica {
         .rules
         .iter()
         .find(|rule| {
-            ta.locations[rule.from].role == "Replica"
-                && ta.locations[rule.from].phase == "s"
-                && ta.locations[rule.from].local_vars.get("pid") == Some(&LocalValue::Int(0))
+            ta.locations[rule.from.as_usize()].role == "Replica"
+                && ta.locations[rule.from.as_usize()].phase == "s"
+                && ta.locations[rule.from.as_usize()].local_vars.get("pid")
+                    == Some(&LocalValue::Int(0))
         })
         .expect("expected a pid=0 guard rule");
     let guard_vars = match guard_rule.guard.atoms.first().expect("threshold guard") {
@@ -826,7 +834,7 @@ role Replica {
     };
     let guard_names: std::collections::HashSet<String> = guard_vars
         .iter()
-        .map(|v| ta.shared_vars[*v].name.clone())
+        .map(|v| ta.shared_vars[v.as_usize()].name.clone())
         .collect();
     let expected_guard: std::collections::HashSet<String> = [
         "cnt_Vote@Replica#0<-Replica#0[value=false]".to_string(),
@@ -895,7 +903,7 @@ role R {
 "#;
     let prog = parse(src, "cohort_selective_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.network_semantics, NetworkSemantics::CohortSelective);
+    assert_eq!(ta.semantics.network_semantics, NetworkSemantics::CohortSelective);
     assert!(
         ta.locations
             .iter()
@@ -920,7 +928,7 @@ role R {
 "#;
     let prog = parse(src, "crash_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.fault_model, FaultModel::Crash);
+    assert_eq!(ta.semantics.fault_model, FaultModel::Crash);
     let crash_counter = ta
         .find_shared_var_by_name(INTERNAL_CRASH_COUNTER)
         .expect("crash model should include internal crash counter");
@@ -931,11 +939,19 @@ role R {
         "all locations should include internal alive/dead flag"
     );
     assert!(ta.initial_locations.iter().all(|&lid| {
-        ta.locations[lid].local_vars.get(INTERNAL_ALIVE_VAR) == Some(&LocalValue::Bool(true))
+        ta.locations[lid.as_usize()]
+            .local_vars
+            .get(INTERNAL_ALIVE_VAR)
+            == Some(&LocalValue::Bool(true))
     }));
     let has_crash_rule = ta.rules.iter().any(|rule| {
-        ta.locations[rule.from].local_vars.get(INTERNAL_ALIVE_VAR) == Some(&LocalValue::Bool(true))
-            && ta.locations[rule.to].local_vars.get(INTERNAL_ALIVE_VAR)
+        ta.locations[rule.from.as_usize()]
+            .local_vars
+            .get(INTERNAL_ALIVE_VAR)
+            == Some(&LocalValue::Bool(true))
+            && ta.locations[rule.to.as_usize()]
+                .local_vars
+                .get(INTERNAL_ALIVE_VAR)
                 == Some(&LocalValue::Bool(false))
             && rule
                 .updates
@@ -1153,7 +1169,7 @@ role P {
     let ta = lower(&prog).unwrap();
 
     let has_decided_true_rule = ta.rules.iter().any(|r| {
-        let to = &ta.locations[r.to];
+        let to = &ta.locations[r.to.as_usize()];
         to.local_vars.get("decided") == Some(&LocalValue::Bool(true))
             && to.local_vars.get("decision") == Some(&LocalValue::Bool(true))
     });
@@ -1280,7 +1296,7 @@ role Client {
         .find(|rule| {
             rule.updates.iter().any(|upd| {
                 ta.shared_vars
-                    .get(upd.var)
+                    .get(upd.var.as_usize())
                     .map(|sv| sv.name.starts_with("cnt_Sig@Replica<-Replica"))
                     .unwrap_or(false)
             })
@@ -1302,7 +1318,7 @@ role Client {
         .expect("form Sig should include distinct source-threshold guard");
     let source_names: Vec<String> = source_guard
         .iter()
-        .map(|var_id| ta.shared_vars[*var_id].name.clone())
+        .map(|var_id| ta.shared_vars[var_id.as_usize()].name.clone())
         .collect();
     assert!(
         source_names
@@ -1352,7 +1368,7 @@ role Replica {
         .find(|rule| {
             rule.updates.iter().any(|upd| {
                 ta.shared_vars
-                    .get(upd.var)
+                    .get(upd.var.as_usize())
                     .map(|sv| sv.name == "cnt_QC@Replica<-Replica[value=true]")
                     .unwrap_or(false)
             })
@@ -1391,7 +1407,7 @@ role Replica {
     let prog = parse(src, "crypto_auth_default.trs").unwrap();
     let ta = lower(&prog).unwrap();
     let qc_policy = ta
-        .message_policies
+        .security.message_policies
         .get("QC")
         .expect("crypto object should have default message policy");
     assert_eq!(qc_policy.auth, MessageAuthPolicy::Authenticated);
@@ -1734,9 +1750,11 @@ role Replica {
         .rules
         .iter()
         .find(|rule| {
-            let target_loc = &ta.locations[rule.to];
+            let target_loc = &ta.locations[rule.to.as_usize()];
             target_loc.local_vars.get("__lock_qc") == Some(&LocalValue::Bool(true))
-                && ta.locations[rule.from].local_vars.get("__lock_qc")
+                && ta.locations[rule.from.as_usize()]
+                    .local_vars
+                    .get("__lock_qc")
                     == Some(&LocalValue::Bool(false))
         })
         .expect("lock transition rule should exist");
@@ -1790,7 +1808,7 @@ fn lower_por_mode_full() {
     let src = make_por_mode_protocol("full");
     let prog = parse(&src, "por_full.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.por_mode, PorMode::Full);
+    assert_eq!(ta.semantics.por_mode, PorMode::Full);
 }
 
 #[test]
@@ -1798,7 +1816,7 @@ fn lower_por_mode_static() {
     let src = make_por_mode_protocol("static");
     let prog = parse(&src, "por_static.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.por_mode, PorMode::Static);
+    assert_eq!(ta.semantics.por_mode, PorMode::Static);
 }
 
 #[test]
@@ -1806,7 +1824,7 @@ fn lower_por_mode_off() {
     let src = make_por_mode_protocol("off");
     let prog = parse(&src, "por_off.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.por_mode, PorMode::Off);
+    assert_eq!(ta.semantics.por_mode, PorMode::Off);
 }
 
 #[test]
@@ -1814,7 +1832,7 @@ fn lower_por_mode_none_alias() {
     let src = make_por_mode_protocol("none");
     let prog = parse(&src, "por_none.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.por_mode, PorMode::Off);
+    assert_eq!(ta.semantics.por_mode, PorMode::Off);
 }
 
 #[test]
@@ -1951,9 +1969,9 @@ role R {
     assert_eq!(ta.parameters[0].name, "n");
     assert_eq!(ta.parameters[1].name, "t");
     assert_eq!(ta.parameters[2].name, "f");
-    assert_eq!(ta.find_param_by_name("n"), Some(0));
-    assert_eq!(ta.find_param_by_name("t"), Some(1));
-    assert_eq!(ta.find_param_by_name("f"), Some(2));
+    assert_eq!(ta.find_param_by_name("n"), Some(ParamId::from(0)));
+    assert_eq!(ta.find_param_by_name("t"), Some(ParamId::from(1)));
+    assert_eq!(ta.find_param_by_name("f"), Some(ParamId::from(2)));
 }
 
 #[test]
@@ -2011,7 +2029,7 @@ role R {
     assert!(phase_names.contains("phase_b"));
     // Initial location should be phase_a with flag=false
     assert_eq!(ta.initial_locations.len(), 1);
-    let init_loc = &ta.locations[ta.initial_locations[0]];
+    let init_loc = &ta.locations[ta.initial_locations[0].as_usize()];
     assert_eq!(init_loc.phase, "phase_a");
     assert_eq!(
         init_loc.local_vars.get("flag"),
@@ -2075,15 +2093,15 @@ role R {
 "#;
     let prog = parse(src, "committee_test.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.committees.len(), 1);
-    let c = &ta.committees[0];
+    assert_eq!(ta.constraints.committees.len(), 1);
+    let c = &ta.constraints.committees[0];
     assert_eq!(c.name, "validators");
     assert!(matches!(c.population, ParamOrConst::Const(1000)));
     assert!(matches!(c.byzantine, ParamOrConst::Const(333)));
     assert!(matches!(c.committee_size, ParamOrConst::Const(100)));
     assert_eq!(c.epsilon, Some(1.0e-9));
     let bound_pid = c.bound_param.expect("bound_param should be set");
-    assert_eq!(ta.parameters[bound_pid].name, "b");
+    assert_eq!(ta.parameters[bound_pid.as_usize()].name, "b");
 }
 
 #[test]
@@ -2107,11 +2125,17 @@ role R {
 "#;
     let prog = parse(src, "committee_param_ref.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.committees.len(), 1);
-    let c = &ta.committees[0];
-    assert!(matches!(c.population, ParamOrConst::Param(pid) if ta.parameters[pid].name == "N"));
-    assert!(matches!(c.byzantine, ParamOrConst::Param(pid) if ta.parameters[pid].name == "K"));
-    assert!(matches!(c.committee_size, ParamOrConst::Param(pid) if ta.parameters[pid].name == "S"));
+    assert_eq!(ta.constraints.committees.len(), 1);
+    let c = &ta.constraints.committees[0];
+    assert!(
+        matches!(c.population, ParamOrConst::Param(pid) if ta.parameters[pid.as_usize()].name == "N")
+    );
+    assert!(
+        matches!(c.byzantine, ParamOrConst::Param(pid) if ta.parameters[pid.as_usize()].name == "K")
+    );
+    assert!(
+        matches!(c.committee_size, ParamOrConst::Param(pid) if ta.parameters[pid.as_usize()].name == "S")
+    );
     assert!(c.epsilon.is_none());
 }
 
@@ -2131,11 +2155,11 @@ role R {
 "#;
     let prog = parse(src, "byzantine_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.fault_model, FaultModel::Byzantine);
+    assert_eq!(ta.semantics.fault_model, FaultModel::Byzantine);
     let bound = ta
-        .adversary_bound_param
+        .constraints.adversary_bound_param
         .expect("adversary bound should be set");
-    assert_eq!(ta.parameters[bound].name, "f");
+    assert_eq!(ta.parameters[bound.as_usize()].name, "f");
     // No crash counter in Byzantine mode
     assert!(ta.find_shared_var_by_name(INTERNAL_CRASH_COUNTER).is_none());
     // No alive flag in Byzantine mode
@@ -2161,7 +2185,7 @@ role R {
     let prog = parse(src, "resilience_check.trs").unwrap();
     let ta = lower(&prog).unwrap();
     let rc = ta
-        .resilience_condition
+        .constraints.resilience_condition
         .as_ref()
         .expect("resilience condition should be present");
     // lhs should be n (param 0)
@@ -2201,7 +2225,7 @@ role Worker {
     assert_eq!(ta.locations.len(), 3);
     // Initial location should have status=idle
     assert_eq!(ta.initial_locations.len(), 1);
-    let init = &ta.locations[ta.initial_locations[0]];
+    let init = &ta.locations[ta.initial_locations[0].as_usize()];
     assert_eq!(
         init.local_vars.get("status"),
         Some(&LocalValue::Enum("idle".into()))
@@ -2210,11 +2234,11 @@ role Worker {
     assert_eq!(ta.rules.len(), 1);
     let rule = &ta.rules[0];
     assert_eq!(
-        ta.locations[rule.from].local_vars.get("status"),
+        ta.locations[rule.from.as_usize()].local_vars.get("status"),
         Some(&LocalValue::Enum("idle".into()))
     );
     assert_eq!(
-        ta.locations[rule.to].local_vars.get("status"),
+        ta.locations[rule.to.as_usize()].local_vars.get("status"),
         Some(&LocalValue::Enum("active".into()))
     );
 }
@@ -2374,8 +2398,8 @@ role Voter {
                 "agreement property should find cross-phase conflicting pairs"
             );
             for (l, r) in &conflicting_pairs {
-                let lp = &ta.locations[*l].phase;
-                let rp = &ta.locations[*r].phase;
+                let lp = &ta.locations[l.as_usize()].phase;
+                let rp = &ta.locations[r.as_usize()].phase;
                 assert_ne!(lp, rp, "conflicting pairs must be in different phases");
             }
         }
@@ -2413,7 +2437,7 @@ role Process {
         .iter()
         .enumerate()
         .filter(|(_, loc)| loc.phase == "done")
-        .map(|(id, _)| id)
+        .map(|(id, _)| LocationId::from(id))
         .collect();
     assert!(
         !goal_locs.is_empty(),
@@ -2449,8 +2473,8 @@ role Replica {
 "#;
     let prog = parse(src, "crypto_obj_ir.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert!(ta.crypto_objects.contains_key("QC"));
-    let qc = &ta.crypto_objects["QC"];
+    assert!(ta.security.crypto_objects.contains_key("QC"));
+    let qc = &ta.security.crypto_objects["QC"];
     assert_eq!(qc.source_message, "Vote");
     assert_eq!(qc.signer_role.as_deref(), Some("Replica"));
     assert!(matches!(qc.kind, IrCryptoObjectKind::QuorumCertificate));
@@ -2514,11 +2538,11 @@ role R {
     // counter=2 -> counter=3 is out of range, so no rule from counter=2
     assert_eq!(ta.rules.len(), 2);
     for rule in &ta.rules {
-        let from_val = match ta.locations[rule.from].local_vars.get("counter") {
+        let from_val = match ta.locations[rule.from.as_usize()].local_vars.get("counter") {
             Some(LocalValue::Int(v)) => *v,
             _ => panic!("expected int counter"),
         };
-        let to_val = match ta.locations[rule.to].local_vars.get("counter") {
+        let to_val = match ta.locations[rule.to.as_usize()].local_vars.get("counter") {
             Some(LocalValue::Int(v)) => *v,
             _ => panic!("expected int counter"),
         };
@@ -2635,9 +2659,9 @@ role R {
     let prog = parse(src, "no_adv_bound.trs").unwrap();
     let ta = lower(&prog).unwrap();
     assert!(
-        ta.adversary_bound_param.is_none(),
+        ta.constraints.adversary_bound_param.is_none(),
         "adversary bound param should be None when not declared"
     );
-    assert_eq!(ta.fault_model, FaultModel::Byzantine); // default
-    assert_eq!(ta.timing_model, TimingModel::Asynchronous); // default
+    assert_eq!(ta.semantics.fault_model, FaultModel::Byzantine); // default
+    assert_eq!(ta.semantics.timing_model, TimingModel::Asynchronous); // default
 }

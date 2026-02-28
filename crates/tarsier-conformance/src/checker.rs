@@ -113,7 +113,7 @@ impl<'a> ConformanceChecker<'a> {
         let mut params = vec![0i64; automaton.parameters.len()];
         for (name, val) in param_bindings {
             if let Some(pid) = automaton.find_param_by_name(name) {
-                params[pid] = *val;
+                params[pid.as_usize()] = *val;
             }
         }
         ConformanceChecker {
@@ -218,7 +218,11 @@ impl<'a> ConformanceChecker<'a> {
                                             rid, rule.from, rule.to, from_location, to_location
                                         ),
                                     });
-                                } else if !self.evaluate_guard(*rid, &msg_counters, &sender_sets) {
+                                } else if !self.evaluate_guard(
+                                    RuleId::from(*rid),
+                                    &msg_counters,
+                                    &sender_sets,
+                                ) {
                                     violations.push(Violation {
                                         process_id: process_trace.process_id,
                                         event_sequence: event.sequence,
@@ -325,7 +329,7 @@ impl<'a> ConformanceChecker<'a> {
                     ProcessEventKind::Decide { .. } => {
                         if self.options.reject_invalid_decide_context {
                             let in_decided_location = current_location
-                                .and_then(|lid| self.automaton.locations.get(lid))
+                                .and_then(|lid| self.automaton.locations.get(lid.as_usize()))
                                 .and_then(|loc| loc.local_vars.get("decided"))
                                 .map(|value| {
                                     matches!(
@@ -364,7 +368,7 @@ impl<'a> ConformanceChecker<'a> {
     fn eval_linear_combination(&self, lc: &LinearCombination) -> i64 {
         let mut val = lc.constant;
         for &(coeff, pid) in &lc.terms {
-            val += coeff * self.params.get(pid).copied().unwrap_or(0);
+            val += coeff * self.params.get(pid.as_usize()).copied().unwrap_or(0);
         }
         val
     }
@@ -399,7 +403,7 @@ impl<'a> ConformanceChecker<'a> {
                     // Count distinct senders across the referenced shared vars
                     let mut combined_senders: HashSet<u64> = HashSet::new();
                     for &vid in vars {
-                        if let Some(sv) = self.automaton.shared_vars.get(vid) {
+                        if let Some(sv) = self.automaton.shared_vars.get(vid.as_usize()) {
                             if let Some(senders) = sender_sets.get(&sv.name) {
                                 combined_senders.extend(senders);
                             }
@@ -410,7 +414,7 @@ impl<'a> ConformanceChecker<'a> {
                     // Sum of message counters for the referenced shared vars
                     let mut sum = 0i64;
                     for &vid in vars {
-                        if let Some(sv) = self.automaton.shared_vars.get(vid) {
+                        if let Some(sv) = self.automaton.shared_vars.get(vid.as_usize()) {
                             sum += msg_counters.get(&sv.name).copied().unwrap_or(0);
                         }
                     }
@@ -429,7 +433,7 @@ impl<'a> ConformanceChecker<'a> {
         msg_counters: &HashMap<String, i64>,
         sender_sets: &HashMap<String, HashSet<u64>>,
     ) -> bool {
-        let rule = &self.automaton.rules[rule_id];
+        let rule = &self.automaton.rules[rule_id.as_usize()];
         // A guard is a conjunction of atoms; empty guard is trivially true.
         rule.guard
             .atoms
@@ -450,8 +454,8 @@ impl<'a> ConformanceChecker<'a> {
             .iter()
             .enumerate()
             .filter(|(_, r)| r.from == from && r.to == to)
-            .filter(|(rid, _)| self.evaluate_guard(*rid, msg_counters, sender_sets))
-            .map(|(rid, _)| rid)
+            .filter(|(rid, _)| self.evaluate_guard(RuleId::from(*rid), msg_counters, sender_sets))
+            .map(|(rid, _)| RuleId::from(rid))
             .collect()
     }
 }
@@ -494,7 +498,7 @@ mod tests {
             local_vars: Default::default(),
         });
 
-        ta.initial_locations = vec![0];
+        ta.initial_locations = vec![LocationId::from(0)];
 
         // Shared var: cnt_Vote
         ta.add_shared_var(SharedVar {
@@ -506,10 +510,10 @@ mod tests {
 
         // Rule 0: L0 -> L1, guard: cnt_Vote >= t+1
         ta.add_rule(Rule {
-            from: 0,
-            to: 1,
+            from: LocationId::from(0),
+            to: LocationId::from(1),
             guard: Guard::single(GuardAtom::Threshold {
-                vars: vec![0],
+                vars: vec![SharedVarId::from(0)],
                 op: CmpOp::Ge,
                 bound: LinearCombination {
                     constant: 1,
@@ -522,8 +526,8 @@ mod tests {
 
         // Rule 1: L0 -> L2, trivial guard
         ta.add_rule(Rule {
-            from: 0,
-            to: 2,
+            from: LocationId::from(0),
+            to: LocationId::from(2),
             guard: Guard::trivial(),
             updates: vec![],
         });

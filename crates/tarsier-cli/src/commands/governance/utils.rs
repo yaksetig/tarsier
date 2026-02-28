@@ -1,3 +1,5 @@
+//! Shared helpers used by governance command implementations.
+//
 // Utility functions for governance workflows.
 
 use miette::IntoDiagnostic;

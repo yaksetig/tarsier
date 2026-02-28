@@ -1,3 +1,5 @@
+//! CLI command module declarations.
+
 pub(crate) mod analyze;
 pub(crate) mod codegen;
 pub(crate) mod compose;

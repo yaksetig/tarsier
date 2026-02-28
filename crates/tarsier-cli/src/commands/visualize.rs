@@ -221,7 +221,7 @@ pub(crate) fn eval_threshold_lc(
 ) -> i64 {
     let mut value = lc.constant;
     for (coeff, pid) in &lc.terms {
-        value += coeff * params.get(*pid).copied().unwrap_or(0);
+        value += coeff * params.get(pid.as_usize()).copied().unwrap_or(0);
     }
     value
 }
@@ -231,7 +231,7 @@ pub(crate) fn crypto_replay_summary(
     pre_config: &tarsier_ir::counter_system::Configuration,
     delivery: &tarsier_ir::counter_system::MessageDeliveryEvent,
 ) -> Option<String> {
-    let spec = ta.crypto_objects.get(&delivery.payload.family)?;
+    let spec = ta.security.crypto_objects.get(&delivery.payload.family)?;
     let recipient_channel = delivery
         .recipient
         .process
@@ -702,15 +702,9 @@ pub(crate) fn run_parse_command(file: PathBuf) -> miette::Result<()> {
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
 
-    match tarsier_dsl::parse(&source, &filename) {
-        Ok(program) => {
-            println!("{:#?}", program);
-        }
-        Err(e) => {
-            eprintln!("Parse error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let program =
+        tarsier_dsl::parse(&source, &filename).map_err(|e| miette::miette!("Parse error: {e}"))?;
+    println!("{:#?}", program);
     Ok(())
 }
 
@@ -730,15 +724,9 @@ pub(crate) fn run_show_ta_command(
         cli_network_mode,
     )?;
 
-    match tarsier_engine::pipeline::show_ta(&source, &filename) {
-        Ok(output) => {
-            print!("{output}");
-        }
-        Err(e) => {
-            eprintln!("Error: {e}");
-            std::process::exit(1);
-        }
-    }
+    let output = tarsier_engine::pipeline::show_ta(&source, &filename)
+        .map_err(|e| miette::miette!("Error: {e}"))?;
+    print!("{output}");
     Ok(())
 }
 
@@ -850,13 +838,13 @@ pub(crate) fn run_visualize_command(
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
 
-    let check = parse_visualize_check(&check);
-    let format = parse_visualize_format(&format);
-    let fairness = parse_fairness_mode(&fairness);
-    let soundness = parse_soundness_mode(&soundness);
+    let check = parse_visualize_check(&check)?;
+    let format = parse_visualize_format(&format)?;
+    let fairness = parse_fairness_mode(&fairness)?;
+    let soundness = parse_soundness_mode(&soundness)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness, cli_network_mode)?;
-    let solver = parse_solver_choice(&solver);
-    let engine = parse_proof_engine(&engine);
+    let solver = parse_solver_choice(&solver)?;
+    let engine = parse_proof_engine(&engine)?;
 
     let program = tarsier_engine::pipeline::parse(&source, &filename).into_diagnostic()?;
     let ta = tarsier_engine::pipeline::lower(&program).into_diagnostic()?;
@@ -958,7 +946,7 @@ pub(crate) fn run_explore_command(
     } else {
         let source = sandbox_read_source(&file)?;
         let filename = file.display().to_string();
-        let solver_choice = parse_solver_choice(&solver);
+        let solver_choice = parse_solver_choice(&solver)?;
 
         let program = tarsier_engine::pipeline::parse(&source, &filename).into_diagnostic()?;
         let ta = tarsier_engine::pipeline::lower(&program).into_diagnostic()?;
@@ -985,7 +973,7 @@ pub(crate) fn run_explore_command(
             },
             Err(e) => {
                 eprintln!("Verification error: {e}");
-                std::process::exit(1);
+                return Err(miette::miette!("Verification error: {e}"));
             }
         }
     }
@@ -1017,12 +1005,12 @@ pub(crate) fn run_debug_cex_command(
 ) -> miette::Result<()> {
     let source = sandbox_read_source(&file)?;
     let filename = file.display().to_string();
-    let check = parse_visualize_check(&check);
-    let fairness = parse_fairness_mode(&fairness);
-    let soundness = parse_soundness_mode(&soundness);
+    let check = parse_visualize_check(&check)?;
+    let fairness = parse_fairness_mode(&fairness)?;
+    let soundness = parse_soundness_mode(&soundness)?;
     validate_cli_network_semantics_mode(&source, &filename, soundness, cli_network_mode)?;
-    let solver = parse_solver_choice(&solver);
-    let engine = parse_proof_engine(&engine);
+    let solver = parse_solver_choice(&solver)?;
+    let engine = parse_proof_engine(&engine)?;
 
     let mut options = PipelineOptions {
         solver,

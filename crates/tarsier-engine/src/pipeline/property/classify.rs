@@ -1,6 +1,7 @@
 //! Fragment classification and quantifier analysis.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::property::*;
 
 fn collect_formula_quantified_var_refs(
     expr: &ast::FormulaExpr,

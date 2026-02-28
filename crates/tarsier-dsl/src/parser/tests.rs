@@ -1400,7 +1400,7 @@ role R { init s; phase s {} }
     assert_eq!(pop.value, CommitteeValue::Int(1000));
     let eps = c.items.iter().find(|i| i.key == "epsilon").unwrap();
     match &eps.value {
-        CommitteeValue::Float(f) => assert!((*f - 1.0e-9).abs() < 1e-15),
+        CommitteeValue::Float(f) => assert!((f - 1.0e-9).abs() < 1e-15),
         other => panic!("expected Float for epsilon, got: {other:?}"),
     }
     let bp = c.items.iter().find(|i| i.key == "bound_param").unwrap();

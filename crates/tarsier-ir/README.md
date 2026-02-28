@@ -19,8 +19,8 @@ compositional verification through module interfaces.
   process counts per location (`kappa`) and shared variable values (`gamma`).
 - `lowering::lower(protocol, source, filename)` -- Lower a `ProtocolDecl` AST
   into a `ThresholdAutomaton`. Reports `SpannedLoweringError` with source spans.
-- `abstraction::abstract_to_counter_system(automaton)` -- Wrap a threshold
-  automaton in a `CounterSystem` for BMC encoding.
+- `abstraction::abstract_to_counter_system(automaton)` -- Convert a threshold
+  automaton into a `CounterSystem` view for BMC encoding (identity mapping).
 - `properties::extract_agreement_property(automaton, property)` -- Extract a
   `SafetyProperty` from a named property declaration.
 - `composition` module -- Data structures for compositional verification with

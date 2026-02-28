@@ -1,6 +1,7 @@
 //! Property extraction & selection, `TaExportProperty`.
 
-use super::*;
+use crate::pipeline::*;
+use crate::pipeline::property::*;
 
 /// Extract the safety property from the protocol.
 ///
@@ -98,7 +99,9 @@ pub(crate) fn select_ta_export_property(
     if has_liveness_properties(program) {
         match extract_liveness_spec(ta, program) {
             Ok(LivenessSpec::TerminationGoalLocs(goal_locs)) => {
-                return TaExportProperty::Safety(SafetyProperty::Termination { goal_locs });
+                return TaExportProperty::Safety(SafetyProperty::Termination {
+                    goal_locs: goal_locs.into_iter().map(Into::into).collect(),
+                });
             }
             Ok(LivenessSpec::Temporal {
                 quantifiers,
@@ -149,7 +152,7 @@ pub(crate) fn extract_property_from_decl(
     ta: &ThresholdAutomaton,
     prop: &ast::PropertyDecl,
 ) -> Result<SafetyProperty, PipelineError> {
-    use ast::{PropertyKind, Quantifier};
+    use tarsier_dsl::ast::{PropertyKind, Quantifier};
     let reachable = graph_reachable_locations(ta);
 
     let q = &prop.formula.quantifiers;
@@ -190,7 +193,12 @@ pub(crate) fn extract_property_from_decl(
                 )?;
                 let mut conflicting_pairs = Vec::new();
                 build_conflicts_from_groups(&groups, &mut conflicting_pairs);
-                return Ok(SafetyProperty::Agreement { conflicting_pairs });
+                return Ok(SafetyProperty::Agreement {
+                    conflicting_pairs: conflicting_pairs
+                        .into_iter()
+                        .map(|(a, b)| (a.into(), b.into()))
+                        .collect(),
+                });
             }
 
             let (var_l, var_r, field) = parse_qualified_eq(body).ok_or_else(|| {
@@ -209,7 +217,12 @@ pub(crate) fn extract_property_from_decl(
             let groups = locs_by_local_var(ta, role, &field, &reachable)?;
             let mut conflicting_pairs = Vec::new();
             build_conflicts_from_groups(&groups, &mut conflicting_pairs);
-            Ok(SafetyProperty::Agreement { conflicting_pairs })
+            Ok(SafetyProperty::Agreement {
+                conflicting_pairs: conflicting_pairs
+                    .into_iter()
+                    .map(|(a, b)| (a.into(), b.into()))
+                    .collect(),
+            })
         }
         PropertyKind::Invariant | PropertyKind::Safety | PropertyKind::Validity => {
             let active_index = resolve_effective_quantifier_index(
@@ -237,7 +250,10 @@ pub(crate) fn extract_property_from_decl(
             }
             let (true_locs, false_locs) = locs_by_bool_var(ta, role, &field, &reachable)?;
             let bad_locs = if value { false_locs } else { true_locs };
-            let bad_sets = bad_locs.into_iter().map(|l| vec![l]).collect();
+            let bad_sets = bad_locs
+                .into_iter()
+                .map(|l| vec![l.into()])
+                .collect();
             Ok(SafetyProperty::Invariant { bad_sets })
         }
         PropertyKind::Liveness => Err(PipelineError::Property(
