@@ -1,7 +1,7 @@
 //! SMT variable naming, term construction, and fair-lasso encoding helpers.
 
-use crate::pipeline::*;
 use crate::pipeline::verification::*;
+use crate::pipeline::*;
 
 pub(crate) fn run_single_depth_bmc_encoding<S: SmtSolver>(
     solver: &mut S,
@@ -333,7 +333,8 @@ pub(crate) fn build_fair_lasso_encoding(
                     .iter()
                     .map(|a| encode_guard_atom_enabled_at_step(a, step))
                     .collect::<Vec<_>>();
-                if ta.semantics.timing_model == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
+                if ta.semantics.timing_model
+                    == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
                 {
                     if let Some(gst_pid) = ta.semantics.gst_param {
                         atoms.push(
@@ -377,8 +378,8 @@ pub(crate) fn build_fair_lasso_encoding(
 
 #[cfg(test)]
 mod tests {
+    use crate::pipeline::verification::*;
     use crate::pipeline::*;
-use crate::pipeline::verification::*;
 
     #[test]
     fn pdr_param_var_format() {

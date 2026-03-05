@@ -1,11 +1,15 @@
 //! Location grouping, guard parsing, reachability.
 
-use crate::pipeline::*;
 use crate::pipeline::property::*;
+use crate::pipeline::*;
 
 pub(crate) fn graph_reachable_locations(ta: &ThresholdAutomaton) -> HashSet<usize> {
     let mut reachable: HashSet<usize> = HashSet::new();
-    let mut stack: Vec<usize> = ta.initial_locations.iter().map(|id| id.as_usize()).collect();
+    let mut stack: Vec<usize> = ta
+        .initial_locations
+        .iter()
+        .map(|id| id.as_usize())
+        .collect();
     while let Some(lid) = stack.pop() {
         if !reachable.insert(lid) {
             continue;

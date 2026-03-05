@@ -488,7 +488,9 @@ impl<'a> KInductionEncoderBuilder<'a> {
                             .sub(net_deliver.clone())
                             .sub(net_drop.clone())),
                     );
-                    if ta.semantics.timing_model == TimingModel::PartialSynchrony && selective_network {
+                    if ta.semantics.timing_model == TimingModel::PartialSynchrony
+                        && selective_network
+                    {
                         if let Some(gst_pid) = ta.semantics.gst_param {
                             let post_gst =
                                 SmtTerm::var(param_var(gst_pid)).le(SmtTerm::var(time_var(step)));

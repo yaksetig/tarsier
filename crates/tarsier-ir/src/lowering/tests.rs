@@ -447,11 +447,19 @@ role R {
     let prog = parse(src, "msg_policies.trs").unwrap();
     let ta = lower(&prog).unwrap();
 
-    let vote_policy = ta.security.message_policies.get("Vote").expect("Vote policy");
+    let vote_policy = ta
+        .security
+        .message_policies
+        .get("Vote")
+        .expect("Vote policy");
     assert_eq!(vote_policy.auth, MessageAuthPolicy::Authenticated);
     assert_eq!(vote_policy.equivocation, MessageEquivocationPolicy::None);
 
-    let ping_policy = ta.security.message_policies.get("Ping").expect("Ping policy");
+    let ping_policy = ta
+        .security
+        .message_policies
+        .get("Ping")
+        .expect("Ping policy");
     assert_eq!(ping_policy.auth, MessageAuthPolicy::Unauthenticated);
     assert_eq!(ping_policy.equivocation, MessageEquivocationPolicy::Full);
 
@@ -489,7 +497,10 @@ role R {
 "#;
     let prog = parse(src, "net_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.semantics.network_semantics, NetworkSemantics::IdentitySelective);
+    assert_eq!(
+        ta.semantics.network_semantics,
+        NetworkSemantics::IdentitySelective
+    );
 }
 
 #[test]
@@ -514,7 +525,10 @@ role R {
 "#;
     let prog = parse(src, "delivery_fault_scope_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.semantics.delivery_control, DeliveryControlMode::PerRecipient);
+    assert_eq!(
+        ta.semantics.delivery_control,
+        DeliveryControlMode::PerRecipient
+    );
     assert_eq!(ta.semantics.fault_budget_scope, FaultBudgetScope::Global);
 }
 
@@ -571,7 +585,10 @@ role R {
 "#;
     let prog = parse(src, "process_selective_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.semantics.network_semantics, NetworkSemantics::ProcessSelective);
+    assert_eq!(
+        ta.semantics.network_semantics,
+        NetworkSemantics::ProcessSelective
+    );
 
     let recipient0_vars: std::collections::HashSet<usize> = ta
         .shared_vars
@@ -682,7 +699,10 @@ role R {
     let prog = parse(src, "process_selective_identity_var.trs").unwrap();
     let ta = lower(&prog).unwrap();
 
-    assert_eq!(ta.semantics.network_semantics, NetworkSemantics::ProcessSelective);
+    assert_eq!(
+        ta.semantics.network_semantics,
+        NetworkSemantics::ProcessSelective
+    );
     assert!(
         ta.locations
             .iter()
@@ -903,7 +923,10 @@ role R {
 "#;
     let prog = parse(src, "cohort_selective_cfg.trs").unwrap();
     let ta = lower(&prog).unwrap();
-    assert_eq!(ta.semantics.network_semantics, NetworkSemantics::CohortSelective);
+    assert_eq!(
+        ta.semantics.network_semantics,
+        NetworkSemantics::CohortSelective
+    );
     assert!(
         ta.locations
             .iter()
@@ -1407,7 +1430,8 @@ role Replica {
     let prog = parse(src, "crypto_auth_default.trs").unwrap();
     let ta = lower(&prog).unwrap();
     let qc_policy = ta
-        .security.message_policies
+        .security
+        .message_policies
         .get("QC")
         .expect("crypto object should have default message policy");
     assert_eq!(qc_policy.auth, MessageAuthPolicy::Authenticated);
@@ -2157,7 +2181,8 @@ role R {
     let ta = lower(&prog).unwrap();
     assert_eq!(ta.semantics.fault_model, FaultModel::Byzantine);
     let bound = ta
-        .constraints.adversary_bound_param
+        .constraints
+        .adversary_bound_param
         .expect("adversary bound should be set");
     assert_eq!(ta.parameters[bound.as_usize()].name, "f");
     // No crash counter in Byzantine mode
@@ -2185,7 +2210,8 @@ role R {
     let prog = parse(src, "resilience_check.trs").unwrap();
     let ta = lower(&prog).unwrap();
     let rc = ta
-        .constraints.resilience_condition
+        .constraints
+        .resilience_condition
         .as_ref()
         .expect("resilience condition should be present");
     // lhs should be n (param 0)

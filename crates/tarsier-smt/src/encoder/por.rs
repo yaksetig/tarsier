@@ -309,7 +309,8 @@ pub(super) fn role_process_identity_var<'a>(
     ta: &'a ThresholdAutomaton,
     role: &str,
 ) -> Option<&'a str> {
-    ta.security.role_identities
+    ta.security
+        .role_identities
         .get(role)
         .and_then(|cfg| {
             if cfg.scope == RoleIdentityScope::Process {
@@ -429,7 +430,8 @@ pub(super) fn sender_channel_key_compromised(
     sender_channel: &str,
 ) -> bool {
     let role = sender_channel_role(sender_channel);
-    ta.security.role_identities
+    ta.security
+        .role_identities
         .get(role)
         .map(|cfg| ta.security.compromised_keys.contains(&cfg.key_name))
         .unwrap_or(false)
@@ -546,28 +548,34 @@ pub(super) fn collect_exclusive_crypto_variant_groups(
 /// Resolve a message family's effective authentication policy (inheriting from global if needed).
 pub(super) fn message_effective_signed_auth(ta: &ThresholdAutomaton, family: &str) -> bool {
     match ta
-        .security.message_policies
+        .security
+        .message_policies
         .get(family)
         .map(|p| p.auth)
         .unwrap_or(MessageAuthPolicy::Inherit)
     {
         MessageAuthPolicy::Authenticated => true,
         MessageAuthPolicy::Unauthenticated => false,
-        MessageAuthPolicy::Inherit => ta.semantics.authentication_mode == AuthenticationMode::Signed,
+        MessageAuthPolicy::Inherit => {
+            ta.semantics.authentication_mode == AuthenticationMode::Signed
+        }
     }
 }
 
 /// Resolve a message family's effective equivocation policy (inheriting from global if needed).
 pub(super) fn message_effective_non_equivocating(ta: &ThresholdAutomaton, family: &str) -> bool {
     match ta
-        .security.message_policies
+        .security
+        .message_policies
         .get(family)
         .map(|p| p.equivocation)
         .unwrap_or(MessageEquivocationPolicy::Inherit)
     {
         MessageEquivocationPolicy::None => true,
         MessageEquivocationPolicy::Full => false,
-        MessageEquivocationPolicy::Inherit => ta.semantics.equivocation_mode == EquivocationMode::None,
+        MessageEquivocationPolicy::Inherit => {
+            ta.semantics.equivocation_mode == EquivocationMode::None
+        }
     }
 }
 

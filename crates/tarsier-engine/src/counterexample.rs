@@ -314,7 +314,8 @@ fn identity_from_recipient_channel(
         .map(|(r, p)| (r.to_string(), Some(p.to_string())))
         .unwrap_or_else(|| (recipient_channel.to_string(), None));
     let key = ta
-        .security.role_identities
+        .security
+        .role_identities
         .get(&role)
         .map(|cfg| cfg.key_name.clone());
     MessageIdentity { role, process, key }
@@ -326,7 +327,8 @@ fn identity_from_sender_channel(ta: &ThresholdAutomaton, sender_channel: &str) -
         .map(|(r, p)| (r.to_string(), Some(p.to_string())))
         .unwrap_or_else(|| (sender_channel.to_string(), None));
     let key = ta
-        .security.role_identities
+        .security
+        .role_identities
         .get(&role)
         .map(|cfg| cfg.key_name.clone());
     MessageIdentity { role, process, key }
@@ -695,7 +697,8 @@ mod tests {
                 key_name: "replica_key".to_string(),
             },
         );
-        ta.security.key_ownership
+        ta.security
+            .key_ownership
             .insert("replica_key".to_string(), "Replica".to_string());
         ta.semantics.authentication_mode = if authenticated {
             AuthenticationMode::Signed
@@ -805,7 +808,9 @@ mod tests {
         assert!(owned.authenticated_channel);
         assert!(!owned.key_compromised);
 
-        ta.security.compromised_keys.insert("replica_key".to_string());
+        ta.security
+            .compromised_keys
+            .insert("replica_key".to_string());
         let compromised = auth_metadata_for_owned_sender(&ta, &sender, "Vote");
         assert_eq!(compromised.provenance, SignatureProvenance::CompromisedKey);
         assert!(compromised.key_compromised);
@@ -833,7 +838,9 @@ mod tests {
         assert_eq!(byz.provenance, SignatureProvenance::ByzantineSigner);
         assert!(byz.authenticated_channel);
 
-        ta.security.compromised_keys.insert("replica_key".to_string());
+        ta.security
+            .compromised_keys
+            .insert("replica_key".to_string());
         let compromised = auth_metadata_for_forge(&ta, "Vote");
         assert_eq!(compromised.provenance, SignatureProvenance::CompromisedKey);
         assert_eq!(compromised.signature_key.as_deref(), Some("replica_key"));

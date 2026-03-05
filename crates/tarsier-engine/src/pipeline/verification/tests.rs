@@ -1,7 +1,7 @@
 //! Unit tests for verification helpers and SMT orchestration glue.
 
-use crate::pipeline::*;
 use crate::pipeline::verification::*;
+use crate::pipeline::*;
 use std::collections::HashMap;
 use tarsier_ir::properties::SafetyProperty;
 use tarsier_ir::threshold_automaton::{
@@ -323,7 +323,10 @@ fn por_comparable_lc_constants_same_vs_different_terms() {
         constant: 20,
         terms: vec![(1, 0.into())],
     };
-    assert_eq!(por_comparable_lc_constants(&lhs, &rhs), Some((10, 20.into())));
+    assert_eq!(
+        por_comparable_lc_constants(&lhs, &rhs),
+        Some((10, 20.into()))
+    );
 
     let rhs_diff = LinearCombination {
         constant: 20,
@@ -344,7 +347,10 @@ fn make_guard_atom(
         op,
         bound: LinearCombination {
             constant,
-            terms: terms.into_iter().map(|(coeff, pid)| (coeff, pid.into())).collect(),
+            terms: terms
+                .into_iter()
+                .map(|(coeff, pid)| (coeff, pid.into()))
+                .collect(),
         },
         distinct,
     }

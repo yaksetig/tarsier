@@ -1,7 +1,7 @@
 //! Network semantics, POR analysis, and controlled lowering helpers.
 
-use crate::pipeline::*;
 use crate::pipeline::verification::*;
+use crate::pipeline::*;
 
 pub(crate) fn adversary_value<'a>(proto: &'a ast::ProtocolDecl, key: &str) -> Option<&'a str> {
     proto
@@ -357,14 +357,11 @@ pub(crate) fn por_guard_atom_implies(lhs: &GuardAtom, rhs: &GuardAtom) -> bool {
                 distinct: rhs_distinct,
             },
         ) => {
-            let lhs_vars_norm = por_normalized_vars(
-                &lhs_vars.iter().map(|v| v.as_usize()).collect::<Vec<_>>(),
-            );
-            let rhs_vars_norm = por_normalized_vars(
-                &rhs_vars.iter().map(|v| v.as_usize()).collect::<Vec<_>>(),
-            );
-            if lhs_distinct != rhs_distinct || lhs_vars_norm != rhs_vars_norm
-            {
+            let lhs_vars_norm =
+                por_normalized_vars(&lhs_vars.iter().map(|v| v.as_usize()).collect::<Vec<_>>());
+            let rhs_vars_norm =
+                por_normalized_vars(&rhs_vars.iter().map(|v| v.as_usize()).collect::<Vec<_>>());
+            if lhs_distinct != rhs_distinct || lhs_vars_norm != rhs_vars_norm {
                 return false;
             }
             let Some((lhs_const, rhs_const)) = por_comparable_lc_constants(lhs_bound, rhs_bound)
@@ -726,7 +723,8 @@ pub(crate) fn lower_with_controls(
         fault_budget_scope: fault_budget_scope_name(current_ta.semantics.fault_budget_scope).into(),
         identity_roles: current_ta.security.role_identities.len(),
         process_identity_roles: current_ta
-            .security.role_identities
+            .security
+            .role_identities
             .values()
             .filter(|cfg| cfg.scope == tarsier_ir::threshold_automaton::RoleIdentityScope::Process)
             .count(),
@@ -756,8 +754,8 @@ pub(crate) fn lower_with_active_controls(
 
 #[cfg(test)]
 mod tests {
+    use crate::pipeline::verification::*;
     use crate::pipeline::*;
-use crate::pipeline::verification::*;
     use tarsier_ir::threshold_automaton::{Guard, LinearCombination, Rule, Update, UpdateKind};
 
     // Helper: create a minimal ProtocolDecl for testing

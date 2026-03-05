@@ -1,7 +1,7 @@
 //! CEGAR types, refinement logic, oracle, scoring, and reporting.
 
-use crate::pipeline::*;
 use crate::pipeline::verification::*;
+use crate::pipeline::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CegarRefinementKind {

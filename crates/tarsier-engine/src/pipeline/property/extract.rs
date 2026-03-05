@@ -1,7 +1,7 @@
 //! Property extraction & selection, `TaExportProperty`.
 
-use crate::pipeline::*;
 use crate::pipeline::property::*;
+use crate::pipeline::*;
 
 /// Extract the safety property from the protocol.
 ///

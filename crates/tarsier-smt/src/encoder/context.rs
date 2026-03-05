@@ -108,7 +108,8 @@ pub(super) fn build_common_encoder_context(cs: &CounterSystem) -> CommonEncoderC
     for (id, loc) in ta.locations.iter().enumerate() {
         role_loc_ids.entry(loc.role.clone()).or_default().push(id);
     }
-    let process_scoped_network = ta.semantics.network_semantics == NetworkSemantics::ProcessSelective;
+    let process_scoped_network =
+        ta.semantics.network_semantics == NetworkSemantics::ProcessSelective;
     let process_id_buckets = process_scoped_network.then(|| process_identity_buckets(ta));
     let missing_process_ids = process_scoped_network
         && ta

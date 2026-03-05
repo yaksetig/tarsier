@@ -235,10 +235,7 @@ pub(super) fn apply_round_erasure_abstraction(
                             bound,
                             distinct,
                         } => GuardAtom::Threshold {
-                            vars: vars
-                                .iter()
-                                .map(|v| shared_map[v.as_usize()])
-                                .collect(),
+                            vars: vars.iter().map(|v| shared_map[v.as_usize()]).collect(),
                             op: *op,
                             bound: bound.clone(),
                             distinct: *distinct,
@@ -587,7 +584,8 @@ pub fn comm_complexity(
         .map(|id| ta.parameters[id.as_usize()].name.clone());
     let n_label = n_param.clone().unwrap_or_else(|| "n".into());
     let adv_param = ta
-        .constraints.adversary_bound_param
+        .constraints
+        .adversary_bound_param
         .map(|id| ta.parameters[id.as_usize()].name.clone());
     let min_decision_steps = {
         let decision_locs: Vec<LocationId> = ta
@@ -982,7 +980,10 @@ pub fn comm_complexity(
         authentication_mode: format!("{:?}", ta.semantics.authentication_mode),
         equivocation_mode: format!("{:?}", ta.semantics.equivocation_mode),
         network_semantics: format!("{:?}", ta.semantics.network_semantics),
-        gst_param: ta.semantics.gst_param.map(|id| ta.parameters[id.as_usize()].name.clone()),
+        gst_param: ta
+            .semantics
+            .gst_param
+            .map(|id| ta.parameters[id.as_usize()].name.clone()),
     };
 
     // --- Model metadata (item 7) ---

@@ -1,8 +1,6 @@
 //! Trait-based pipeline stages for composable, testable execution flows.
 
-use super::{
-    abstract_to_cs, lower, parse, CounterSystem, PipelineError, ThresholdAutomaton,
-};
+use super::{abstract_to_cs, lower, parse, CounterSystem, PipelineError, ThresholdAutomaton};
 use tarsier_dsl::ast;
 
 /// Single pipeline stage that transforms `Input` into `Output`.
@@ -223,4 +221,3 @@ protocol Tiny {
         assert_eq!(cs.num_rules(), 0);
     }
 }
-

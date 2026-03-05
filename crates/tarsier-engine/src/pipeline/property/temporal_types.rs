@@ -1,7 +1,7 @@
 //! `LivenessSpec`, `TemporalFormula`, `TemporalBuchiAutomaton`, etc.
 
-use crate::pipeline::*;
 use crate::pipeline::property::*;
+use crate::pipeline::*;
 
 #[derive(Debug, Clone)]
 pub(crate) enum LivenessSpec {

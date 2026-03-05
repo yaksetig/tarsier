@@ -1,8 +1,8 @@
 //! Unit tests for property lowering, evaluation, and temporal encodings.
 
 use super::super::verification::pdr_kappa_var;
-use crate::pipeline::*;
 use crate::pipeline::property::*;
+use crate::pipeline::*;
 use tarsier_ir::threshold_automaton::{Guard, Location, Parameter, Rule};
 use tarsier_smt::terms::SmtTerm;
 

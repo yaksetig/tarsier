@@ -1,7 +1,7 @@
 //! `TemporalAtomTable`, NNF conversion, operators.
 
-use crate::pipeline::*;
 use crate::pipeline::property::*;
+use crate::pipeline::*;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct TemporalAtomTable {

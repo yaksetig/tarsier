@@ -1,7 +1,7 @@
 //! `FormulaValue`, `eval_formula_*` functions.
 
-use crate::pipeline::*;
 use crate::pipeline::property::*;
+use crate::pipeline::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum FormulaValue {

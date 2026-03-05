@@ -2,8 +2,8 @@
 
 use std::collections::HashSet;
 
-use crate::pipeline::*;
 use crate::pipeline::verification::*;
+use crate::pipeline::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PipelineCommand {
@@ -567,7 +567,10 @@ pub(crate) fn strict_preflight_validate(
                             tracing::warn!(
                                 "Transition in role '{}' phase '{}' uses lock/justify for '{}' \
                                  without explicit 'has {}(...)' guard.",
-                                role.node.name, phase.node.name, name, name
+                                role.node.name,
+                                phase.node.name,
+                                name,
+                                name
                             );
                         }
                     }
@@ -724,8 +727,8 @@ pub fn completeness_preflight(program: &ast::Program) -> Vec<CompletenessWarning
 
 #[cfg(test)]
 mod tests {
+    use crate::pipeline::verification::*;
     use crate::pipeline::*;
-use crate::pipeline::verification::*;
 
     // Helper: build a simple ThresholdGuard for testing
     fn make_threshold_guard(

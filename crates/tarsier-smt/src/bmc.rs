@@ -256,7 +256,8 @@ fn location_symmetry_key(cs: &CounterSystem, loc_id: usize) -> String {
     let ta = cs;
     let loc = &ta.locations[loc_id];
     let pid_var = ta
-        .security.role_identities
+        .security
+        .role_identities
         .get(&loc.role)
         .and_then(|cfg| {
             if cfg.scope == RoleIdentityScope::Process {
