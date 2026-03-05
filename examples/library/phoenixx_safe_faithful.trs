@@ -1,0 +1,134 @@
+// Phoenixx — Linear Consensus with Random Sampling
+// Chaum, Cardoso, Carter, Yaksetig, Aroso (IACR ePrint 2023/1262)
+//
+// HotStuff-inspired 3-phase BFT with endorser sampling.
+// Full network confirms proposals (NQC = 2f+1 votes), then a randomly
+// selected endorser committee certifies (EQC = q·|E| endorsements).
+//
+// Safety relies on two layers:
+//   1. Deterministic: only one NQC per round (quorum overlap, Lemma 1)
+//   2. Probabilistic: EQC implies NQC (≥1 honest endorser, Lemma 3)
+//
+// The committee block bounds the max Byzantine endorsers using
+// hypergeometric analysis. With b+1 endorsements required for EQC,
+// and at most b Byzantine endorsers, at least 1 honest endorser
+// must participate — guaranteeing the EQC reflects a real NQC.
+//
+// Rule 1 (Voting): vote for at most one proposal per round
+// Rule 2 (Endorsing): endorse only after seeing NQC, same proposal voted for
+// Rule 3 (Locking): only vote if parent round >= preferred round
+//
+// This model captures the per-round confirm+endorse safety kernel.
+
+protocol PhoenixxSafeFaithful {
+    params n, t, f, b, gst;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        auth: signed;
+        network: identity_selective;
+        delivery: per_recipient;
+        faults: per_recipient;
+        equivocation: none;
+        values: sign;
+    }
+
+    // Endorser committee: 200 endorsers from 1000 validators, 333 Byzantine.
+    // Computes b_max such that P(Byz in committee > b_max) < epsilon.
+    // Paper uses q=0.6, |E|=200, epsilon=1e-14 for MTTF > 5.7M years.
+    committee endorsers {
+        population: 1000;
+        byzantine: 333;
+        size: 200;
+        epsilon: 1.0e-14;
+        bound_param: b;
+    }
+
+    // Confirm votes (full network → endorsers)
+    message ConfirmA;
+    message ConfirmB;
+    // Endorsements (endorser set → all validators)
+    message EndorseA;
+    message EndorseB;
+
+    identity Validator: role key validator_key;
+
+    channel ConfirmA: authenticated;
+    channel ConfirmB: authenticated;
+    channel EndorseA: authenticated;
+    channel EndorseB: authenticated;
+
+    // Rule 1: at most one vote per round (no double-voting)
+    equivocation ConfirmA: none;
+    equivocation ConfirmB: none;
+    // Rule 2: at most one endorsement per round
+    equivocation EndorseA: none;
+    equivocation EndorseB: none;
+
+    role Validator {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init confirm;
+
+        // Confirm phase (Rule 1): vote for one proposal
+        phase confirm {
+            when received >= 1 ConfirmA => {
+                send ConfirmA;
+                goto phase endorse;
+            }
+            when received >= 1 ConfirmB => {
+                send ConfirmB;
+                goto phase endorse;
+            }
+        }
+
+        // Endorse phase (Rule 2): after seeing NQC (2t+1 confirms), endorse
+        phase endorse {
+            when received distinct >= 2*t+1 ConfirmA => {
+                send EndorseA;
+                goto phase certify;
+            }
+            when received distinct >= 2*t+1 ConfirmB => {
+                send EndorseB;
+                goto phase certify;
+            }
+        }
+
+        // Certify phase: collect EQC (b+1 endorsements from committee)
+        // Committee bounds ensure at most b Byzantine endorsers,
+        // so b+1 endorsements must include >= 1 honest endorser,
+        // which guarantees the EQC is backed by a real NQC.
+        phase certify {
+            when received >= b+1 EndorseA => {
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done;
+            }
+            when received >= b+1 EndorseB => {
+                decided = true;
+                decision = false;
+                decide false;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    // SAFETY: all deciding validators agree on the same proposal
+    property agreement: agreement {
+        forall p: Validator. forall q: Validator.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+
+    // LIVENESS: every validator eventually decides
+    property termination: liveness {
+        forall p: Validator. p.decided == true
+    }
+}

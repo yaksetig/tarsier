@@ -1,0 +1,111 @@
+// Minimmit — Fast Finality with Even Faster Blocks
+// Chou, Lewis-Pye, O'Grady (FC 2026)
+//
+// 2-round finality BFT SMR protocol with n >= 5f+1.
+// Key innovation: dual-quorum structure separating finalization
+// from view progression.
+//
+// L-notarisation (n-f votes): suffices for finalization
+// M-notarisation (2f+1 votes): suffices for view progression
+// Nullification (2f+1 nullify messages): view skip on timeout
+//
+// Safety kernel: models two competing proposals in the same view.
+// X1: If block A gets L-notarised, no conflicting block B can get
+//     even 2f+1 votes (M-notarised). Proof: overlap between n-f
+//     and 2f+1 is (n-f)+(2f+1)-n = f+1, so at least one correct
+//     processor would have double-voted — contradiction.
+// X2: If block A gets L-notarised, no nullification can form.
+//     Proof: at most 2f processors (n-f correct voted for A) can
+//     send nullify, which is < 2f+1 needed for nullification.
+
+protocol Minimmit {
+    params n, t, f, gst;
+    resilience: n > 5*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        auth: signed;
+        network: identity_selective;
+        delivery: per_recipient;
+        faults: per_recipient;
+        equivocation: none;
+        values: sign;
+    }
+
+    // Two competing proposals in the same view
+    message VoteA;
+    message VoteB;
+    // Nullify message for view change on timeout
+    message Nullify;
+
+    identity Processor: role key processor_key;
+
+    channel VoteA: authenticated;
+    channel VoteB: authenticated;
+    channel Nullify: authenticated;
+
+    equivocation VoteA: none;
+    equivocation VoteB: none;
+    equivocation Nullify: none;
+
+    role Processor {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init start;
+
+        // Receive proposal and vote (one block only — state machine enforces no double-voting)
+        phase start {
+            when received >= 1 VoteA => {
+                send VoteA;
+                goto phase voted;
+            }
+            when received >= 1 VoteB => {
+                send VoteB;
+                goto phase voted;
+            }
+            // Timeout before voting: send nullify
+            when received >= 1 Nullify => {
+                send Nullify;
+                goto phase nullified;
+            }
+        }
+
+        // Voted, waiting for L-notarisation (finalization) or M-notarisation (view change)
+        phase voted {
+            // L-notarisation for A (n-t distinct votes): finalize A
+            when received distinct >= n-t VoteA => {
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done;
+            }
+            // L-notarisation for B (n-t distinct votes): finalize B
+            when received distinct >= n-t VoteB => {
+                decided = true;
+                decision = false;
+                decide false;
+                goto phase done;
+            }
+        }
+
+        // Nullified — waiting for enough nullify messages to form nullification
+        phase nullified {}
+
+        phase done {}
+    }
+
+    // SAFETY: all finalizing processors agree on the same block
+    property agreement: agreement {
+        forall p: Processor. forall q: Processor.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+
+    // LIVENESS: every processor eventually finalizes
+    property termination: liveness {
+        forall p: Processor. p.decided == true
+    }
+}
