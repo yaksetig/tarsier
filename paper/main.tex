@@ -63,23 +63,25 @@
 
 \begin{abstract}
 We present \tarsier{}, a parameterized model checker for threshold-guarded
-distributed protocols.  \tarsier{} verifies safety and liveness properties
-for \emph{all} system sizes satisfying a given resilience condition
-(e.g., $n > 3t$), without requiring explicit instantiation.
-The tool introduces three advances over prior threshold-automata verifiers:
-(i)~a hierarchy of four \emph{network abstraction modes} ranging from
-classic counter abstraction to \emph{process-selective} semantics that are
-instance-exact with respect to a faithful protocol model;
+distributed protocols that verifies safety and liveness properties for
+\emph{all} system sizes satisfying a given resilience condition (e.g.,
+$n > 3t$), without requiring explicit instantiation.  \tarsier{} introduces
+three advances over prior threshold-automata verifiers:
+(i)~a hierarchy of four \emph{network abstraction modes}---from classic
+counter abstraction to \emph{process-selective} semantics that are
+instance-exact with respect to a faithful protocol model, so that both
+SAFE and UNSAFE verdicts transfer;
 (ii)~first-class \emph{cryptographic object} declarations (certificates,
 threshold signatures) with non-forgeability and signer-set constraints
-encoded directly in SMT; and
-(iii)~a \emph{minimal proof kernel} with only four dependencies that
-independently validates proof certificates without trusting the
+encoded directly in SMT\@; and
+(iii)~a \emph{minimal proof kernel} with only four library dependencies
+that independently validates proof certificates without trusting the
 verification engine.
-We evaluate \tarsier{} on a library of 48~protocol models spanning PBFT,
-HotStuff, Tendermint, Paxos, and Algorand families, demonstrating that
-faithful network modes close soundness gaps present in classical
-abstractions while remaining tractable for SMT solvers.
+We evaluate \tarsier{} on 49~protocol models spanning PBFT, HotStuff,
+Tendermint, Paxos, Algorand, and nine additional BFT families.
+Faithful network modes close soundness gaps present in classical
+abstractions---detecting equivocation-based bugs that classic mode
+cannot express---while remaining tractable for SMT solvers.
 
 \keywords{Parameterized verification \and Threshold automata \and
 Byzantine fault tolerance \and SMT-based model checking \and
