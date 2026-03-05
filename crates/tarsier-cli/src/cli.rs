@@ -783,7 +783,7 @@ pub(crate) enum Commands {
     /// Scaffold a new protocol from a template
     #[command(display_order = 1)]
     Assist {
-        /// Protocol family scaffold: pbft | hotstuff | raft
+        /// Protocol family scaffold: pbft | hotstuff | raft | tendermint | streamlet | casper
         #[arg(long, default_value = "pbft")]
         kind: String,
 

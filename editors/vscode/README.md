@@ -19,8 +19,8 @@ specification files (`.trs`).
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 20+
-- The `tarsier` binary (built from the workspace root with
-  `cargo build --release`)
+- The `tarsier-lsp` binary (built from the workspace root with
+  `cargo build --release -p tarsier-lsp`)
 
 ### Build and install
 
@@ -51,13 +51,13 @@ you open a `.trs` file.
 
 | Setting              | Type     | Default     | Description                                      |
 |----------------------|----------|-------------|--------------------------------------------------|
-| `tarsier.serverPath` | `string` | `"tarsier"` | Path to the `tarsier` binary. The LSP is started via `tarsier lsp`. Set this if the binary is not on your `PATH`. |
+| `tarsier.serverPath` | `string` | `"tarsier-lsp"` | Path to the `tarsier-lsp` binary. Set this if the binary is not on your `PATH`. |
 
 Example `settings.json`:
 
 ```json
 {
-  "tarsier.serverPath": "/path/to/target/release/tarsier"
+  "tarsier.serverPath": "/path/to/target/release/tarsier-lsp"
 }
 ```
 
@@ -66,9 +66,9 @@ Example `settings.json`:
 **LSP server not starting:**
 - Check the "Tarsier" output channel (View > Output > select "Tarsier") for
   error messages.
-- Verify that `tarsier` is on your PATH or that `tarsier.serverPath` points to
+- Verify that `tarsier-lsp` is on your PATH or that `tarsier.serverPath` points to
   the correct binary.
-- Ensure the binary was built successfully: run `tarsier lsp` from a terminal to
+- Ensure the binary was built successfully: run `tarsier-lsp` from a terminal to
   confirm it starts without errors.
 
 **No syntax highlighting:**

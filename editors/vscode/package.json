@@ -31,8 +31,8 @@
       "properties": {
         "tarsier.serverPath": {
           "type": "string",
-          "default": "tarsier",
-          "description": "Path to the tarsier binary. The LSP server is started via 'tarsier lsp'."
+          "default": "tarsier-lsp",
+          "description": "Path to the tarsier-lsp binary."
         }
       }
     }
