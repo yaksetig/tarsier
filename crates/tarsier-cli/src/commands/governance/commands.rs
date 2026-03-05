@@ -650,6 +650,7 @@ pub(crate) fn run_governance_pipeline_command(
             cli_network_mode,
             None,
             &por_mode,
+            false,
         );
         let status = if report.overall == "pass" {
             "pass"

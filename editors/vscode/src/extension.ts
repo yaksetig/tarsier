@@ -24,11 +24,11 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarItem);
 
   const config = vscode.workspace.getConfiguration("tarsier");
-  const serverPath = config.get<string>("serverPath", "tarsier");
+  const serverPath = config.get<string>("serverPath", "tarsier-lsp");
 
   const serverOptions: ServerOptions = {
-    run: { command: serverPath, args: ["lsp"] },
-    debug: { command: serverPath, args: ["lsp"] },
+    run: { command: serverPath },
+    debug: { command: serverPath },
   };
 
   const clientOptions: LanguageClientOptions = {

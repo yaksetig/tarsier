@@ -71,23 +71,23 @@ protocol MyProtocol {
         gst: f;
     }
 
-    message Vote(value: bool);
+    message Vote;
 
     role Replica {
         var decided: bool = false;
         init idle;
 
         phase idle {
-            on Vote(v) from >= 2*f+1 {
-                decided := true;
-                goto done;
+            when received >= 2*f+1 Vote => {
+                decided = true;
+                goto phase done;
             }
         }
         phase done {}
     }
 
     property agreement: safety {
-        forall p, q: Replica.
+        forall p: Replica. forall q: Replica.
             (p.decided == true && q.decided == true) ==> true
     }
 }
@@ -212,7 +212,7 @@ Quickly bootstrap a new protocol model from a template:
 tarsier assist --kind pbft --out my_pbft.trs
 ```
 
-Available scaffolds: `pbft`, `hotstuff`, `raft`, `tendermint`, `streamlet`, `casper`.
+Available scaffolds: `pbft` (default), `hotstuff`, `raft`, `tendermint`, `streamlet`, `casper`.
 
 ## 9. Use the Playground
 

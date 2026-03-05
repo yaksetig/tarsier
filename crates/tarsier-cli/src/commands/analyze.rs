@@ -1858,6 +1858,7 @@ pub(crate) fn run_analysis(
     network_mode: CliNetworkSemanticsMode,
     cert_out_dir: Option<&Path>,
     por_mode: &str,
+    safety_only: bool,
 ) -> AnalysisReport {
     let mut layers = Vec::new();
     let network_faithfulness =
@@ -1921,18 +1922,20 @@ pub(crate) fn run_analysis(
                     cfg,
                     verify_cegar_iters,
                 ));
-                layers.push(run_liveness_layer_portfolio(
-                    source,
-                    filename,
-                    "liveness[bounded]",
-                    cfg,
-                ));
-                layers.push(run_fair_liveness_layer_portfolio(
-                    source,
-                    filename,
-                    "liveness[fair_lasso]",
-                    cfg,
-                ));
+                if !safety_only {
+                    layers.push(run_liveness_layer_portfolio(
+                        source,
+                        filename,
+                        "liveness[bounded]",
+                        cfg,
+                    ));
+                    layers.push(run_fair_liveness_layer_portfolio(
+                        source,
+                        filename,
+                        "liveness[fair_lasso]",
+                        cfg,
+                    ));
+                }
             } else {
                 layers.push(run_verify_layer(
                     source,
@@ -1941,21 +1944,23 @@ pub(crate) fn run_analysis(
                     cfg,
                     verify_cegar_iters,
                 ));
-                layers.push(run_liveness_layer(
-                    source,
-                    filename,
-                    "liveness[bounded]",
-                    cfg.solver,
-                    cfg.depth,
-                    cfg.timeout,
-                    cfg.soundness,
-                ));
-                layers.push(run_fair_liveness_layer(
-                    source,
-                    filename,
-                    "liveness[fair_lasso]",
-                    cfg,
-                ));
+                if !safety_only {
+                    layers.push(run_liveness_layer(
+                        source,
+                        filename,
+                        "liveness[bounded]",
+                        cfg.solver,
+                        cfg.depth,
+                        cfg.timeout,
+                        cfg.soundness,
+                    ));
+                    layers.push(run_fair_liveness_layer(
+                        source,
+                        filename,
+                        "liveness[fair_lasso]",
+                        cfg,
+                    ));
+                }
             }
             layers.push(run_comm_layer(source, filename, "comm", cfg.depth));
         }
@@ -1981,12 +1986,14 @@ pub(crate) fn run_analysis(
                 proof_cfg,
                 ProofEngine::Pdr,
             ));
-            layers.push(run_prove_fair_layer_portfolio(
-                source,
-                filename,
-                "prove[fair_pdr]",
-                proof_cfg,
-            ));
+            if !safety_only {
+                layers.push(run_prove_fair_layer_portfolio(
+                    source,
+                    filename,
+                    "prove[fair_pdr]",
+                    proof_cfg,
+                ));
+            }
         } else {
             layers.push(run_prove_layer(
                 source,
@@ -2002,12 +2009,14 @@ pub(crate) fn run_analysis(
                 proof_cfg,
                 ProofEngine::Pdr,
             ));
-            layers.push(run_prove_fair_layer(
-                source,
-                filename,
-                "prove[fair_pdr]",
-                proof_cfg,
-            ));
+            if !safety_only {
+                layers.push(run_prove_fair_layer(
+                    source,
+                    filename,
+                    "prove[fair_pdr]",
+                    proof_cfg,
+                ));
+            }
         }
     }
 
@@ -2030,12 +2039,14 @@ pub(crate) fn run_analysis(
             secondary_cfg,
             verify_cegar_iters,
         ));
-        layers.push(run_fair_liveness_layer(
-            source,
-            filename,
-            &format!("liveness[fair_lasso]{suffix}"),
-            secondary_cfg,
-        ));
+        if !safety_only {
+            layers.push(run_fair_liveness_layer(
+                source,
+                filename,
+                &format!("liveness[fair_lasso]{suffix}"),
+                secondary_cfg,
+            ));
+        }
         layers.push(run_prove_layer(
             source,
             filename,
@@ -2043,12 +2054,14 @@ pub(crate) fn run_analysis(
             secondary_cfg,
             ProofEngine::Pdr,
         ));
-        layers.push(run_prove_fair_layer(
-            source,
-            filename,
-            &format!("prove[fair_pdr]{suffix}"),
-            secondary_cfg,
-        ));
+        if !safety_only {
+            layers.push(run_prove_fair_layer(
+                source,
+                filename,
+                &format!("prove[fair_pdr]{suffix}"),
+                secondary_cfg,
+            ));
+        }
     }
 
     // V2-01: Release certification layers (audit mode only)
@@ -2094,16 +2107,17 @@ pub(crate) fn run_analysis(
         &preflight_warnings,
     );
     let next_action = build_next_action(&layers, filename, mode_str);
-    let liveness_governance = if matches!(mode, AnalysisMode::Proof | AnalysisMode::Audit) {
-        Some(build_liveness_governance_report(
-            source,
-            filename,
-            cfg.fairness,
-            &layers,
-        ))
-    } else {
-        None
-    };
+    let liveness_governance =
+        if !safety_only && matches!(mode, AnalysisMode::Proof | AnalysisMode::Audit) {
+            Some(build_liveness_governance_report(
+                source,
+                filename,
+                cfg.fairness,
+                &layers,
+            ))
+        } else {
+            None
+        };
 
     AnalysisReport {
         schema_version: "v1".to_string(),
@@ -2281,6 +2295,7 @@ pub(crate) fn run_analyze_command(args: AnalyzeCommandArgs<'_>) -> miette::Resul
 
     // V2-01: Derive cert output directory from report_out path
     let cert_dir = report_out.and_then(|p| p.parent()).map(Path::to_path_buf);
+    let safety_only = goal.as_deref() == Some("safety");
     let report = run_analysis(
         &source,
         &filename,
@@ -2289,6 +2304,7 @@ pub(crate) fn run_analyze_command(args: AnalyzeCommandArgs<'_>) -> miette::Resul
         cli_network_mode,
         cert_dir.as_deref(),
         por_mode,
+        safety_only,
     );
 
     let json_report = serde_json::to_string_pretty(&report).into_diagnostic()?;
