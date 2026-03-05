@@ -1,32 +1,115 @@
+// Casper FFG — Ethereum 2.0 Finality Gadget
+// Buterin & Griffith, 2017
+//
+// Models the core two-phase finality mechanism:
+//   1. Validators cast attestations linking source → target checkpoints
+//   2. A checkpoint is JUSTIFIED when ≥ 2/3 of stake attests to it
+//   3. A justified checkpoint is FINALIZED when its immediate child is also justified
+//
+// Safety: two conflicting checkpoints cannot both be finalized
+// unless ≥ 1/3 of validators violate slashing conditions (double-voting).
+//
+// The equivocation: none policy models slashing — no validator can
+// attest to both branch A and branch B without being slashed.
+
 protocol CasperFfgLike {
     params n, t, f, gst;
     resilience: n > 3*t;
+
     adversary {
         model: byzantine;
         bound: f;
         timing: partial_synchrony;
         gst: gst;
+        auth: signed;
+        network: identity_selective;
+        delivery: per_recipient;
+        faults: per_recipient;
+        equivocation: none;
         values: sign;
     }
 
-    message Attestation(epoch: nat, source: int, target: int);
-    message Justify(epoch: nat);
+    // Attestations for competing branches
+    message AttestA;
+    message AttestB;
+    // Finalization votes (cast after justification)
+    message FinalizeA;
+    message FinalizeB;
 
-    role Replica {
+    identity Validator: role key validator_key;
+
+    channel AttestA: authenticated;
+    channel AttestB: authenticated;
+    channel FinalizeA: authenticated;
+    channel FinalizeB: authenticated;
+
+    // Slashing: no double-voting across branches
+    equivocation AttestA: none;
+    equivocation AttestB: none;
+    equivocation FinalizeA: none;
+    equivocation FinalizeB: none;
+
+    role Validator {
+        var justified_a: bool = false;
+        var justified_b: bool = false;
         var decided: bool = false;
-        init pre;
+        var decision: bool = false;
 
-        phase pre {
-            when received >= 2*t+1 Justify(epoch=0) => {
-                decided = true;
-                goto phase decided;
+        init voting;
+
+        // Phase 1: attest to one branch
+        phase voting {
+            when received >= 1 AttestA => {
+                send AttestA;
+                goto phase waiting_justify;
+            }
+            when received >= 1 AttestB => {
+                send AttestB;
+                goto phase waiting_justify;
             }
         }
 
-        phase decided {}
+        // Phase 2: justification requires 2/3 distinct attestations
+        phase waiting_justify {
+            when received distinct >= 2*t+1 AttestA => {
+                justified_a = true;
+                send FinalizeA;
+                goto phase waiting_finalize;
+            }
+            when received distinct >= 2*t+1 AttestB => {
+                justified_b = true;
+                send FinalizeB;
+                goto phase waiting_finalize;
+            }
+        }
+
+        // Phase 3: finalization requires justified + 2/3 finalize votes
+        phase waiting_finalize {
+            when received distinct >= 2*t+1 FinalizeA && justified_a == true => {
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done;
+            }
+            when received distinct >= 2*t+1 FinalizeB && justified_b == true => {
+                decided = true;
+                decision = false;
+                decide false;
+                goto phase done;
+            }
+        }
+
+        phase done {}
     }
 
+    // SAFETY: all finalizing validators agree on the same branch
     property agreement: agreement {
-        forall p: Replica. forall q: Replica. p.decided == q.decided
+        forall p: Validator. forall q: Validator.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+
+    // LIVENESS: every validator eventually finalizes (under partial synchrony)
+    property termination: liveness {
+        forall p: Validator. p.decided == true
     }
 }
