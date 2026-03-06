@@ -148,3 +148,13 @@ Columns:
 2026-03-06T02:06:24Z | 1 | INV-01 | UNBLOCKED | tarsier-dsl parser now compiles; cargo check -p tarsier-engine passes
 2026-03-06T02:06:24Z | 1 | TWIN-01 | PR_OPEN | local patch ready (no remote PR yet); active harness API in tarsier-conformance
 2026-03-06T02:06:24Z | 1 | TWIN-01 | DONE | implemented active harness API + schedule injector interface; tests=cargo check -p tarsier-conformance && cargo test -p tarsier-conformance active:: -- --nocapture
+2026-03-06T11:35:53Z | 1 | AI-01 | CLAIM | taking task
+2026-03-06T11:35:53Z | 1 | AI-01 | START | implementation started
+2026-03-06T11:37:34Z | 1 | AI-01 | BLOCKED | unexpected unowned workspace changes in crates/tarsier-ir/src/lowering/*; need owner confirmation to proceed without reverting
+2026-03-06T02:10:00Z | 2 | LOG-01 | DONE | DSL grammar + AST + parser + codegen + tests (commit 9e5fdb7)
+2026-03-06T02:30:00Z | 2 | LOG-02 | CLAIM | taking task
+2026-03-06T02:30:00Z | 2 | LOG-02 | START | implementation started
+2026-03-06T03:00:00Z | 2 | LOG-02 | DONE | IR types (IrCollectionSpec, CollectionId) + lowering + test (commit b70d035)
+2026-03-06T03:10:00Z | 2 | LOG-03 | CLAIM | taking task
+2026-03-06T03:10:00Z | 2 | LOG-03 | START | implementation started
+2026-03-06T06:40:00Z | 2 | LOG-03 | DONE | CollectionUpdate IR types, Append lowering via lower_expr_to_lc, pending_collection_updates on Rules, test (commit 8bdb0b4)
