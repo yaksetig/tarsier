@@ -13,5 +13,6 @@ pub mod lowering;
 pub mod properties;
 #[cfg(any(test, feature = "proptest"))]
 pub mod proptest_generators;
+pub mod refinement;
 pub mod runtime_trace;
 pub mod threshold_automaton;

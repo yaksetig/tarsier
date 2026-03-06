@@ -222,3 +222,7 @@ Columns:
 2026-03-06T13:45:00Z | 2 | FIFO-05 | START | implementation started
 2026-03-06T13:55:00Z | 2 | FIFO-05 | PR_OPEN | agent2/fifo-05 918e62e integration tests + demo example
 2026-03-06T13:55:00Z | 2 | FIFO-05 | DONE | commit 918e62e tests=cargo test -p tarsier-ir -- fifo_channel_end_to_end fifo_channel_mixed && cargo test -p tarsier-smt fifo_queue_with_enqueue
+2026-03-06T14:30:00Z | 2 | REF-02 | CLAIM | taking task — implementing on agent2/ref-02 branch
+2026-03-06T14:30:00Z | 2 | REF-02 | START | implementation started
+2026-03-06T14:35:29Z | 1 | AI-03 | PR_OPEN | codex/agent1-ai-03-v1 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-ai-03-v1 parse/sanitize assist invariants + SMT validation
+2026-03-06T14:35:29Z | 1 | AI-03 | DONE | commit 1c1482e tests=CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-cli && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo test -p tarsier-cli assist_formula -- --nocapture && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo test -p tarsier-cli parse_prove_accepts_assist_flags -- --nocapture
