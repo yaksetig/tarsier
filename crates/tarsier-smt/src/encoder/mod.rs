@@ -359,6 +359,14 @@ impl<'a> BmcEncoderBuilder<'a> {
             // Length bounded by capacity
             let cap = encode_lc(&spec.capacity);
             enc.assert_term(SmtTerm::var(coll_len_var(0, cid)).le(cap));
+
+            // FIFO channels: declare and initialize head/tail indices
+            if spec.queue_model == QueueModel::LinearFifo {
+                enc.declare(queue_head_var(0, cid), SmtSort::Int);
+                enc.declare(queue_tail_var(0, cid), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(queue_head_var(0, cid)).eq(SmtTerm::int(0)));
+                enc.assert_term(SmtTerm::var(queue_tail_var(0, cid)).eq(SmtTerm::int(0)));
+            }
         }
         if missing_process_ids {
             enc.assert_term(SmtTerm::bool(false));
@@ -821,28 +829,84 @@ impl<'a> BmcEncoderBuilder<'a> {
                 enc.declare(coll_len_var(k + 1, cid), SmtSort::Int);
                 enc.assert_term(SmtTerm::var(coll_len_var(k + 1, cid)).ge(SmtTerm::int(0)));
                 let cap = encode_lc(&spec.capacity);
-                enc.assert_term(SmtTerm::var(coll_len_var(k + 1, cid)).le(cap));
+                enc.assert_term(SmtTerm::var(coll_len_var(k + 1, cid)).le(cap.clone()));
 
-                // Compute total appends to this collection from all rules firing at step k
-                let mut append_deltas: Vec<SmtTerm> = Vec::new();
-                for &r in active_rule_ids {
-                    for cu in &ta.rules[r].collection_updates {
-                        if cu.collection.as_usize() == cid {
-                            if matches!(cu.kind, CollectionUpdateKind::Append(_)) {
-                                append_deltas.push(SmtTerm::var(delta_var(k, r)));
+                if spec.queue_model == QueueModel::LinearFifo {
+                    // FIFO queue: track head and tail separately
+                    enc.declare(queue_head_var(k + 1, cid), SmtSort::Int);
+                    enc.declare(queue_tail_var(k + 1, cid), SmtSort::Int);
+
+                    // Collect enqueue and dequeue deltas
+                    let mut enqueue_deltas: Vec<SmtTerm> = Vec::new();
+                    let mut dequeue_deltas: Vec<SmtTerm> = Vec::new();
+                    for &r in active_rule_ids {
+                        for cu in &ta.rules[r].collection_updates {
+                            if cu.collection.as_usize() == cid {
+                                match &cu.kind {
+                                    CollectionUpdateKind::Enqueue(_) => {
+                                        enqueue_deltas.push(SmtTerm::var(delta_var(k, r)));
+                                    }
+                                    CollectionUpdateKind::Dequeue => {
+                                        dequeue_deltas.push(SmtTerm::var(delta_var(k, r)));
+                                    }
+                                    _ => {}
+                                }
                             }
                         }
                     }
-                }
 
-                let len_k = SmtTerm::var(coll_len_var(k, cid));
-                let len_next = SmtTerm::var(coll_len_var(k + 1, cid));
-                if append_deltas.is_empty() {
-                    // No appends possible → length unchanged
-                    enc.assert_term(len_next.eq(len_k));
+                    let head_k = SmtTerm::var(queue_head_var(k, cid));
+                    let head_next = SmtTerm::var(queue_head_var(k + 1, cid));
+                    let tail_k = SmtTerm::var(queue_tail_var(k, cid));
+                    let tail_next = SmtTerm::var(queue_tail_var(k + 1, cid));
+
+                    // tail_{k+1} = tail_k + enqueue_deltas
+                    if enqueue_deltas.is_empty() {
+                        enc.assert_term(tail_next.clone().eq(tail_k.clone()));
+                    } else {
+                        let total_enqueues = sum_terms_balanced(enqueue_deltas);
+                        enc.assert_term(tail_next.clone().eq(tail_k.clone().add(total_enqueues)));
+                    }
+
+                    // head_{k+1} = head_k + dequeue_deltas
+                    if dequeue_deltas.is_empty() {
+                        enc.assert_term(head_next.clone().eq(head_k.clone()));
+                    } else {
+                        let total_dequeues = sum_terms_balanced(dequeue_deltas);
+                        enc.assert_term(head_next.clone().eq(head_k.clone().add(total_dequeues)));
+                    }
+
+                    // head <= tail (can't dequeue more than enqueued)
+                    enc.assert_term(SmtTerm::var(queue_head_var(k + 1, cid))
+                        .le(SmtTerm::var(queue_tail_var(k + 1, cid))));
+
+                    // Occupancy = tail - head = collection length
+                    let occupancy = SmtTerm::var(queue_tail_var(k + 1, cid))
+                        .sub(SmtTerm::var(queue_head_var(k + 1, cid)));
+                    enc.assert_term(SmtTerm::var(coll_len_var(k + 1, cid)).eq(occupancy));
+
+                    // Capacity bound on occupancy (already bounded via coll_len above)
                 } else {
-                    let total_appends = sum_terms_balanced(append_deltas);
-                    enc.assert_term(len_next.eq(len_k.add(total_appends)));
+                    // Non-FIFO: track length via appends only
+                    let mut append_deltas: Vec<SmtTerm> = Vec::new();
+                    for &r in active_rule_ids {
+                        for cu in &ta.rules[r].collection_updates {
+                            if cu.collection.as_usize() == cid {
+                                if matches!(cu.kind, CollectionUpdateKind::Append(_)) {
+                                    append_deltas.push(SmtTerm::var(delta_var(k, r)));
+                                }
+                            }
+                        }
+                    }
+
+                    let len_k = SmtTerm::var(coll_len_var(k, cid));
+                    let len_next = SmtTerm::var(coll_len_var(k + 1, cid));
+                    if append_deltas.is_empty() {
+                        enc.assert_term(len_next.eq(len_k));
+                    } else {
+                        let total_appends = sum_terms_balanced(append_deltas);
+                        enc.assert_term(len_next.eq(len_k.add(total_appends)));
+                    }
                 }
             }
         }
@@ -4079,5 +4143,92 @@ protocol BuggyBroadcast {
         assert_eq!(queue_head_var(3, 1), "qhead_3_1");
         assert_eq!(queue_tail_var(0, 0), "qtail_0_0");
         assert_eq!(queue_tail_var(2, 5), "qtail_2_5");
+    }
+
+    #[test]
+    fn fifo_queue_encoding_declares_head_tail_variables() {
+        let mut ta = make_simple_ta();
+
+        // Add a FIFO channel collection with capacity = n
+        ta.add_collection(IrCollectionSpec {
+            name: "MsgQueue".into(),
+            kind: IrCollectionKind::FifoChannel,
+            element_type: "int".into(),
+            capacity: LinearCombination::param(ParamId::from(0)), // n
+            queue_model: QueueModel::LinearFifo,
+        });
+
+        // Rule: waiting->done enqueues to MsgQueue
+        ta.rules[0].collection_updates.push(CollectionUpdate {
+            collection: CollectionId::new(0),
+            kind: CollectionUpdateKind::Enqueue(LinearCombination::constant(1)),
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let encoding = encode_bmc(&cs, &property, 2);
+        let assertions: Vec<String> = encoding
+            .assertions
+            .iter()
+            .map(|t| to_smtlib(t))
+            .collect();
+
+        // Check head and tail variables are declared at step 0
+        let has_head_init = assertions.iter().any(|a| a.contains("qhead_0_0") && a.contains("0"));
+        let has_tail_init = assertions.iter().any(|a| a.contains("qtail_0_0") && a.contains("0"));
+        assert!(has_head_init, "Queue head should be initialized to 0");
+        assert!(has_tail_init, "Queue tail should be initialized to 0");
+
+        // Check head/tail variables exist at step 1
+        let has_head_1 = assertions.iter().any(|a| a.contains("qhead_1_0"));
+        let has_tail_1 = assertions.iter().any(|a| a.contains("qtail_1_0"));
+        assert!(has_head_1, "Queue head at step 1 should exist");
+        assert!(has_tail_1, "Queue tail at step 1 should exist");
+
+        // Check head <= tail constraint
+        let has_ordering = assertions.iter().any(|a| {
+            a.contains("qhead_1_0") && a.contains("qtail_1_0") && a.contains("<=")
+        });
+        assert!(has_ordering, "head <= tail ordering constraint should exist");
+
+        // Check occupancy = tail - head = length
+        let has_occupancy = assertions.iter().any(|a| {
+            a.contains("clen_1_0") && a.contains("qtail_1_0") && a.contains("qhead_1_0")
+        });
+        assert!(has_occupancy, "Occupancy (tail - head) should equal collection length");
+    }
+
+    #[test]
+    fn fifo_queue_dequeue_updates_head() {
+        let mut ta = make_simple_ta();
+
+        ta.add_collection(IrCollectionSpec {
+            name: "Q".into(),
+            kind: IrCollectionKind::FifoChannel,
+            element_type: "int".into(),
+            capacity: LinearCombination::constant(10),
+            queue_model: QueueModel::LinearFifo,
+        });
+
+        // Rule: waiting->done dequeues from Q
+        ta.rules[0].collection_updates.push(CollectionUpdate {
+            collection: CollectionId::new(0),
+            kind: CollectionUpdateKind::Dequeue,
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let encoding = encode_bmc(&cs, &property, 1);
+        let assertions: Vec<String> = encoding
+            .assertions
+            .iter()
+            .map(|t| to_smtlib(t))
+            .collect();
+
+        // head_1 should reference head_0 and delta (dequeue delta)
+        let has_head_update = assertions.iter().any(|a| {
+            a.contains("qhead_1_0") && (a.contains("qhead_0_0") || a.contains("delta_0_"))
+        });
+        assert!(has_head_update, "Dequeue should update queue head");
     }
 }
