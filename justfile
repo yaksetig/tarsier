@@ -39,3 +39,18 @@ validate:
 # Local "CI-like" gate for common contributor checks.
 ci: fmt-check clippy test
 
+# Summarize multi-agent execution board status.
+board-status:
+    python3 scripts/board_status.py
+
+# Emit board status as JSON for automation.
+board-status-json:
+    python3 scripts/board_status.py --json
+
+# Show tasks that are done but still need independent review.
+board-review-queue:
+    python3 scripts/board_status.py --review-queue
+
+# Show backlog of completed work with review state.
+board-done-backlog:
+    python3 scripts/board_status.py --done-backlog
