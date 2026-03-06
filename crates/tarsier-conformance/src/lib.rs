@@ -5,6 +5,7 @@
 //! This crate replays execution traces against a verified protocol model
 //! to check that a concrete implementation conforms to the specification.
 
+pub mod active;
 pub mod adapters;
 pub mod checker;
 pub mod manifest;

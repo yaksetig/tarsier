@@ -29,6 +29,10 @@ formally verified model and a real-world implementation.
   properties to runtime monitoring obligations.
 - `obligations::generate_obligation_map(automaton, name, properties)` --
   Generate runtime monitoring obligations from verified safety properties.
+- `active::scenario_from_counterexample(trace, scenario_id, options)` --
+  Convert model counterexamples into executable active fault schedules.
+- `active::ActiveScenario` -- Serializable scenario artifact for active
+  conformance/adversarial replay flows.
 - `adapters` module -- Trace format adapters for different systems (native
   runtime traces, CometBFT, etcd-raft).
 
