@@ -164,3 +164,7 @@ Columns:
 2026-03-06T02:48:47Z | 1 | TWIN-03 | START | implementation started
 2026-03-06T02:52:07Z | 1 | TWIN-03 | PR_OPEN | branch=codex/agent1-twin-03-v2 commit=1c4f926 local patch ready (no remote PR yet)
 2026-03-06T02:52:07Z | 1 | TWIN-03 | DONE | commit=1c4f926 tests=cargo fmt --package tarsier-conformance && cargo check -p tarsier-conformance && cargo test -p tarsier-conformance network_shim:: -- --nocapture && cargo test -p tarsier-conformance
+2026-03-06T02:53:07Z | 1 | RECONF-01 | CLAIM | taking task
+2026-03-06T02:53:07Z | 1 | RECONF-01 | START | implementation started
+2026-03-06T02:56:11Z | 1 | RECONF-01 | PR_OPEN | branch=codex/agent1-reconf-01 commit=e9db751 local patch ready (no remote PR yet)
+2026-03-06T02:56:11Z | 1 | RECONF-01 | DONE | commit=e9db751 tests=cargo fmt --package tarsier-dsl && cargo test -p tarsier-dsl -- parse_reconfigure_action_desugars_into_assignments parse_reconfigure_action_rejects_duplicate_parameter && cargo check -p tarsier-dsl
