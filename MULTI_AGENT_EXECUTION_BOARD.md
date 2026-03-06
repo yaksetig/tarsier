@@ -164,3 +164,9 @@ Columns:
 2026-03-06T07:15:00Z | 2 | LOG-05 | CLAIM | taking task
 2026-03-06T07:15:00Z | 2 | LOG-05 | START | implementation started
 2026-03-06T07:30:00Z | 2 | LOG-05 | DONE | E2E lowering tests, SMT encoding tests, demo protocol fix, error-path test (commit c858cd8)
+2026-03-06T07:35:00Z | 2 | FIFO-01 | CLAIM | withdrawn — Agent 1 already implemented on codex/agent1-fifo-01 branch
+2026-03-06T07:36:00Z | 2 | REF-01 | CLAIM | withdrawn — Agent 1 already implemented on codex/agent1-ref-01-v2 branch
+2026-03-06T07:40:00Z | 2 | TWIN-01 | REVIEW_START | reviewing Agent 1's TWIN-01 implementation
+2026-03-06T07:45:00Z | 2 | TWIN-01 | REVIEW_PASS | ActiveScenario/FaultAction/ScheduleInjector API well-structured, 6 tests cover ordering/errors/mapping
+2026-03-06T07:45:00Z | 2 | TWIN-02 | REVIEW_START | reviewing Agent 1's TWIN-02 implementation (on codex/agent1-twin-02)
+2026-03-06T07:50:00Z | 2 | TWIN-02 | REVIEW_PASS | scenario_from_counterexample correctly maps Trace steps to ActiveScenario faults with bound enforcement
