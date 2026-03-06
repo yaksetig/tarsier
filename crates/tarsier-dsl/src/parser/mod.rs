@@ -180,6 +180,7 @@ fn parse_protocol(
     let mut channels = Vec::new();
     let mut equivocation_policies = Vec::new();
     let mut committees = Vec::new();
+    let mut collections = Vec::new();
     let mut messages = Vec::new();
     let mut crypto_objects = Vec::new();
     let mut roles = Vec::new();
@@ -225,6 +226,9 @@ fn parse_protocol(
             Rule::committee_decl => {
                 committees.push(parse_committee(item)?);
             }
+            Rule::collection_decl => {
+                collections.push(parse_collection(item)?);
+            }
             Rule::message_decl => {
                 messages.push(parse_message(item)?);
             }
@@ -265,6 +269,7 @@ fn parse_protocol(
             channels,
             equivocation_policies,
             committees,
+            collections,
             messages,
             crypto_objects,
             roles,
@@ -328,6 +333,7 @@ fn parse_module(pair: Pair<'_>, _source: &str, _filename: &str) -> Result<Module
             | Rule::enum_decl
             | Rule::crypto_object_decl
             | Rule::committee_decl
+            | Rule::collection_decl
             | Rule::channel_decl
             | Rule::equivocation_decl
             | Rule::identity_decl
@@ -791,6 +797,34 @@ fn parse_committee(pair: Pair<'_>) -> Result<CommitteeDecl, ParseError> {
     Ok(CommitteeDecl { name, items, span })
 }
 
+fn parse_collection(pair: Pair<'_>) -> Result<CollectionDecl, ParseError> {
+    let span = span_from(&pair);
+    let mut inner = pair.into_inner();
+    let kind_pair = next_child(&mut inner, "collection_kind")?;
+    let kind = match kind_pair.as_str() {
+        "log" => CollectionKind::Log,
+        "sequence" => CollectionKind::Sequence,
+        other => {
+            return Err(syntax_error_at(
+                &kind_pair,
+                format!("Unknown collection kind: {other}"),
+            ));
+        }
+    };
+    let name = next_child(&mut inner, "collection name")?.as_str().to_string();
+    let element_type_pair = next_child(&mut inner, "collection element type")?;
+    let element_type = element_type_pair.as_str().to_string();
+    let capacity_pair = next_child(&mut inner, "collection capacity")?;
+    let capacity = parse_linear_expr(capacity_pair)?;
+    Ok(CollectionDecl {
+        name,
+        kind,
+        element_type,
+        capacity,
+        span,
+    })
+}
+
 fn parse_message(pair: Pair<'_>) -> Result<MessageDecl, ParseError> {
     let span = span_from(&pair);
     let mut inner = pair.into_inner();
@@ -1109,6 +1143,12 @@ fn parse_transition(pair: Pair<'_>) -> Result<Spanned<TransitionRule>, ParseErro
                 }
                 actions.push(Action::JustifyCryptoObject { object_name, args });
             }
+            Rule::append_action => {
+                let mut si = item.into_inner();
+                let collection = next_child(&mut si, "si")?.as_str().to_string();
+                let value = parse_expr(next_child(&mut si, "si")?)?;
+                actions.push(Action::Append { collection, value });
+            }
             Rule::assign_action => {
                 let mut si = item.into_inner();
                 let var = next_child(&mut si, "si")?.as_str().to_string();
@@ -1379,6 +1419,19 @@ fn parse_expr(pair: Pair<'_>) -> Result<Expr, ParseError> {
         Rule::bool_literal => {
             let b = pair.as_str() == "true";
             Ok(Expr::BoolLit(b))
+        }
+        Rule::index_access => {
+            let mut inner = pair.into_inner();
+            let coll = next_child(&mut inner, "index_access collection")?.as_str().to_string();
+            let idx = parse_expr(next_child(&mut inner, "index_access index")?)?;
+            Ok(Expr::Index(coll, Box::new(idx)))
+        }
+        Rule::len_expr => {
+            let inner_expr = next_child(&mut pair.into_inner(), "len_expr")?;
+            match parse_expr(inner_expr)? {
+                Expr::Var(name) => Ok(Expr::Len(name)),
+                other => Ok(Expr::Len(other.to_string())),
+            }
         }
         Rule::ident => Ok(Expr::Var(pair.as_str().to_string())),
         _ => {

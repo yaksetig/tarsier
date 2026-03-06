@@ -1,0 +1,33 @@
+// Demonstrates bounded log/sequence types.
+// Logs are append-only bounded collections.
+// Sequences support random-access reads.
+
+protocol BoundedLogDemo {
+
+params n, t, f;
+resilience: n > 3*t;
+adversary { model: byzantine; bound: f; }
+
+log VoteHistory: int[n];
+sequence DecisionBuf: bool[10];
+
+message Vote;
+
+role Voter {
+    var round: int = 0;
+    init Listening;
+    phase Listening {
+        when received >= 2*t+1 Vote => {
+            append VoteHistory round;
+            round = round + 1;
+            goto phase Listening;
+        }
+    }
+}
+
+property safe: safety {
+    forall p: Voter. forall q: Voter.
+        p.Listening == 0 || q.Listening == 0
+}
+
+}

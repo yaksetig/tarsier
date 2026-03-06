@@ -20,6 +20,7 @@ protocol_item = _{
     | channel_decl
     | equivocation_decl
     | committee_decl
+    | collection_decl
     | message_decl
     | crypto_object_decl
     | role_decl
@@ -140,6 +141,12 @@ committee_decl = {
 committee_item = { ident ~ ":" ~ committee_value ~ ";" }
 committee_value = _{ float_literal | int_literal | ident }
 
+// --- Bounded log/sequence types ---
+collection_decl = {
+    collection_kind ~ ident ~ ":" ~ field_type ~ "[" ~ linear_expr ~ "]" ~ ";"
+}
+collection_kind = { "log" | "sequence" }
+
 // --- Messages ---
 message_decl = {
     "message" ~ ident ~ ("(" ~ field_list? ~ ")")? ~ ";"
@@ -224,10 +231,13 @@ action = _{
     | form_crypto_action
     | lock_crypto_action
     | justify_crypto_action
+    | append_action
     | assign_action
     | goto_action
     | decide_action
 }
+
+append_action = { "append" ~ ident ~ expr ~ ";" }
 
 send_action = {
     "send" ~ ident ~
@@ -275,9 +285,14 @@ neg_op = { "-" }
 unary_atom = _{
     int_literal
     | bool_literal
+    | len_expr
+    | index_access
     | ident
     | "(" ~ expr ~ ")"
 }
+
+len_expr = { "len" ~ "(" ~ expr ~ ")" }
+index_access = { ident ~ "[" ~ expr ~ "]" }
 
 add_op = { "+" | "-" }
 mul_op = { "*" | "/" }

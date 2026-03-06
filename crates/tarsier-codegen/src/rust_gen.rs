@@ -672,6 +672,11 @@ fn write_actions(
                 let snake = to_snake_case(object_name);
                 writeln!(out, "{indent}self.justify_{snake} = true;")?;
             }
+            Action::Append { collection, value } => {
+                let snake = to_snake_case(collection);
+                let val = render_expr(value, params, CodegenTarget::Rust);
+                writeln!(out, "{indent}self.{snake}.push({val});")?;
+            }
         }
     }
     Ok(())
@@ -815,6 +820,7 @@ mod tests {
             channels: vec![],
             equivocation_policies: vec![],
             committees: vec![],
+            collections: vec![],
             messages: vec![],
             crypto_objects: vec![],
             roles: vec![],

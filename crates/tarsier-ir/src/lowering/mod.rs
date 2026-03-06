@@ -988,6 +988,10 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             }
                             decide_value = Some(value.clone());
                         }
+                        ast::Action::Append { .. } => {
+                            // Append actions are handled by the LOG IR lowering pass (LOG-03).
+                            // For now, silently ignore during threshold automaton construction.
+                        }
                     }
                 }
 

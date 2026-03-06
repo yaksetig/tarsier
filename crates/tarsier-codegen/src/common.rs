@@ -121,6 +121,18 @@ pub fn render_expr(expr: &Expr, params: &HashSet<String>, target: CodegenTarget)
                 CodegenTarget::Go => format!("(-int64({inner}))"),
             }
         }
+        Expr::Index(coll, idx) => {
+            let coll_name = var_accessor(coll, params, target);
+            let index = render_expr(idx, params, target);
+            format!("{coll_name}[{index}]")
+        }
+        Expr::Len(coll) => {
+            let coll_name = var_accessor(coll, params, target);
+            match target {
+                CodegenTarget::Rust => format!("{coll_name}.len()"),
+                CodegenTarget::Go => format!("len({coll_name})"),
+            }
+        }
     }
 }
 

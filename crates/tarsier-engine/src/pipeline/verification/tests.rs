@@ -500,6 +500,7 @@ fn make_default_program() -> ast::Program {
                 channels: vec![],
                 equivocation_policies: vec![],
                 committees: vec![],
+                collections: vec![],
                 messages: vec![],
                 crypto_objects: vec![],
                 roles: vec![],

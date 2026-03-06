@@ -136,3 +136,15 @@ Columns:
 - Hard gate 2: `DAG-*` starts after log/FIFO semantics are stable (`LOG-04`, `FIFO-04`).
 - Sequential within a feature: DSL -> AST/IR -> lowering -> SMT -> CLI/report -> tests.
 - Conflict hotspots: DSL grammar/parser, IR lowering, SMT encoder modules.
+
+
+2026-03-06T01:58:35Z | 1 | INV-01 | CLAIM | taking task
+2026-03-06T01:58:35Z | 1 | INV-01 | START | implementation started
+2026-03-06T01:59:51Z | 2 | LOG-01 | CLAIM | taking task
+2026-03-06T01:59:51Z | 2 | LOG-01 | START | implementation started
+2026-03-06T02:03:15Z | 1 | INV-01 | BLOCKED | cargo check failed in tarsier-dsl (missing parse_collection); blocked by concurrent DSL/parser changes (likely LOG-01 stream)
+2026-03-06T02:04:00Z | 1 | TWIN-01 | CLAIM | taking task
+2026-03-06T02:04:00Z | 1 | TWIN-01 | START | implementation started
+2026-03-06T02:06:24Z | 1 | INV-01 | UNBLOCKED | tarsier-dsl parser now compiles; cargo check -p tarsier-engine passes
+2026-03-06T02:06:24Z | 1 | TWIN-01 | PR_OPEN | local patch ready (no remote PR yet); active harness API in tarsier-conformance
+2026-03-06T02:06:24Z | 1 | TWIN-01 | DONE | implemented active harness API + schedule injector interface; tests=cargo check -p tarsier-conformance && cargo test -p tarsier-conformance active:: -- --nocapture

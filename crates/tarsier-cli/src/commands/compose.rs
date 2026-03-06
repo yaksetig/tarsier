@@ -45,6 +45,7 @@ pub(crate) fn run_compose_check_command(file: PathBuf) -> miette::Result<()> {
                     channels: Vec::new(),
                     equivocation_policies: Vec::new(),
                     committees: Vec::new(),
+                    collections: Vec::new(),
                     messages: module_decl.items.messages.clone(),
                     crypto_objects: Vec::new(),
                     roles: module_decl.items.roles.clone(),

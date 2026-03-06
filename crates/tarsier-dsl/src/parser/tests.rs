@@ -2578,3 +2578,159 @@ proptest! {
         prop_assert_eq!(p1, p2, "AST differs between identical parses");
     }
 }
+
+// --- Bounded log/sequence tests ---
+
+#[test]
+fn parse_log_declaration() {
+    let src = r#"
+protocol LogTest {
+    params n, t;
+    resilience: n > 3*t;
+    log VoteHistory: int[n];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "log_test.trs").expect("should parse");
+    let proto = &program.protocol.node;
+    assert_eq!(proto.collections.len(), 1);
+    let coll = &proto.collections[0];
+    assert_eq!(coll.name, "VoteHistory");
+    assert!(matches!(coll.kind, CollectionKind::Log));
+    assert_eq!(coll.element_type, "int");
+}
+
+#[test]
+fn parse_sequence_declaration() {
+    let src = r#"
+protocol SeqTest {
+    params n, t;
+    resilience: n > 3*t;
+    sequence Decisions: bool[10];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "seq_test.trs").expect("should parse");
+    let proto = &program.protocol.node;
+    assert_eq!(proto.collections.len(), 1);
+    let coll = &proto.collections[0];
+    assert_eq!(coll.name, "Decisions");
+    assert!(matches!(coll.kind, CollectionKind::Sequence));
+    assert_eq!(coll.element_type, "bool");
+}
+
+#[test]
+fn parse_append_action() {
+    let src = r#"
+protocol AppendTest {
+    params n, t;
+    resilience: n > 3*t;
+    log History: int[n];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {
+            when received >= 1 Vote => {
+                append History 42;
+                goto phase Idle;
+            }
+        }
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "append_test.trs").expect("should parse");
+    let role = &program.protocol.node.roles[0].node;
+    let transition = &role.phases[0].node.transitions[0].node;
+    assert!(matches!(
+        &transition.actions[0],
+        Action::Append { collection, value }
+        if collection == "History" && matches!(value, Expr::IntLit(42))
+    ));
+}
+
+#[test]
+fn parse_index_access_expr() {
+    let src = r#"
+protocol IndexTest {
+    params n, t;
+    resilience: n > 3*t;
+    sequence Buf: int[n];
+    message Vote;
+    role Voter {
+        var x: int = 0;
+        init Idle;
+        phase Idle {
+            when received >= 1 Vote => {
+                x = Buf[0];
+                goto phase Idle;
+            }
+        }
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "index_test.trs").expect("should parse");
+    let role = &program.protocol.node.roles[0].node;
+    let transition = &role.phases[0].node.transitions[0].node;
+    match &transition.actions[0] {
+        Action::Assign { var, value } => {
+            assert_eq!(var, "x");
+            assert!(matches!(value, Expr::Index(coll, idx) if coll == "Buf" && matches!(idx.as_ref(), Expr::IntLit(0))));
+        }
+        other => panic!("Expected Assign, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_len_expr() {
+    let src = r#"
+protocol LenTest {
+    params n, t;
+    resilience: n > 3*t;
+    log History: int[n];
+    message Vote;
+    role Voter {
+        var x: int = 0;
+        init Idle;
+        phase Idle {
+            when received >= 1 Vote => {
+                x = len(History);
+                goto phase Idle;
+            }
+        }
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "len_test.trs").expect("should parse");
+    let role = &program.protocol.node.roles[0].node;
+    let transition = &role.phases[0].node.transitions[0].node;
+    match &transition.actions[0] {
+        Action::Assign { var, value } => {
+            assert_eq!(var, "x");
+            assert!(matches!(value, Expr::Len(name) if name == "History"));
+        }
+        other => panic!("Expected Assign, got {:?}", other),
+    }
+}

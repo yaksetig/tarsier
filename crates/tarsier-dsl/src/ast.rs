@@ -49,6 +49,7 @@ pub struct ProtocolDecl {
     pub channels: Vec<ChannelDecl>,
     pub equivocation_policies: Vec<EquivocationDecl>,
     pub committees: Vec<CommitteeDecl>,
+    pub collections: Vec<CollectionDecl>,
     pub messages: Vec<MessageDecl>,
     pub crypto_objects: Vec<CryptoObjectDecl>,
     pub roles: Vec<Spanned<RoleDecl>>,
@@ -254,6 +255,25 @@ pub enum CommitteeValue {
     Float(f64),
 }
 
+/// Kind of bounded collection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
+pub enum CollectionKind {
+    Log,
+    Sequence,
+}
+
+/// Bounded log or sequence type declaration.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
+pub struct CollectionDecl {
+    pub name: String,
+    pub kind: CollectionKind,
+    pub element_type: String,
+    pub capacity: LinearExpr,
+    pub span: Span,
+}
+
 /// First-class cryptographic object declaration.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize))]
@@ -450,6 +470,8 @@ pub enum Expr {
     Div(Box<Expr>, Box<Expr>),
     Not(Box<Expr>),
     Neg(Box<Expr>),
+    Index(String, Box<Expr>),
+    Len(String),
 }
 
 impl std::fmt::Display for Expr {
@@ -464,6 +486,8 @@ impl std::fmt::Display for Expr {
             Expr::Div(l, r) => write!(f, "({l} / {r})"),
             Expr::Not(e) => write!(f, "!{e}"),
             Expr::Neg(e) => write!(f, "-{e}"),
+            Expr::Index(coll, idx) => write!(f, "{coll}[{idx}]"),
+            Expr::Len(coll) => write!(f, "len({coll})"),
         }
     }
 }
@@ -489,6 +513,10 @@ pub enum Action {
     JustifyCryptoObject {
         object_name: String,
         args: Vec<SendArg>,
+    },
+    Append {
+        collection: String,
+        value: Expr,
     },
     Assign {
         var: String,

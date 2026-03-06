@@ -652,6 +652,11 @@ fn write_actions_go(
                 let pascal = to_pascal_case(object_name);
                 writeln!(out, "{indent}s.Justify{pascal} = true")?;
             }
+            Action::Append { collection, value } => {
+                let pascal = to_pascal_case(collection);
+                let val = render_expr(value, params, CodegenTarget::Go);
+                writeln!(out, "{indent}s.{pascal} = append(s.{pascal}, {val})")?;
+            }
         }
     }
     Ok(())
@@ -855,6 +860,7 @@ mod tests {
             channels: vec![],
             equivocation_policies: vec![],
             committees: vec![],
+            collections: vec![],
             messages: vec![],
             crypto_objects: vec![],
             roles: vec![],
