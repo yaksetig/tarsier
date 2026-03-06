@@ -2780,3 +2780,37 @@ role R {
     assert_eq!(ta.semantics.fault_model, FaultModel::Byzantine); // default
     assert_eq!(ta.semantics.timing_model, TimingModel::Asynchronous); // default
 }
+
+#[test]
+fn lower_bounded_collection_declarations() {
+    let src = r#"
+protocol CollTest {
+    params n, t;
+    resilience: n > 3*t;
+    log VoteHistory: int[n];
+    sequence Decisions: bool[10];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let prog = parse(src, "coll_test.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    assert_eq!(ta.collections.len(), 2);
+
+    let log_coll = &ta.collections[0];
+    assert_eq!(log_coll.name, "VoteHistory");
+    assert_eq!(log_coll.kind, IrCollectionKind::Log);
+    assert_eq!(log_coll.element_type, "int");
+
+    let seq_coll = &ta.collections[1];
+    assert_eq!(seq_coll.name, "Decisions");
+    assert_eq!(seq_coll.kind, IrCollectionKind::Sequence);
+    assert_eq!(seq_coll.element_type, "bool");
+}

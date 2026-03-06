@@ -406,6 +406,21 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         });
     }
 
+    // 2d. Process bounded collection declarations
+    for coll in &proto.collections {
+        let kind = match coll.kind {
+            ast::CollectionKind::Log => IrCollectionKind::Log,
+            ast::CollectionKind::Sequence => IrCollectionKind::Sequence,
+        };
+        let capacity = lower_linear_expr_to_lc(&coll.capacity, &param_ids)?;
+        ta.add_collection(IrCollectionSpec {
+            name: coll.name.clone(),
+            kind,
+            element_type: coll.element_type.clone(),
+            capacity,
+        });
+    }
+
     // 3. Add shared variables for each message type (expanded by field values)
     let mut message_infos =
         build_message_infos(&proto.messages, &enum_defs, ta.semantics.value_abstraction)?;

@@ -69,6 +69,10 @@ define_id!(
     "A unique identifier for a location in the threshold automaton."
 );
 define_id!(SharedVarId, "A unique identifier for a shared variable.");
+define_id!(
+    CollectionId,
+    "A unique identifier for a bounded log/sequence collection."
+);
 define_id!(RuleId, "A unique identifier for a rule.");
 define_id!(ParamId, "A unique identifier for a parameter.");
 
@@ -364,6 +368,8 @@ pub struct ThresholdAutomaton {
     pub security: ThresholdAutomatonSecurity,
     /// Roles marked as `leader` (exactly one process occupies leader locations at all times).
     pub leader_roles: Vec<String>,
+    /// Bounded log/sequence collection declarations.
+    pub collections: Vec<IrCollectionSpec>,
 }
 
 /// A value that is either a reference to a protocol parameter or a concrete constant.
@@ -390,6 +396,37 @@ pub struct IrCommitteeSpec {
     pub bound_param: Option<ParamId>,
 }
 
+/// Kind of bounded collection in the IR.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IrCollectionKind {
+    /// Append-only log with FIFO read semantics.
+    Log,
+    /// Random-access bounded sequence.
+    Sequence,
+}
+
+impl fmt::Display for IrCollectionKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IrCollectionKind::Log => write!(f, "log"),
+            IrCollectionKind::Sequence => write!(f, "sequence"),
+        }
+    }
+}
+
+/// Bounded log or sequence specification in the IR.
+#[derive(Debug, Clone)]
+pub struct IrCollectionSpec {
+    /// Name of this collection type.
+    pub name: String,
+    /// Log or sequence.
+    pub kind: IrCollectionKind,
+    /// Element type name (e.g., "int", "bool", "Vote").
+    pub element_type: String,
+    /// Maximum capacity as a linear combination of parameters/constants.
+    pub capacity: LinearCombination,
+}
+
 impl ThresholdAutomaton {
     pub fn new() -> Self {
         Self {
@@ -402,6 +439,7 @@ impl ThresholdAutomaton {
             semantics: ThresholdAutomatonSemantics::default(),
             security: ThresholdAutomatonSecurity::default(),
             leader_roles: Vec::new(),
+            collections: Vec::new(),
         }
     }
 
@@ -468,6 +506,19 @@ impl ThresholdAutomaton {
     /// Return the number of symbolic parameters.
     pub fn num_parameters(&self) -> usize {
         self.parameters.len()
+    }
+
+    pub fn add_collection(&mut self, spec: IrCollectionSpec) -> CollectionId {
+        let id = CollectionId::from(self.collections.len());
+        self.collections.push(spec);
+        id
+    }
+
+    pub fn find_collection_by_name(&self, name: &str) -> Option<CollectionId> {
+        self.collections
+            .iter()
+            .position(|c| c.name == name)
+            .map(CollectionId::from)
     }
 
     pub fn role_locations(&self, role: &str) -> Vec<LocationId> {
@@ -874,6 +925,16 @@ impl fmt::Display for ThresholdAutomaton {
             writeln!(f, "  Leader roles:")?;
             for role in &self.leader_roles {
                 writeln!(f, "    {role}")?;
+            }
+        }
+        if !self.collections.is_empty() {
+            writeln!(f, "  Collections:")?;
+            for (i, coll) in self.collections.iter().enumerate() {
+                writeln!(
+                    f,
+                    "    c{i}: {} {} (element={}, capacity={})",
+                    coll.kind, coll.name, coll.element_type, coll.capacity
+                )?;
             }
         }
         writeln!(f, "  Locations:")?;
