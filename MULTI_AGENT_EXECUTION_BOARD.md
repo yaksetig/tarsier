@@ -214,3 +214,5 @@ Columns:
 2026-03-06T13:28:00Z | 2 | FIFO-03 | DONE | tests=cargo test -p tarsier-dsl -- parse_enqueue && cargo test -p tarsier-ir lower_enqueue_dequeue
 2026-03-06T13:35:00Z | 2 | FIFO-04 | CLAIM | taking task — implementing on agent2/fifo-04 branch
 2026-03-06T13:35:00Z | 2 | FIFO-04 | START | implementation started
+2026-03-06T13:42:00Z | 2 | FIFO-04 | PR_OPEN | agent2/fifo-04 6d51cdd SMT FIFO queue head/tail encoding
+2026-03-06T13:42:00Z | 2 | FIFO-04 | DONE | commit 6d51cdd tests=cargo test -p tarsier-smt fifo_queue
