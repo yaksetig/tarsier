@@ -216,3 +216,9 @@ Columns:
 2026-03-06T13:35:00Z | 2 | FIFO-04 | START | implementation started
 2026-03-06T13:42:00Z | 2 | FIFO-04 | PR_OPEN | agent2/fifo-04 6d51cdd SMT FIFO queue head/tail encoding
 2026-03-06T13:42:00Z | 2 | FIFO-04 | DONE | commit 6d51cdd tests=cargo test -p tarsier-smt fifo_queue
+2026-03-06T14:21:03Z | 1 | AI-03 | CLAIM | taking task
+2026-03-06T14:21:03Z | 1 | AI-03 | START | implementation started
+2026-03-06T13:45:00Z | 2 | FIFO-05 | CLAIM | taking task — implementing on agent2/fifo-05 branch
+2026-03-06T13:45:00Z | 2 | FIFO-05 | START | implementation started
+2026-03-06T13:55:00Z | 2 | FIFO-05 | PR_OPEN | agent2/fifo-05 918e62e integration tests + demo example
+2026-03-06T13:55:00Z | 2 | FIFO-05 | DONE | commit 918e62e tests=cargo test -p tarsier-ir -- fifo_channel_end_to_end fifo_channel_mixed && cargo test -p tarsier-smt fifo_queue_with_enqueue
