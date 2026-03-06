@@ -188,3 +188,11 @@ Columns:
 2026-03-06T12:32:30Z | 1 | TWIN-03 | DONE | commit 14d277c tests=cargo test -p tarsier-conformance network_shim -- --nocapture && cargo check -p tarsier-conformance
 2026-03-06T12:33:00Z | 2 | REF-01 | CLAIM | taking task — implementing on agent2/ref-01 branch
 2026-03-06T12:33:00Z | 2 | REF-01 | START | implementation started
+2026-03-06T12:38:00Z | 2 | REF-01 | PR_OPEN | agent2/ref-01 023f8b5 refines declaration parser + downstream fixes
+2026-03-06T12:38:00Z | 2 | REF-01 | DONE | commit 023f8b5 tests=cargo test -p tarsier-dsl -- parse_refines parse_no_refines
+2026-03-06T12:43:08Z | 1 | AI-01 | CLAIM | taking task on clean worktree codex/agent1-twin-03-v4
+2026-03-06T12:43:08Z | 1 | AI-01 | START | implementation started in /Users/myaksetig/Desktop/Repos/tarsier-agent1-twin03
+2026-03-06T12:47:14Z | 1 | AI-01 | PR_OPEN | codex/agent1-ai-01-v1 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-ai-01-v1 wire prove failure serializer exports
+2026-03-06T12:47:14Z | 1 | AI-01 | DONE | commit cf3c6a4 tests=CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-engine --lib && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-cli && attempted CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo test -p tarsier-engine prove_failure_prompt_payload -- --nocapture (fails on pre-existing ProtocolDecl refines fixture mismatch in engine lib tests)
+2026-03-06T12:50:00Z | 2 | TWIN-03 | REVIEW_START | reviewing Agent 1's network_shim.rs on codex/agent1-twin-03-v4 (commit 14d277c)
+2026-03-06T12:50:00Z | 2 | TWIN-03 | REVIEW_PASS | InMemoryNetworkShim well-designed: deterministic tick-based delivery, delay/drop/reorder/partition/heal/spawn-twin/retire-twin ops, good error handling, 6 tests cover all fault types and error paths; branch diverges from pre-LOG main (removes LOG-03/04/05 work) so merge must be rebased
