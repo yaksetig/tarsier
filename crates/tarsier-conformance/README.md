@@ -33,6 +33,8 @@ formally verified model and a real-world implementation.
   implementation testing.
 - `active::ActiveHarness` -- Deterministic runner that replays scheduled
   perturbations through an implementation adapter and network injector.
+- `network_shim::InMemoryNetworkShim` -- Deterministic queue/shim primitives
+  for delay, drop, reorder, partition, and twin perturbations.
 - `adapters` module -- Trace format adapters for different systems (native
   runtime traces, CometBFT, etcd-raft).
 
