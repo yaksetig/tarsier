@@ -217,6 +217,10 @@ fn run() -> miette::Result<()> {
             cegar_iters,
             cegar_report_out,
             portfolio,
+            assist,
+            assist_provider,
+            assist_max_suggestions,
+            assist_payload_out,
             format,
         } => {
             commands::prove::run_prove_command(commands::prove::ProveCommandArgs {
@@ -231,6 +235,10 @@ fn run() -> miette::Result<()> {
                 cegar_iters,
                 cegar_report_out,
                 portfolio,
+                assist,
+                assist_provider,
+                assist_max_suggestions,
+                assist_payload_out,
                 format,
                 cli_network_mode,
             })?;

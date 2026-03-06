@@ -47,6 +47,10 @@ fn run_once(args: &WatchCommandArgs) {
         cegar_iters: 0,
         cegar_report_out: None,
         portfolio: args.portfolio,
+        assist: false,
+        assist_provider: "mock".to_string(),
+        assist_max_suggestions: 5,
+        assist_payload_out: None,
         format: args.format.clone(),
         cli_network_mode: args.cli_network_mode,
     });

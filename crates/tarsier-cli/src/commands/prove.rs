@@ -9,7 +9,10 @@ use std::path::PathBuf;
 use miette::IntoDiagnostic;
 use serde_json::{json, Value};
 
-use tarsier_engine::pipeline::{FairnessMode, PipelineOptions, ProofEngine, SolverChoice};
+use tarsier_engine::pipeline::{
+    assist_provider_from_kind, prove_failure_prompt_payload, AssistProviderKind, FairnessMode,
+    PipelineOptions, ProofEngine, SolverChoice,
+};
 use tarsier_engine::result::{UnboundedFairLivenessResult, UnboundedSafetyResult};
 
 use crate::{
@@ -51,6 +54,10 @@ pub(crate) struct ProveCommandArgs {
     pub(crate) cegar_iters: usize,
     pub(crate) cegar_report_out: Option<PathBuf>,
     pub(crate) portfolio: bool,
+    pub(crate) assist: bool,
+    pub(crate) assist_provider: String,
+    pub(crate) assist_max_suggestions: usize,
+    pub(crate) assist_payload_out: Option<PathBuf>,
     pub(crate) format: String,
     pub(crate) cli_network_mode: CliNetworkSemanticsMode,
 }
@@ -107,6 +114,13 @@ struct ProveExecutionConfig {
     cegar_report_out: Option<PathBuf>,
     timeout: u64,
     output_format: OutputFormat,
+}
+
+#[derive(Debug, Clone)]
+struct ProveAssistConfig {
+    provider: AssistProviderKind,
+    max_suggestions: usize,
+    payload_out: Option<PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -308,12 +322,28 @@ pub(crate) fn run_prove_command(args: ProveCommandArgs) -> miette::Result<()> {
         timeout: args.timeout,
         output_format,
     };
+    let assist = if args.assist {
+        let provider =
+            AssistProviderKind::parse(&args.assist_provider).map_err(|e| miette::miette!("{e}"))?;
+        Some(ProveAssistConfig {
+            provider,
+            max_suggestions: args.assist_max_suggestions.max(1),
+            payload_out: args.assist_payload_out,
+        })
+    } else {
+        None
+    };
     let prove_target = detect_prove_auto_target(&source, &filename)?;
 
     if prove_target == ProveAutoTarget::FairLiveness {
+        if assist.is_some() && matches!(output_format, OutputFormat::Text) {
+            eprintln!(
+                "Assist note: `--assist` currently applies to safety `prove` only; skipping for fair-liveness auto-dispatch."
+            );
+        }
         run_prove_fair_liveness_branch(&source, &filename, &options, args.portfolio, exec)?;
     } else if args.portfolio {
-        run_prove_safety_portfolio(&source, &filename, &options, exec)?;
+        run_prove_safety_portfolio(&source, &filename, &options, exec, assist.as_ref())?;
     } else {
         run_prove_safety_single(
             &source,
@@ -323,6 +353,7 @@ pub(crate) fn run_prove_command(args: ProveCommandArgs) -> miette::Result<()> {
             exec.cegar_iters,
             exec.cegar_report_out,
             exec.output_format,
+            assist.as_ref(),
         )?;
     }
     Ok(())
@@ -745,12 +776,68 @@ fn run_prove_fair_liveness_branch(
     Ok(())
 }
 
+fn maybe_emit_assist_suggestions(
+    source: &str,
+    filename: &str,
+    options: &PipelineOptions,
+    result: &UnboundedSafetyResult,
+    assist: Option<&ProveAssistConfig>,
+    output_format: OutputFormat,
+) -> miette::Result<()> {
+    let Some(assist) = assist else {
+        return Ok(());
+    };
+
+    let payload = match prove_failure_prompt_payload(source, filename, options, result)
+        .map_err(|e| miette::miette!("Assist payload generation failed: {e}"))?
+    {
+        Some(payload) => payload,
+        None => return Ok(()),
+    };
+
+    if let Some(path) = &assist.payload_out {
+        let value = serde_json::to_value(&payload).into_diagnostic()?;
+        write_json_artifact(path, &value)?;
+        if matches!(output_format, OutputFormat::Text) {
+            eprintln!("Assist payload written to {}", path.display());
+        }
+    }
+
+    let provider = assist_provider_from_kind(assist.provider);
+    let suggestions = match provider.suggest_invariants(&payload, assist.max_suggestions) {
+        Ok(suggestions) => suggestions,
+        Err(reason) => {
+            if matches!(output_format, OutputFormat::Text) {
+                eprintln!(
+                    "Assist provider '{}' failed: {reason}",
+                    assist.provider.as_str()
+                );
+            }
+            return Ok(());
+        }
+    };
+
+    if matches!(output_format, OutputFormat::Text) {
+        eprintln!(
+            "Assist suggestions (provider={}, count={}):",
+            assist.provider.as_str(),
+            suggestions.len()
+        );
+        for (idx, suggestion) in suggestions.iter().enumerate() {
+            eprintln!("  {}. {}", idx + 1, suggestion);
+        }
+    }
+
+    Ok(())
+}
+
 /// Run `tarsier prove` in safety portfolio mode (parallel Z3 + cvc5).
 fn run_prove_safety_portfolio(
     source: &str,
     filename: &str,
     options: &PipelineOptions,
     config: ProveExecutionConfig,
+    assist: Option<&ProveAssistConfig>,
 ) -> miette::Result<()> {
     let ProveExecutionConfig {
         fairness,
@@ -862,6 +949,8 @@ fn run_prove_safety_portfolio(
             "Skipping certificate generation in portfolio mode. Use `certify-safety` with an explicit solver."
         );
     }
+
+    maybe_emit_assist_suggestions(source, filename, options, &result, assist, output_format)?;
     Ok(())
 }
 
@@ -874,6 +963,7 @@ fn run_prove_safety_single(
     cegar_iters: usize,
     cegar_report_out: Option<PathBuf>,
     output_format: OutputFormat,
+    assist: Option<&ProveAssistConfig>,
 ) -> miette::Result<()> {
     let result = if let Some(report_path) = cegar_report_out.clone() {
         let report = tarsier_engine::pipeline::prove_safety_with_cegar_report(
@@ -960,6 +1050,8 @@ fn run_prove_safety_single(
             }
         }
     }
+
+    maybe_emit_assist_suggestions(source, filename, options, &result, assist, output_format)?;
     Ok(())
 }
 

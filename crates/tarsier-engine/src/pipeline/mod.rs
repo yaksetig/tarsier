@@ -552,13 +552,13 @@ pub use analysis::{comm_complexity, show_ta};
 
 // From verification
 pub use verification::{
-    check_fair_liveness, check_fair_liveness_with_mode, check_liveness, completeness_preflight,
-    prove_failure_prompt_payload,
-    prove_fair_liveness, prove_fair_liveness_with_cegar, prove_fair_liveness_with_cegar_report,
+    assist_provider_from_kind, check_fair_liveness, check_fair_liveness_with_mode, check_liveness,
+    completeness_preflight, prove_failure_prompt_payload, prove_fair_liveness,
+    prove_fair_liveness_with_cegar, prove_fair_liveness_with_cegar_report,
     prove_fair_liveness_with_mode, prove_fair_liveness_with_round_abstraction, prove_safety,
     prove_safety_with_cegar, prove_safety_with_cegar_report, prove_safety_with_round_abstraction,
     verify, verify_all_properties, verify_program_ast, verify_with_cegar, verify_with_cegar_report,
-    CompletenessWarning, ProveFailurePromptPayload,
+    AssistProviderKind, AssistSuggestionProvider, CompletenessWarning, ProveFailurePromptPayload,
 };
 
 // From certification

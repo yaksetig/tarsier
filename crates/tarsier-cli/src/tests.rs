@@ -401,6 +401,42 @@ fn parse_prove_accepts_cegar_report_out_flag() {
 }
 
 #[test]
+fn parse_prove_accepts_assist_flags() {
+    let cli = Cli::try_parse_from([
+        "tarsier",
+        "prove",
+        "examples/pbft_simple.trs",
+        "--assist",
+        "--assist-provider",
+        "mock",
+        "--assist-max-suggestions",
+        "7",
+        "--assist-payload-out",
+        "artifacts/assist_payload.json",
+    ])
+    .expect("prove command with assist flags should parse");
+
+    match cli.command {
+        Commands::Prove {
+            assist,
+            assist_provider,
+            assist_max_suggestions,
+            assist_payload_out,
+            ..
+        } => {
+            assert!(assist);
+            assert_eq!(assist_provider, "mock");
+            assert_eq!(assist_max_suggestions, 7);
+            assert_eq!(
+                assist_payload_out,
+                Some(PathBuf::from("artifacts/assist_payload.json"))
+            );
+        }
+        _ => panic!("expected prove command"),
+    }
+}
+
+#[test]
 fn parse_prove_fair_accepts_cegar_report_out_flag() {
     let cli = Cli::try_parse_from([
         "tarsier",

@@ -27,6 +27,11 @@ pub(crate) use fair_pdr::*;
 mod assist;
 pub use assist::{prove_failure_prompt_payload, ProveFailurePromptPayload};
 
+mod assist_provider;
+pub use assist_provider::{
+    assist_provider_from_kind, AssistProviderKind, AssistSuggestionProvider,
+};
+
 mod orchestration;
 pub(crate) use orchestration::*;
 pub use orchestration::{
