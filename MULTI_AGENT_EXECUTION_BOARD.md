@@ -234,3 +234,15 @@ Columns:
 2026-03-06T14:55:00Z | 2 | REF-03 | DONE | commit 07cd003 tests=cargo test -p tarsier-ir -- product
 2026-03-06T15:00:00Z | 2 | REF-04 | CLAIM | taking task — implementing on agent2/ref-04 branch
 2026-03-06T15:00:00Z | 2 | REF-04 | START | implementation started
+2026-03-06T15:10:00Z | 2 | REF-04 | PR_OPEN | agent2/ref-04 a2d1775 bounded simulation-preservation SMT encoding
+2026-03-06T15:10:00Z | 2 | REF-04 | DONE | commit a2d1775 tests=cargo test -p tarsier-smt -- refinement
+2026-03-06T15:15:00Z | 2 | REF-05 | CLAIM | taking task — implementing on agent2/ref-05 branch
+2026-03-06T15:15:00Z | 2 | REF-05 | START | implementation started
+2026-03-06T14:49:28Z | 1 | AI-04 | CLAIM | taking task
+2026-03-06T14:49:28Z | 1 | AI-04 | START | implementation started
+2026-03-06T15:03:59Z | 1 | AI-04 | PR_OPEN | codex/agent1-ai-04-v1 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-ai-04-v1 rerun validated assist suggestions + structured reporting in prove outputs
+2026-03-06T15:03:59Z | 1 | AI-04 | DONE | commit edbc7fe tests=CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier-agent1-target cargo check -p tarsier-cli && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier-agent1-target cargo test -p tarsier-cli assist_formula -- --nocapture && /Users/myaksetig/Desktop/Repos/tarsier-agent1-target/debug/deps/tarsier-a8e7e133e72dae93 assist_report_json_contains_rerun_results_and_errors --nocapture && /Users/myaksetig/Desktop/Repos/tarsier-agent1-target/debug/deps/tarsier-a8e7e133e72dae93 parse_prove_accepts_assist_flags --nocapture (note: direct test-binary invocations used due low disk preventing additional cargo test profile link steps)
+2026-03-06T15:04:19Z | 1 | AI-05 | CLAIM | taking task
+2026-03-06T15:04:19Z | 1 | AI-05 | START | implementation started
+2026-03-06T15:07:22Z | 1 | AI-05 | PR_OPEN | codex/agent1-ai-05-v1 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-ai-05-v1 add mock-provider + safety regression tests for assist reporting pipeline
+2026-03-06T15:07:22Z | 1 | AI-05 | DONE | commit cb7bb29 tests=CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier-agent1-target cargo check -p tarsier-cli && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier-agent1-target cargo check -p tarsier-cli --tests && attempted CARGO_BUILD_JOBS=1 CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier-agent1-target cargo test -p tarsier-cli collect_assist_report_with_openai_provider_surfaces_failure -- --nocapture (fails: no space left on device while linking z3-sys test profile)

@@ -429,6 +429,19 @@ fn run() -> miette::Result<()> {
         } => {
             commands::verify::run_comm_command(file, depth, format, out, cli_network_mode)?;
         }
+        Commands::RefinementCheck {
+            file,
+            abstract_file,
+            depth,
+            format,
+        } => {
+            commands::refinement::run_refinement_check(
+                &file,
+                abstract_file.as_deref(),
+                depth,
+                &format,
+            )?;
+        }
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             clap_complete::generate(shell, &mut cmd, "tarsier", &mut std::io::stdout());

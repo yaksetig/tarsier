@@ -900,6 +900,25 @@ pub(crate) enum Commands {
         artifact_dir: Option<PathBuf>,
     },
 
+    /// Check refinement (simulation preservation) between a concrete and abstract protocol
+    #[command(display_order = 7)]
+    RefinementCheck {
+        /// Path to the concrete .trs protocol file (must contain a `refines` declaration)
+        file: PathBuf,
+
+        /// Path to the abstract .trs protocol file (overrides the `refines` path in the DSL)
+        #[arg(long)]
+        abstract_file: Option<PathBuf>,
+
+        /// Maximum BMC depth for bounded simulation check
+        #[arg(long, default_value_t = 10)]
+        depth: usize,
+
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
     /// Generate shell completions for the given shell
     #[command(display_order = 99)]
     Completions {
