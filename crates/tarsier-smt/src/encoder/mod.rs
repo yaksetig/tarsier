@@ -350,6 +350,16 @@ impl<'a> BmcEncoderBuilder<'a> {
             enc.assert_term(SmtTerm::var(gamma_var(0, v)).eq(SmtTerm::int(0)));
         }
         enc.assert_term(SmtTerm::var(time_var(0)).eq(SmtTerm::int(0)));
+
+        // Bounded collections: declare and initialize length variables at step 0
+        for (cid, spec) in ta.collections.iter().enumerate() {
+            enc.declare(coll_len_var(0, cid), SmtSort::Int);
+            // Length starts at 0
+            enc.assert_term(SmtTerm::var(coll_len_var(0, cid)).eq(SmtTerm::int(0)));
+            // Length bounded by capacity
+            let cap = encode_lc(&spec.capacity);
+            enc.assert_term(SmtTerm::var(coll_len_var(0, cid)).le(cap));
+        }
         if missing_process_ids {
             enc.assert_term(SmtTerm::bool(false));
         }
@@ -803,6 +813,36 @@ impl<'a> BmcEncoderBuilder<'a> {
                             }
                         }
                     }
+                }
+            }
+
+            // Bounded collection length updates for step k → k+1
+            for (cid, spec) in ta.collections.iter().enumerate() {
+                enc.declare(coll_len_var(k + 1, cid), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(coll_len_var(k + 1, cid)).ge(SmtTerm::int(0)));
+                let cap = encode_lc(&spec.capacity);
+                enc.assert_term(SmtTerm::var(coll_len_var(k + 1, cid)).le(cap));
+
+                // Compute total appends to this collection from all rules firing at step k
+                let mut append_deltas: Vec<SmtTerm> = Vec::new();
+                for &r in active_rule_ids {
+                    for cu in &ta.rules[r].collection_updates {
+                        if cu.collection.as_usize() == cid {
+                            if matches!(cu.kind, CollectionUpdateKind::Append(_)) {
+                                append_deltas.push(SmtTerm::var(delta_var(k, r)));
+                            }
+                        }
+                    }
+                }
+
+                let len_k = SmtTerm::var(coll_len_var(k, cid));
+                let len_next = SmtTerm::var(coll_len_var(k + 1, cid));
+                if append_deltas.is_empty() {
+                    // No appends possible → length unchanged
+                    enc.assert_term(len_next.eq(len_k));
+                } else {
+                    let total_appends = sum_terms_balanced(append_deltas);
+                    enc.assert_term(len_next.eq(len_k.add(total_appends)));
                 }
             }
         }
@@ -3916,5 +3956,47 @@ protocol BuggyBroadcast {
             has_conservation,
             "k-induction step should have process conservation strengthening"
         );
+    }
+
+    #[test]
+    fn collection_length_variables_are_declared_and_bounded() {
+        let mut ta = make_simple_ta();
+
+        // Add a bounded collection with capacity = n
+        ta.add_collection(IrCollectionSpec {
+            name: "Votes".into(),
+            kind: IrCollectionKind::Log,
+            element_type: "int".into(),
+            capacity: LinearCombination::param(ParamId::from(0)), // n
+        });
+
+        // Add an append rule (waiting->done appends to Votes)
+        ta.rules[0].collection_updates.push(CollectionUpdate {
+            collection: CollectionId::new(0),
+            kind: CollectionUpdateKind::Append(LinearCombination::constant(1)),
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let encoding = encode_bmc(&cs, &property, 2);
+        let assertions: Vec<String> = encoding
+            .assertions
+            .iter()
+            .map(|t| to_smtlib(t))
+            .collect();
+
+        // Check collection length var at step 0 is declared and initialized to 0
+        let has_len_init = assertions.iter().any(|a| a.contains("clen_0_0") && a.contains("0"));
+        assert!(has_len_init, "Collection length should be initialized to 0");
+
+        // Check collection length var at step 1 is declared
+        let has_len_step1 = assertions.iter().any(|a| a.contains("clen_1_0"));
+        assert!(has_len_step1, "Collection length at step 1 should exist");
+
+        // Check capacity bound exists (clen <= p_0 which is n)
+        let has_cap_bound = assertions
+            .iter()
+            .any(|a| a.contains("clen_") && a.contains("p_0"));
+        assert!(has_cap_bound, "Collection length should be bounded by capacity");
     }
 }

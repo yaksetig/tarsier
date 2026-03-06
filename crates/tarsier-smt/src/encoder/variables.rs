@@ -81,6 +81,16 @@ pub(super) fn net_drop_var(step: usize, var: impl std::fmt::Display) -> String {
     format!("net_drop_{step}_{var}")
 }
 
+/// Length of bounded collection `coll` at step `step`.
+pub(super) fn coll_len_var(step: usize, coll: usize) -> String {
+    format!("clen_{step}_{coll}")
+}
+
+/// Element `index` of bounded collection `coll` at step `step`.
+pub(super) fn coll_elem_var(step: usize, coll: usize, index: usize) -> String {
+    format!("celem_{step}_{coll}_{index}")
+}
+
 /// Parse `__sent_g<N>` variable names back to their shared-var index.
 pub(super) fn parse_internal_sent_flag_var(name: &str) -> Option<usize> {
     name.strip_prefix("__sent_g")?.parse::<usize>().ok()
