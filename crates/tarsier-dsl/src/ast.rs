@@ -528,6 +528,13 @@ pub enum Action {
         collection: String,
         value: Expr,
     },
+    Enqueue {
+        collection: String,
+        value: Expr,
+    },
+    Dequeue {
+        collection: String,
+    },
     Assign {
         var: String,
         value: Expr,

@@ -677,6 +677,15 @@ fn write_actions(
                 let val = render_expr(value, params, CodegenTarget::Rust);
                 writeln!(out, "{indent}self.{snake}.push({val});")?;
             }
+            Action::Enqueue { collection, value } => {
+                let snake = to_snake_case(collection);
+                let val = render_expr(value, params, CodegenTarget::Rust);
+                writeln!(out, "{indent}self.{snake}.push_back({val});")?;
+            }
+            Action::Dequeue { collection } => {
+                let snake = to_snake_case(collection);
+                writeln!(out, "{indent}self.{snake}.pop_front();")?;
+            }
         }
     }
     Ok(())

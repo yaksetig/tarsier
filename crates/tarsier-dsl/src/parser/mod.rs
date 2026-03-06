@@ -1178,6 +1178,17 @@ fn parse_transition(pair: Pair<'_>) -> Result<Spanned<TransitionRule>, ParseErro
                 let value = parse_expr(next_child(&mut si, "si")?)?;
                 actions.push(Action::Append { collection, value });
             }
+            Rule::enqueue_action => {
+                let mut si = item.into_inner();
+                let collection = next_child(&mut si, "si")?.as_str().to_string();
+                let value = parse_expr(next_child(&mut si, "si")?)?;
+                actions.push(Action::Enqueue { collection, value });
+            }
+            Rule::dequeue_action => {
+                let mut si = item.into_inner();
+                let collection = next_child(&mut si, "si")?.as_str().to_string();
+                actions.push(Action::Dequeue { collection });
+            }
             Rule::assign_action => {
                 let mut si = item.into_inner();
                 let var = next_child(&mut si, "si")?.as_str().to_string();

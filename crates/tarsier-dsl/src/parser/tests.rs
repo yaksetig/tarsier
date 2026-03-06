@@ -2803,3 +2803,41 @@ protocol NoRefines {
     let program = parse(src, "no_refines_test.trs").expect("should parse");
     assert!(program.protocol.node.refines.is_none());
 }
+
+#[test]
+fn parse_enqueue_and_dequeue_actions() {
+    let src = r#"
+protocol QueueTest {
+    params n, t;
+    resilience: n > 3*t;
+    fifo_channel MsgQueue: int[n];
+    message Request;
+    role Worker {
+        init Idle;
+        phase Idle {
+            when received >= 1 Request => {
+                enqueue MsgQueue 42;
+                dequeue MsgQueue;
+                goto phase Idle;
+            }
+        }
+    }
+    property safe: safety {
+        forall p: Worker. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "queue_test.trs").expect("should parse");
+    let role = &program.protocol.node.roles[0].node;
+    let transition = &role.phases[0].node.transitions[0].node;
+    assert!(matches!(
+        &transition.actions[0],
+        Action::Enqueue { collection, value }
+        if collection == "MsgQueue" && matches!(value, Expr::IntLit(42))
+    ));
+    assert!(matches!(
+        &transition.actions[1],
+        Action::Dequeue { collection }
+        if collection == "MsgQueue"
+    ));
+}

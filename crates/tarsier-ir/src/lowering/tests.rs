@@ -3060,3 +3060,46 @@ fn collection_update_enqueue_dequeue_display() {
     };
     assert_eq!(format!("{deq}"), "c1.dequeue()");
 }
+
+#[test]
+fn lower_enqueue_dequeue_actions() {
+    let src = r#"
+protocol QueueTest {
+    params n, t;
+    resilience: n > 3*t;
+    fifo_channel MsgQueue: int[n];
+    message Request;
+    role Worker {
+        init Waiting;
+        phase Waiting {
+            when received >= 1 Request => {
+                enqueue MsgQueue 1;
+                dequeue MsgQueue;
+                goto phase Waiting;
+            }
+        }
+    }
+    property safe: safety {
+        forall p: Worker. p.Waiting == 0
+    }
+}
+"#;
+    let prog = parse(src, "queue_test.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    // Find a rule with collection updates
+    let rules_with_updates: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| !r.collection_updates.is_empty())
+        .collect();
+    assert!(
+        !rules_with_updates.is_empty(),
+        "Should have rules with collection updates"
+    );
+
+    let updates = &rules_with_updates[0].collection_updates;
+    assert_eq!(updates.len(), 2);
+    assert!(matches!(updates[0].kind, CollectionUpdateKind::Enqueue(_)));
+    assert!(matches!(updates[1].kind, CollectionUpdateKind::Dequeue));
+}

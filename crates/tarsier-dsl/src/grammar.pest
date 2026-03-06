@@ -236,6 +236,8 @@ action = _{
     | form_crypto_action
     | lock_crypto_action
     | justify_crypto_action
+    | enqueue_action
+    | dequeue_action
     | append_action
     | assign_action
     | goto_action
@@ -243,6 +245,8 @@ action = _{
 }
 
 append_action = { "append" ~ ident ~ expr ~ ";" }
+enqueue_action = { "enqueue" ~ ident ~ expr ~ ";" }
+dequeue_action = { "dequeue" ~ ident ~ ";" }
 
 send_action = {
     "send" ~ ident ~

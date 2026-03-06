@@ -657,6 +657,15 @@ fn write_actions_go(
                 let val = render_expr(value, params, CodegenTarget::Go);
                 writeln!(out, "{indent}s.{pascal} = append(s.{pascal}, {val})")?;
             }
+            Action::Enqueue { collection, value } => {
+                let pascal = to_pascal_case(collection);
+                let val = render_expr(value, params, CodegenTarget::Go);
+                writeln!(out, "{indent}s.{pascal} = append(s.{pascal}, {val})")?;
+            }
+            Action::Dequeue { collection } => {
+                let pascal = to_pascal_case(collection);
+                writeln!(out, "{indent}s.{pascal} = s.{pascal}[1:]")?;
+            }
         }
     }
     Ok(())

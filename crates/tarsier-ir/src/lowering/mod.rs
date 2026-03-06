@@ -1022,6 +1022,29 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                 kind: CollectionUpdateKind::Append(lc),
                             });
                         }
+                        ast::Action::Enqueue { collection, value } => {
+                            let coll_id = ta.find_collection_by_name(collection).ok_or_else(|| {
+                                LoweringError::Unsupported(format!(
+                                    "Unknown collection '{collection}' in enqueue action"
+                                ))
+                            })?;
+                            let lc = helpers::lower_expr_to_lc(value, &param_ids)?;
+                            pending_collection_updates.push(CollectionUpdate {
+                                collection: coll_id,
+                                kind: CollectionUpdateKind::Enqueue(lc),
+                            });
+                        }
+                        ast::Action::Dequeue { collection } => {
+                            let coll_id = ta.find_collection_by_name(collection).ok_or_else(|| {
+                                LoweringError::Unsupported(format!(
+                                    "Unknown collection '{collection}' in dequeue action"
+                                ))
+                            })?;
+                            pending_collection_updates.push(CollectionUpdate {
+                                collection: coll_id,
+                                kind: CollectionUpdateKind::Dequeue,
+                            });
+                        }
                     }
                 }
 
