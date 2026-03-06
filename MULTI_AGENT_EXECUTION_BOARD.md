@@ -160,3 +160,7 @@ Columns:
 2026-03-06T02:13:08Z | 1 | TWIN-02 | START | implementation started
 2026-03-06T02:16:40Z | 1 | TWIN-02 | PR_OPEN | branch=codex/agent1-twin-02 commit=0b916df local patch ready (no remote PR yet)
 2026-03-06T02:16:40Z | 1 | TWIN-02 | DONE | commit=0b916df tests=cargo check -p tarsier-conformance && cargo test -p tarsier-conformance active:: -- --nocapture
+2026-03-06T02:17:48Z | 1 | TWIN-03 | CLAIM | taking task
+2026-03-06T02:17:48Z | 1 | TWIN-03 | START | implementation started
+2026-03-06T02:21:43Z | 1 | TWIN-03 | PR_OPEN | branch=codex/agent1-twin-03 commit=6035785 local patch ready (no remote PR yet)
+2026-03-06T02:21:43Z | 1 | TWIN-03 | DONE | commit=6035785 tests=cargo fmt --package tarsier-conformance && cargo check -p tarsier-conformance && cargo test -p tarsier-conformance network_shim:: -- --nocapture && cargo test -p tarsier-conformance
