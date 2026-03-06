@@ -226,3 +226,7 @@ Columns:
 2026-03-06T14:30:00Z | 2 | REF-02 | START | implementation started
 2026-03-06T14:35:29Z | 1 | AI-03 | PR_OPEN | codex/agent1-ai-03-v1 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-ai-03-v1 parse/sanitize assist invariants + SMT validation
 2026-03-06T14:35:29Z | 1 | AI-03 | DONE | commit 1c1482e tests=CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-cli && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo test -p tarsier-cli assist_formula -- --nocapture && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo test -p tarsier-cli parse_prove_accepts_assist_flags -- --nocapture
+2026-03-06T14:40:00Z | 2 | REF-02 | PR_OPEN | agent2/ref-02 85a0465 refinement IR model (RefinementMapping, SimulationKind, RefinementRelation)
+2026-03-06T14:40:00Z | 2 | REF-02 | DONE | commit 85a0465 tests=cargo test -p tarsier-ir -- refinement
+2026-03-06T14:45:00Z | 2 | REF-03 | CLAIM | taking task — implementing on agent2/ref-03 branch
+2026-03-06T14:45:00Z | 2 | REF-03 | START | implementation started

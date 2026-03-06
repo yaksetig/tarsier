@@ -10,6 +10,7 @@ pub mod abstraction;
 pub mod composition;
 pub mod counter_system;
 pub mod lowering;
+pub mod product;
 pub mod properties;
 #[cfg(any(test, feature = "proptest"))]
 pub mod proptest_generators;
