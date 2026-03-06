@@ -4,7 +4,7 @@
 // for safety and fair-liveness properties, including portfolio mode, CEGAR
 // refinement, round-erasure over-approximation, and certificate bundle output.
 
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 use miette::IntoDiagnostic;
 use serde_json::{json, Value};
@@ -776,6 +776,170 @@ fn run_prove_fair_liveness_branch(
     Ok(())
 }
 
+fn strip_suggestion_list_prefix_once(raw: &str) -> &str {
+    let trimmed = raw.trim_start();
+    for prefix in ["- ", "* ", "+ "] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            return rest;
+        }
+    }
+
+    let numeric_prefix_len = trimmed
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .map(char::len_utf8)
+        .sum::<usize>();
+    if numeric_prefix_len > 0 {
+        let remainder = &trimmed[numeric_prefix_len..];
+        if let Some(rest) = remainder.strip_prefix(". ") {
+            return rest;
+        }
+        if let Some(rest) = remainder.strip_prefix(") ") {
+            return rest;
+        }
+    }
+
+    trimmed
+}
+
+fn extract_invariant_body_from_wrapper(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let lowered = trimmed.to_ascii_lowercase();
+    if !lowered.starts_with("invariant") && !lowered.starts_with("property ") {
+        return None;
+    }
+
+    let invariant_offset = lowered.find("invariant")?;
+    let after_invariant = trimmed[(invariant_offset + "invariant".len())..].trim_start();
+
+    if after_invariant.starts_with('{') {
+        let close = after_invariant.rfind('}')?;
+        return Some(after_invariant[1..close].trim().to_string());
+    }
+
+    let without_delimiter = after_invariant
+        .strip_prefix(':')
+        .or_else(|| after_invariant.strip_prefix('='))
+        .unwrap_or(after_invariant)
+        .trim();
+    if without_delimiter.is_empty() {
+        None
+    } else {
+        Some(without_delimiter.to_string())
+    }
+}
+
+fn sanitize_assist_formula(raw: &str) -> Option<String> {
+    let mut cleaned = raw.trim().to_string();
+    if cleaned.is_empty() {
+        return None;
+    }
+
+    if cleaned.starts_with("```") && cleaned.ends_with("```") {
+        let mut lines: Vec<&str> = cleaned.lines().collect();
+        if !lines.is_empty() {
+            lines.remove(0);
+        }
+        if lines
+            .last()
+            .is_some_and(|line| line.trim_start().starts_with("```"))
+        {
+            lines.pop();
+        }
+        cleaned = lines.join("\n");
+    }
+
+    cleaned = strip_suggestion_list_prefix_once(cleaned.trim())
+        .trim()
+        .to_string();
+
+    if cleaned.starts_with('"') && cleaned.ends_with('"') && cleaned.len() > 1 {
+        cleaned = cleaned[1..cleaned.len() - 1].trim().to_string();
+    }
+    if cleaned.starts_with('`') && cleaned.ends_with('`') && cleaned.len() > 1 {
+        cleaned = cleaned[1..cleaned.len() - 1].trim().to_string();
+    }
+
+    if let Some(inner) = extract_invariant_body_from_wrapper(&cleaned) {
+        cleaned = inner;
+    }
+
+    while cleaned.ends_with(';') {
+        cleaned.pop();
+        cleaned = cleaned.trim_end().to_string();
+    }
+
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
+fn parse_assist_formula_expr(
+    formula: &str,
+) -> Result<tarsier_dsl::ast::QuantifiedFormula, tarsier_dsl::errors::ParseError> {
+    let wrapped = format!(
+        "protocol AssistSuggestionParse {{
+  parameters {{ n: nat; t: nat; }}
+  resilience {{ n > 3*t; }}
+  message M;
+  role Node {{
+    var ok: bool = true;
+    init Init;
+    phase Init {{}}
+  }}
+  property assist_candidate: invariant {{ {formula} }}
+}}"
+    );
+    let parsed = tarsier_dsl::parse(&wrapped, "<assist_suggestion>")?;
+    Ok(parsed.protocol.node.properties[0].node.formula.clone())
+}
+
+fn validate_assist_formula_with_smt(
+    base_program: &tarsier_dsl::ast::Program,
+    options: &PipelineOptions,
+    formula: &str,
+    candidate_idx: usize,
+) -> Result<(), String> {
+    let parsed_formula =
+        parse_assist_formula_expr(formula).map_err(|e| format!("parse failed: {e}"))?;
+
+    let mut candidate_program = base_program.clone();
+    let candidate_property = tarsier_dsl::ast::PropertyDecl {
+        name: format!("assist_candidate_{candidate_idx}"),
+        kind: tarsier_dsl::ast::PropertyKind::Invariant,
+        formula: parsed_formula,
+    };
+    candidate_program.protocol.node.properties = vec![tarsier_dsl::ast::Spanned::new(
+        candidate_property,
+        tarsier_dsl::ast::Span::new(0, 0),
+    )];
+
+    // Keep assist validation bounded in wall-clock time even when prove timeout is large.
+    let mut validation_options = options.clone();
+    validation_options.dump_smt = None;
+    validation_options.timeout_secs = validation_options.timeout_secs.clamp(1, 15);
+
+    let validation =
+        tarsier_engine::pipeline::prove_safety_program_ast(&candidate_program, &validation_options)
+            .map_err(|e| e.to_string())?;
+
+    match validation {
+        UnboundedSafetyResult::Safe { .. }
+        | UnboundedSafetyResult::ProbabilisticallySafe { .. } => Ok(()),
+        UnboundedSafetyResult::Unsafe { .. } => {
+            Err("SMT refuted candidate with a concrete counterexample".to_string())
+        }
+        UnboundedSafetyResult::NotProved { max_k, .. } => {
+            Err(format!("candidate not proved inductive up to k={max_k}"))
+        }
+        UnboundedSafetyResult::Unknown { reason } => {
+            Err(format!("candidate validation inconclusive: {reason}"))
+        }
+    }
+}
+
 fn maybe_emit_assist_suggestions(
     source: &str,
     filename: &str,
@@ -817,14 +981,51 @@ fn maybe_emit_assist_suggestions(
         }
     };
 
+    let base_program = match tarsier_dsl::parse(source, filename) {
+        Ok(program) => program,
+        Err(e) => {
+            if matches!(output_format, OutputFormat::Text) {
+                eprintln!("Assist validation skipped: failed to parse base protocol: {e}");
+            }
+            return Ok(());
+        }
+    };
+
+    let mut validated: Vec<String> = Vec::new();
+    let mut rejected: Vec<(String, String)> = Vec::new();
+    let mut seen = BTreeSet::<String>::new();
+
+    for (idx, raw) in suggestions.iter().enumerate() {
+        let Some(sanitized) = sanitize_assist_formula(raw) else {
+            rejected.push((raw.clone(), "empty after sanitization".to_string()));
+            continue;
+        };
+
+        if !seen.insert(sanitized.clone()) {
+            rejected.push((raw.clone(), "duplicate after sanitization".to_string()));
+            continue;
+        }
+
+        match validate_assist_formula_with_smt(&base_program, options, &sanitized, idx + 1) {
+            Ok(()) => validated.push(sanitized),
+            Err(reason) => {
+                rejected.push((raw.clone(), format!("{reason}; normalized={sanitized}")))
+            }
+        }
+    }
+
     if matches!(output_format, OutputFormat::Text) {
         eprintln!(
-            "Assist suggestions (provider={}, count={}):",
+            "Assist suggestions (provider={}, raw_count={}, validated={}):",
             assist.provider.as_str(),
-            suggestions.len()
+            suggestions.len(),
+            validated.len()
         );
-        for (idx, suggestion) in suggestions.iter().enumerate() {
-            eprintln!("  {}. {}", idx + 1, suggestion);
+        for (idx, formula) in validated.iter().enumerate() {
+            eprintln!("  [VALID] {}. {}", idx + 1, formula);
+        }
+        for (idx, (raw, reason)) in rejected.iter().enumerate() {
+            eprintln!("  [REJECTED] {}. {} ({reason})", idx + 1, raw);
         }
     }
 
@@ -1289,4 +1490,31 @@ fn run_prove_fair_single(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_assist_formula_strips_fence_and_wrapper() {
+        let raw = "```trs\nproperty ai: invariant { forall p: Node. p.decided == true; }\n```";
+        let normalized = sanitize_assist_formula(raw).expect("formula should sanitize");
+        assert_eq!(normalized, "forall p: Node. p.decided == true");
+    }
+
+    #[test]
+    fn sanitize_assist_formula_strips_list_and_quotes() {
+        let raw = "1. \"invariant: forall p: Node. p.decided == false;\"";
+        let normalized = sanitize_assist_formula(raw).expect("formula should sanitize");
+        assert_eq!(normalized, "forall p: Node. p.decided == false");
+    }
+
+    #[test]
+    fn parse_assist_formula_expr_accepts_quantified_invariant() {
+        let parsed = parse_assist_formula_expr("forall p: Node. p.ok == true")
+            .expect("wrapped formula should parse");
+        assert_eq!(parsed.quantifiers.len(), 1);
+        assert_eq!(parsed.quantifiers[0].var, "p");
+    }
 }
