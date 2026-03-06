@@ -152,3 +152,7 @@ Columns:
 2026-03-06T02:39:07Z | 1 | REF-01 | START | implementation started
 2026-03-06T02:42:13Z | 1 | REF-01 | PR_OPEN | branch=codex/agent1-ref-01-v2 commit=a224ac6 local patch ready (no remote PR yet)
 2026-03-06T02:42:13Z | 1 | REF-01 | DONE | commit=a224ac6 tests=cargo test -p tarsier-dsl -- parse_refines_declaration parse_duplicate_refines_fails parse_module_rejects_refines_inside && cargo check -p tarsier-dsl && cargo check -p tarsier-cli && cargo check -p tarsier-codegen
+2026-03-06T02:43:41Z | 1 | FIFO-01 | CLAIM | taking task
+2026-03-06T02:43:41Z | 1 | FIFO-01 | START | implementation started
+2026-03-06T02:45:10Z | 1 | FIFO-01 | PR_OPEN | branch=codex/agent1-fifo-01-v2 commit=b48d2e2 local patch ready (no remote PR yet)
+2026-03-06T02:45:10Z | 1 | FIFO-01 | DONE | commit=b48d2e2 tests=cargo fmt --package tarsier-dsl && cargo test -p tarsier-dsl -- parse_fifo_channel_declaration parse_sequence_declaration parse_log_declaration
