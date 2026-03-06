@@ -158,3 +158,8 @@ Columns:
 2026-03-06T03:10:00Z | 2 | LOG-03 | CLAIM | taking task
 2026-03-06T03:10:00Z | 2 | LOG-03 | START | implementation started
 2026-03-06T06:40:00Z | 2 | LOG-03 | DONE | CollectionUpdate IR types, Append lowering via lower_expr_to_lc, pending_collection_updates on Rules, test (commit 8bdb0b4)
+2026-03-06T06:45:00Z | 2 | LOG-04 | CLAIM | taking task
+2026-03-06T06:45:00Z | 2 | LOG-04 | START | implementation started
+2026-03-06T07:10:00Z | 2 | LOG-04 | DONE | SMT collection length vars (clen_k_c), capacity bounds, append delta encoding, test (commit ba6a7d1)
+2026-03-06T07:15:00Z | 2 | LOG-05 | CLAIM | taking task
+2026-03-06T07:15:00Z | 2 | LOG-05 | START | implementation started
