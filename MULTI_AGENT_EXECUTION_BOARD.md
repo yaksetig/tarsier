@@ -238,6 +238,10 @@ Columns:
 2026-03-06T15:10:00Z | 2 | REF-04 | DONE | commit a2d1775 tests=cargo test -p tarsier-smt -- refinement
 2026-03-06T15:15:00Z | 2 | REF-05 | CLAIM | taking task — implementing on agent2/ref-05 branch
 2026-03-06T15:15:00Z | 2 | REF-05 | START | implementation started
+2026-03-06T15:25:00Z | 2 | REF-05 | PR_OPEN | main 925bd3e refinement-check CLI command with auto-mapping and text/json output
+2026-03-06T15:25:00Z | 2 | REF-05 | DONE | commit 925bd3e tests=cargo run -p tarsier-cli -- refinement-check --help
+2026-03-06T15:30:00Z | 2 | REF-06 | CLAIM | taking task — implementing on agent2/ref-06 branch
+2026-03-06T15:30:00Z | 2 | REF-06 | START | implementation started
 2026-03-06T14:49:28Z | 1 | AI-04 | CLAIM | taking task
 2026-03-06T14:49:28Z | 1 | AI-04 | START | implementation started
 2026-03-06T15:03:59Z | 1 | AI-04 | PR_OPEN | codex/agent1-ai-04-v1 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-ai-04-v1 rerun validated assist suggestions + structured reporting in prove outputs
