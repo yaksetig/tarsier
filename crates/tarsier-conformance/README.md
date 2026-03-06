@@ -29,6 +29,10 @@ formally verified model and a real-world implementation.
   properties to runtime monitoring obligations.
 - `obligations::generate_obligation_map(automaton, name, properties)` --
   Generate runtime monitoring obligations from verified safety properties.
+- `active::ActiveScenario` -- Active fault-injection scenario definition for
+  implementation testing.
+- `active::ActiveHarness` -- Deterministic runner that replays scheduled
+  perturbations through an implementation adapter and network injector.
 - `adapters` module -- Trace format adapters for different systems (native
   runtime traces, CometBFT, etcd-raft).
 

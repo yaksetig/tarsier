@@ -6,6 +6,7 @@
 //! to check that a concrete implementation conforms to the specification.
 
 pub mod adapters;
+pub mod active;
 pub mod checker;
 pub mod manifest;
 pub mod obligations;
