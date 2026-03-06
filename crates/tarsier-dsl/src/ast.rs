@@ -305,6 +305,7 @@ pub struct FieldDef {
 #[cfg_attr(feature = "serialize", derive(serde::Serialize))]
 pub struct RoleDecl {
     pub name: String,
+    pub is_leader: bool,
     pub vars: Vec<VarDecl>,
     pub init_phase: Option<String>,
     pub phases: Vec<Spanned<PhaseDecl>>,

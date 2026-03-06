@@ -12,9 +12,10 @@ pub(super) fn parse_fault_model(raw: &str) -> Result<FaultModel, LoweringError> 
     match raw {
         "byzantine" => Ok(FaultModel::Byzantine),
         "crash" | "crash_stop" => Ok(FaultModel::Crash),
+        "crash_recovery" => Ok(FaultModel::CrashRecovery),
         "omission" => Ok(FaultModel::Omission),
         other => Err(LoweringError::Unsupported(format!(
-            "Unsupported adversary model '{other}'; expected 'byzantine', 'crash', or 'omission'"
+            "Unsupported adversary model '{other}'; expected 'byzantine', 'crash', 'crash_recovery', or 'omission'"
         ))),
     }
 }

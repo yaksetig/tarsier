@@ -167,6 +167,7 @@ pub(crate) fn fault_model_name(mode: FaultModel) -> &'static str {
     match mode {
         FaultModel::Byzantine => "byzantine",
         FaultModel::Crash => "crash",
+        FaultModel::CrashRecovery => "crash_recovery",
         FaultModel::Omission => "omission",
     }
 }

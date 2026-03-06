@@ -985,6 +985,95 @@ role R {
 }
 
 #[test]
+fn lower_crash_recovery_model_has_recovery_transitions() {
+    let src = r#"
+protocol CrashRecoveryCfg {
+params n, t, f;
+resilience: n > 3*t;
+adversary { model: crash_recovery; bound: f; }
+message M;
+role R {
+    init s;
+    phase s {
+        when received >= 1 M => {
+            goto phase done;
+        }
+    }
+    phase done {}
+}
+}
+"#;
+    let prog = parse(src, "crash_recovery_cfg.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+    assert_eq!(ta.semantics.fault_model, FaultModel::CrashRecovery);
+    // All locations should have __alive flag.
+    assert!(
+        ta.locations
+            .iter()
+            .all(|loc| loc.local_vars.contains_key(INTERNAL_ALIVE_VAR)),
+        "all locations should include internal alive/dead flag"
+    );
+    // Should NOT have a crash counter (crash-recovery uses dead-location sum instead).
+    assert!(
+        ta.find_shared_var_by_name(INTERNAL_CRASH_COUNTER).is_none(),
+        "crash-recovery model should not have a crash counter"
+    );
+    // Should have crash transitions (alive -> dead).
+    let has_crash_rule = ta.rules.iter().any(|rule| {
+        ta.locations[rule.from.as_usize()]
+            .local_vars
+            .get(INTERNAL_ALIVE_VAR)
+            == Some(&LocalValue::Bool(true))
+            && ta.locations[rule.to.as_usize()]
+                .local_vars
+                .get(INTERNAL_ALIVE_VAR)
+                == Some(&LocalValue::Bool(false))
+    });
+    assert!(has_crash_rule, "expected crash transitions");
+    // Should have recovery transitions (dead -> initial alive).
+    let initial_alive_lids: Vec<_> = ta
+        .initial_locations
+        .iter()
+        .filter(|&&lid| {
+            ta.locations[lid.as_usize()]
+                .local_vars
+                .get(INTERNAL_ALIVE_VAR)
+                == Some(&LocalValue::Bool(true))
+        })
+        .collect();
+    let has_recovery_rule = ta.rules.iter().any(|rule| {
+        ta.locations[rule.from.as_usize()]
+            .local_vars
+            .get(INTERNAL_ALIVE_VAR)
+            == Some(&LocalValue::Bool(false))
+            && initial_alive_lids.contains(&&rule.to)
+    });
+    assert!(has_recovery_rule, "expected recovery transitions");
+}
+
+#[test]
+fn lower_leader_role_records_leader() {
+    let src = r#"
+protocol LeaderTest {
+params n, t;
+resilience: n > 3*t;
+message Propose;
+leader role Proposer {
+    init s;
+    phase s {}
+}
+role Validator {
+    init s;
+    phase s {}
+}
+}
+"#;
+    let prog = parse(src, "leader_test.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+    assert_eq!(ta.leader_roles, vec!["Proposer".to_string()]);
+}
+
+#[test]
 fn lower_or_threshold_guard_splits_rules() {
     let src = r#"
 protocol OrGuard {

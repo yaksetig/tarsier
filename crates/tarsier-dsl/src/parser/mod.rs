@@ -918,7 +918,16 @@ fn parse_crypto_object(pair: Pair<'_>) -> Result<CryptoObjectDecl, ParseError> {
 fn parse_role(pair: Pair<'_>) -> Result<Spanned<RoleDecl>, ParseError> {
     let span = span_from(&pair);
     let mut inner = pair.into_inner();
-    let name = next_child(&mut inner, "inner")?.as_str().to_string();
+
+    // Check for optional `leader` keyword before the role name.
+    let first = next_child(&mut inner, "role_decl")?;
+    let (is_leader, name) = if first.as_rule() == Rule::leader_kw {
+        let name_pair = next_child(&mut inner, "role name after leader")?;
+        (true, name_pair.as_str().to_string())
+    } else {
+        (false, first.as_str().to_string())
+    };
+
     let mut vars = Vec::new();
     let mut init_phase = None;
     let mut phases = Vec::new();
@@ -941,6 +950,7 @@ fn parse_role(pair: Pair<'_>) -> Result<Spanned<RoleDecl>, ParseError> {
     Ok(Spanned::new(
         RoleDecl {
             name,
+            is_leader,
             vars,
             init_phase,
             phases,

@@ -80,6 +80,9 @@ pub enum FaultModel {
     Byzantine,
     /// Crash-stop failures (processes transition to a dead state and stop sending).
     Crash,
+    /// Crash-recovery failures (processes crash and may later recover from initial state).
+    /// At most f processes are simultaneously crashed at any step.
+    CrashRecovery,
     /// Omission failures (message loss/drop without forged injections).
     Omission,
 }
@@ -359,6 +362,8 @@ pub struct ThresholdAutomaton {
     pub semantics: ThresholdAutomatonSemantics,
     /// Identity, key, and per-message security policies.
     pub security: ThresholdAutomatonSecurity,
+    /// Roles marked as `leader` (exactly one process occupies leader locations at all times).
+    pub leader_roles: Vec<String>,
 }
 
 /// A value that is either a reference to a protocol parameter or a concrete constant.
@@ -396,6 +401,7 @@ impl ThresholdAutomaton {
             constraints: ThresholdAutomatonConstraints::default(),
             semantics: ThresholdAutomatonSemantics::default(),
             security: ThresholdAutomatonSecurity::default(),
+            leader_roles: Vec::new(),
         }
     }
 
@@ -727,6 +733,7 @@ impl fmt::Display for ThresholdAutomaton {
             match self.semantics.fault_model {
                 FaultModel::Byzantine => "byzantine",
                 FaultModel::Crash => "crash",
+                FaultModel::CrashRecovery => "crash_recovery",
                 FaultModel::Omission => "omission",
             }
         )?;
@@ -861,6 +868,12 @@ impl fmt::Display for ThresholdAutomaton {
                     signer,
                     spec.conflict_policy
                 )?;
+            }
+        }
+        if !self.leader_roles.is_empty() {
+            writeln!(f, "  Leader roles:")?;
+            for role in &self.leader_roles {
+                writeln!(f, "    {role}")?;
             }
         }
         writeln!(f, "  Locations:")?;

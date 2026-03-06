@@ -334,6 +334,17 @@ impl<'a> BmcEncoderBuilder<'a> {
             }
         }
 
+        // Leader role constraint at step 0: exactly one process in leader locations.
+        for leader_locs in &self.context.leader_role_locs {
+            let parts: Vec<SmtTerm> = leader_locs
+                .iter()
+                .map(|&l| SmtTerm::var(kappa_var(0, l)))
+                .collect();
+            if !parts.is_empty() {
+                enc.assert_term(sum_terms_balanced(parts).eq(SmtTerm::int(1)));
+            }
+        }
+
         // Shared vars start at 0
         for v in 0..num_svars {
             enc.assert_term(SmtTerm::var(gamma_var(0, v)).eq(SmtTerm::int(0)));
@@ -366,10 +377,12 @@ impl<'a> BmcEncoderBuilder<'a> {
         let distinct_vars = &self.context.distinct_vars;
         let omission_style_faults = self.context.omission_style_faults;
         let crash_faults = self.context.crash_faults;
+        let crash_recovery = self.context.crash_recovery;
         let byzantine_faults = self.context.byzantine_faults;
         let selective_network = self.context.selective_network;
         let lossy_delivery = self.context.lossy_delivery;
         let crash_counter_var = self.context.crash_counter_var;
+        let dead_loc_ids = &self.context.dead_loc_ids;
         let n_param = self.context.n_param;
         let role_pop_params = &self.context.role_pop_params;
         let role_loc_ids = &self.context.role_loc_ids;
@@ -538,6 +551,17 @@ impl<'a> BmcEncoderBuilder<'a> {
 
                 // Non-negativity of resulting counters
                 enc.assert_term(SmtTerm::var(kappa_var(k + 1, l)).ge(SmtTerm::int(0)));
+            }
+
+            // Leader role constraint at step k+1: exactly one process in leader locations.
+            for leader_locs in &self.context.leader_role_locs {
+                let parts: Vec<SmtTerm> = leader_locs
+                    .iter()
+                    .map(|&l| SmtTerm::var(kappa_var(k + 1, l)))
+                    .collect();
+                if !parts.is_empty() {
+                    enc.assert_term(sum_terms_balanced(parts).eq(SmtTerm::int(1)));
+                }
             }
 
             // Guard enablement: delta_k_r > 0 → guard is satisfied
@@ -957,6 +981,24 @@ impl<'a> BmcEncoderBuilder<'a> {
                         enc.assert_term(SmtTerm::bool(false));
                     }
                 }
+                if crash_recovery {
+                    // No message forgery or dropping in crash-recovery model.
+                    for v in all_message_counter_vars {
+                        enc.assert_term(SmtTerm::var(net_forge_var(k, *v)).eq(SmtTerm::int(0)));
+                        enc.assert_term(SmtTerm::var(net_drop_var(k, *v)).eq(SmtTerm::int(0)));
+                    }
+                    // At most f processes simultaneously crashed (dead-location sum bound).
+                    if !dead_loc_ids.is_empty() {
+                        let dead_sum: Vec<SmtTerm> = dead_loc_ids
+                            .iter()
+                            .map(|&l| SmtTerm::var(kappa_var(k + 1, l)))
+                            .collect();
+                        enc.assert_term(
+                            sum_terms_balanced(dead_sum)
+                                .le(SmtTerm::var(param_var(adv_param))),
+                        );
+                    }
+                }
             }
 
             if byzantine_faults {
@@ -1101,8 +1143,8 @@ impl<'a> BmcEncoderBuilder<'a> {
                     }
                 }
             }
-        } else if omission_style_faults || crash_faults {
-            // Omission/crash without explicit bound defaults to no faults.
+        } else if omission_style_faults || crash_faults || crash_recovery {
+            // Omission/crash/crash-recovery without explicit bound defaults to no faults.
             for k in 0..max_depth {
                 for v in 0..num_svars {
                     enc.assert_term(SmtTerm::var(format!("adv_{k}_{v}")).eq(SmtTerm::int(0)));
@@ -1121,6 +1163,16 @@ impl<'a> BmcEncoderBuilder<'a> {
                         );
                     } else {
                         enc.assert_term(SmtTerm::bool(false));
+                    }
+                }
+                if crash_recovery {
+                    // No faults: zero forge/drop and no crashed processes.
+                    for v in all_message_counter_vars {
+                        enc.assert_term(SmtTerm::var(net_forge_var(k, *v)).eq(SmtTerm::int(0)));
+                        enc.assert_term(SmtTerm::var(net_drop_var(k, *v)).eq(SmtTerm::int(0)));
+                    }
+                    for &l in dead_loc_ids {
+                        enc.assert_term(SmtTerm::var(kappa_var(k + 1, l)).eq(SmtTerm::int(0)));
                     }
                 }
             }

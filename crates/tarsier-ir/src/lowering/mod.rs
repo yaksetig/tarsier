@@ -26,6 +26,11 @@ use validation::*;
 
 const INTERNAL_ALIVE_VAR: &str = "__alive";
 const INTERNAL_CRASH_COUNTER: &str = "__crashed_count";
+
+/// Returns true for fault models that use the `__alive` local variable (crash-stop and crash-recovery).
+fn uses_alive_var(fm: FaultModel) -> bool {
+    matches!(fm, FaultModel::Crash | FaultModel::CrashRecovery)
+}
 const INTERNAL_DELIVERY_LANE_VAR: &str = "__delivery_lane";
 const DEFAULT_PROCESS_ID_VAR: &str = "pid";
 const PROCESS_SELECTIVE_LANE_COUNT: i64 = 2;
@@ -588,6 +593,9 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
     // 4. Process each role
     for role in &proto.roles {
         let role_decl = &role.node;
+        if role_decl.is_leader {
+            ta.leader_roles.push(role_decl.name.clone());
+        }
         let process_identity_var = ta
             .security
             .role_identities
@@ -677,7 +685,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             }
         }
 
-        if ta.semantics.fault_model == FaultModel::Crash {
+        if uses_alive_var(ta.semantics.fault_model) {
             if local_var_types.contains_key(INTERNAL_ALIVE_VAR) {
                 return Err(LoweringError::Unsupported(format!(
                     "Local variable name collision with internal crash-state variable '{INTERNAL_ALIVE_VAR}'"
@@ -891,7 +899,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         for flag in justify_flag_by_object.values() {
             initial_values.insert(flag.clone(), LocalValue::Bool(false));
         }
-        if ta.semantics.fault_model == FaultModel::Crash {
+        if uses_alive_var(ta.semantics.fault_model) {
             initial_values.insert(INTERNAL_ALIVE_VAR.into(), LocalValue::Bool(true));
         }
 
@@ -1034,7 +1042,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                     // filtering source locations by local guard requirements.
                     for &from_lid in &from_locs {
                         let from_loc = &ta.locations[from_lid.as_usize()];
-                        if ta.semantics.fault_model == FaultModel::Crash
+                        if uses_alive_var(ta.semantics.fault_model)
                             && from_loc.local_vars.get(INTERNAL_ALIVE_VAR)
                                 != Some(&LocalValue::Bool(true))
                         {
@@ -1414,7 +1422,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                         .unwrap_or_default();
                     for &from_lid in &from_locs {
                         let from_loc = &ta.locations[from_lid.as_usize()];
-                        if ta.semantics.fault_model == FaultModel::Crash
+                        if uses_alive_var(ta.semantics.fault_model)
                             && from_loc.local_vars.get(INTERNAL_ALIVE_VAR)
                                 != Some(&LocalValue::Bool(true))
                         {
@@ -1499,6 +1507,61 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             });
                             break;
                         }
+                    }
+                }
+            }
+        }
+
+        // 7b. Inject crash-recovery transitions, if configured.
+        //
+        // Semantics:
+        // - same `__alive` variable as crash-stop
+        // - crash transitions: alive → dead (no counter, bounded by dead-loc sum in encoder)
+        // - recovery transitions: any dead location → initial alive location (amnesia model)
+        if ta.semantics.fault_model == FaultModel::CrashRecovery {
+            // Find the initial alive location for this role.
+            let initial_alive_lid = ta
+                .initial_locations
+                .iter()
+                .find(|&&lid| {
+                    let loc = &ta.locations[lid.as_usize()];
+                    loc.role == role_decl.name
+                        && loc.local_vars.get(INTERNAL_ALIVE_VAR) == Some(&LocalValue::Bool(true))
+                })
+                .copied();
+
+            for phase in &role_decl.phases {
+                let phase_locs = location_map
+                    .get(&phase.node.name)
+                    .cloned()
+                    .unwrap_or_default();
+                for &from_lid in &phase_locs {
+                    let from_loc = &ta.locations[from_lid.as_usize()];
+                    if from_loc.local_vars.get(INTERNAL_ALIVE_VAR) == Some(&LocalValue::Bool(true))
+                    {
+                        // Crash transition: alive → dead in same phase (no counter update).
+                        let mut target_vars = from_loc.local_vars.clone();
+                        target_vars.insert(INTERNAL_ALIVE_VAR.into(), LocalValue::Bool(false));
+                        for &to_lid in &phase_locs {
+                            let to_loc = &ta.locations[to_lid.as_usize()];
+                            if to_loc.local_vars == target_vars {
+                                ta.add_rule(Rule {
+                                    from: from_lid,
+                                    to: to_lid,
+                                    guard: Guard::trivial(),
+                                    updates: vec![],
+                                });
+                                break;
+                            }
+                        }
+                    } else if let Some(init_lid) = initial_alive_lid {
+                        // Recovery transition: dead → initial alive location (amnesia).
+                        ta.add_rule(Rule {
+                            from: from_lid,
+                            to: init_lid,
+                            guard: Guard::trivial(),
+                            updates: vec![],
+                        });
                     }
                 }
             }

@@ -1,0 +1,48 @@
+// Demonstrates the `leader` role modifier.
+// The `leader` keyword constrains exactly one process
+// to occupy leader-role locations at all times.
+
+protocol LeaderDemo {
+
+params n, t, f;
+resilience: n > 3*t;
+adversary { model: byzantine; bound: f; }
+
+message Propose;
+message Vote;
+
+// Exactly one process is the proposer (leader).
+leader role Proposer {
+    init Idle;
+    phase Idle {
+        when received >= 0 Propose => {
+            send Propose;
+            goto phase Done;
+        }
+    }
+    phase Done {}
+}
+
+// The remaining n-1 processes are validators.
+role Validator {
+    init Wait;
+    phase Wait {
+        when received >= 1 Propose => {
+            send Vote;
+            goto phase Voted;
+        }
+    }
+    phase Voted {
+        when received >= 2*t+1 Vote => {
+            goto phase Decided;
+        }
+    }
+    phase Decided {}
+}
+
+property agreement: agreement {
+    forall p: Validator. forall q: Validator.
+        p.Decided == 0 || q.Decided == 0
+}
+
+}

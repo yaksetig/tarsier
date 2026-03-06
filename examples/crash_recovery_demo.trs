@@ -1,0 +1,35 @@
+// Demonstrates the crash-recovery fault model.
+// Processes may crash (stop sending) and later recover
+// from their initial state (amnesia model).
+// At most f processes are simultaneously crashed at any step.
+
+protocol CrashRecoveryDemo {
+
+params n, t, f;
+resilience: n > 2*t;
+adversary { model: crash_recovery; bound: f; }
+
+message Vote;
+
+role Voter {
+    init Ready;
+    phase Ready {
+        when received >= 0 Vote => {
+            send Vote;
+            goto phase Voted;
+        }
+    }
+    phase Voted {
+        when received >= t+1 Vote => {
+            goto phase Decided;
+        }
+    }
+    phase Decided {}
+}
+
+property agreement: agreement {
+    forall p: Voter. forall q: Voter.
+        p.Decided == 0 || q.Decided == 0
+}
+
+}

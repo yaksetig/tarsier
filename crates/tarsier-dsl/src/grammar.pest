@@ -158,10 +158,11 @@ crypto_conflict_policy = { "allow" | "exclusive" }
 
 // --- Roles ---
 role_decl = {
-    "role" ~ ident ~ "{" ~
+    leader_kw? ~ "role" ~ ident ~ "{" ~
         role_item* ~
     "}"
 }
+leader_kw = { "leader" }
 
 role_item = _{
     var_decl

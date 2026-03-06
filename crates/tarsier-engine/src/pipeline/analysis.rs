@@ -137,6 +137,7 @@ pub(super) fn apply_round_erasure_abstraction(
         constraints: ta.constraints.clone(),
         semantics: ta.semantics.clone(),
         security: ta.security.clone(),
+        leader_roles: ta.leader_roles.clone(),
     };
 
     let mut shared_map: Vec<SharedVarId> = vec![SharedVarId::default(); ta.shared_vars.len()];

@@ -219,6 +219,18 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     enc.assert_term(total.eq(SmtTerm::var(param_var(pid))));
                 }
             }
+
+            // Leader role constraint: exactly one process in leader locations at each step.
+            for leader_locs in &self.context.leader_role_locs {
+                let parts: Vec<SmtTerm> = leader_locs
+                    .iter()
+                    .map(|&l| SmtTerm::var(kappa_var(step, l)))
+                    .collect();
+                if !parts.is_empty() {
+                    enc.assert_term(sum_terms_balanced(parts).eq(SmtTerm::int(1)));
+                }
+            }
+
             if let Some(buckets) = process_id_buckets {
                 assert_process_identity_uniqueness(enc, step, buckets);
             }
@@ -340,10 +352,12 @@ impl<'a> KInductionEncoderBuilder<'a> {
         let distinct_vars = &self.context.distinct_vars;
         let omission_style_faults = self.context.omission_style_faults;
         let crash_faults = self.context.crash_faults;
+        let crash_recovery = self.context.crash_recovery;
         let byzantine_faults = self.context.byzantine_faults;
         let selective_network = self.context.selective_network;
         let lossy_delivery = self.context.lossy_delivery;
         let crash_counter_var = self.context.crash_counter_var;
+        let dead_loc_ids = &self.context.dead_loc_ids;
         let n_param = self.context.n_param;
         let role_pop_params = &self.context.role_pop_params;
         let role_loc_ids = &self.context.role_loc_ids;
@@ -388,6 +402,17 @@ impl<'a> KInductionEncoderBuilder<'a> {
                 }
                 enc.assert_term(SmtTerm::var(kappa_var(step + 1, l)).eq(expr));
                 enc.assert_term(SmtTerm::var(kappa_var(step + 1, l)).ge(SmtTerm::int(0)));
+            }
+
+            // Leader role constraint at step+1: exactly one process in leader locations.
+            for leader_locs in &self.context.leader_role_locs {
+                let parts: Vec<SmtTerm> = leader_locs
+                    .iter()
+                    .map(|&l| SmtTerm::var(kappa_var(step + 1, l)))
+                    .collect();
+                if !parts.is_empty() {
+                    enc.assert_term(sum_terms_balanced(parts).eq(SmtTerm::int(1)));
+                }
             }
 
             // Guard enablement and individual delta bound
@@ -795,6 +820,22 @@ impl<'a> KInductionEncoderBuilder<'a> {
                         enc.assert_term(SmtTerm::bool(false));
                     }
                 }
+                if crash_recovery {
+                    for v in all_message_counter_vars {
+                        enc.assert_term(SmtTerm::var(net_forge_var(step, *v)).eq(SmtTerm::int(0)));
+                        enc.assert_term(SmtTerm::var(net_drop_var(step, *v)).eq(SmtTerm::int(0)));
+                    }
+                    if !dead_loc_ids.is_empty() {
+                        let dead_sum: Vec<SmtTerm> = dead_loc_ids
+                            .iter()
+                            .map(|&l| SmtTerm::var(kappa_var(step + 1, l)))
+                            .collect();
+                        enc.assert_term(
+                            sum_terms_balanced(dead_sum)
+                                .le(SmtTerm::var(param_var(adv_param))),
+                        );
+                    }
+                }
             }
             if byzantine_faults {
                 // Signed-channel origin/auth constraints:
@@ -933,7 +974,7 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     }
                 }
             }
-        } else if omission_style_faults || crash_faults {
+        } else if omission_style_faults || crash_faults || crash_recovery {
             for step in 0..k {
                 for v in 0..num_svars {
                     enc.assert_term(SmtTerm::var(format!("adv_{step}_{v}")).eq(SmtTerm::int(0)));
@@ -952,6 +993,15 @@ impl<'a> KInductionEncoderBuilder<'a> {
                         );
                     } else {
                         enc.assert_term(SmtTerm::bool(false));
+                    }
+                }
+                if crash_recovery {
+                    for v in all_message_counter_vars {
+                        enc.assert_term(SmtTerm::var(net_forge_var(step, *v)).eq(SmtTerm::int(0)));
+                        enc.assert_term(SmtTerm::var(net_drop_var(step, *v)).eq(SmtTerm::int(0)));
+                    }
+                    for &l in dead_loc_ids {
+                        enc.assert_term(SmtTerm::var(kappa_var(step + 1, l)).eq(SmtTerm::int(0)));
                     }
                 }
             }

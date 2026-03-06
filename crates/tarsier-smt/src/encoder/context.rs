@@ -48,6 +48,12 @@ pub(super) struct CommonEncoderContext {
     pub(super) all_message_counter_vars: Vec<usize>,
     pub(super) message_counter_flags: Vec<bool>,
     pub(super) signed_uncompromised_sender_idx_by_var: Vec<Option<usize>>,
+    /// Location IDs for each leader role (exactly one process in these locations at all times).
+    pub(super) leader_role_locs: Vec<Vec<usize>>,
+    /// Whether crash-recovery fault model is active.
+    pub(super) crash_recovery: bool,
+    /// Location IDs where `__alive=false` (dead locations), for crash-recovery fault budget.
+    pub(super) dead_loc_ids: Vec<usize>,
 }
 
 /// Build the shared preamble context for encoder front-ends.
@@ -72,6 +78,7 @@ pub(super) fn build_common_encoder_context(cs: &CounterSystem) -> CommonEncoderC
         .collect();
     let omission_style_faults = ta.semantics.fault_model == FaultModel::Omission;
     let crash_faults = ta.semantics.fault_model == FaultModel::Crash;
+    let crash_recovery = ta.semantics.fault_model == FaultModel::CrashRecovery;
     let byzantine_faults = ta.semantics.fault_model == FaultModel::Byzantine;
     let selective_network = matches!(
         ta.semantics.network_semantics,
@@ -210,6 +217,27 @@ pub(super) fn build_common_encoder_context(cs: &CounterSystem) -> CommonEncoderC
         }
     }
 
+    let leader_role_locs: Vec<Vec<usize>> = ta
+        .leader_roles
+        .iter()
+        .filter_map(|role| role_loc_ids.get(role).cloned())
+        .collect();
+
+    let dead_loc_ids: Vec<usize> = if crash_recovery {
+        ta.locations
+            .iter()
+            .enumerate()
+            .filter(|(_, loc)| {
+                loc.local_vars
+                    .get("__alive")
+                    .map_or(false, |v| v == &tarsier_ir::threshold_automaton::LocalValue::Bool(false))
+            })
+            .map(|(i, _)| i)
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     CommonEncoderContext {
         num_locs,
         num_svars,
@@ -243,5 +271,8 @@ pub(super) fn build_common_encoder_context(cs: &CounterSystem) -> CommonEncoderC
         all_message_counter_vars,
         message_counter_flags,
         signed_uncompromised_sender_idx_by_var,
+        leader_role_locs,
+        crash_recovery,
+        dead_loc_ids,
     }
 }
