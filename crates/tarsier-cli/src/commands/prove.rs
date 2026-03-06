@@ -123,6 +123,17 @@ struct ProveAssistConfig {
     payload_out: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone)]
+struct AssistSuggestionReport {
+    provider: AssistProviderKind,
+    payload_out: Option<PathBuf>,
+    raw_count: usize,
+    validated: Vec<String>,
+    rejected: Vec<(String, String)>,
+    rerun_results: Vec<(String, UnboundedSafetyResult)>,
+    rerun_errors: Vec<(String, String)>,
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
@@ -896,15 +907,13 @@ fn parse_assist_formula_expr(
     Ok(parsed.protocol.node.properties[0].node.formula.clone())
 }
 
-fn validate_assist_formula_with_smt(
+fn build_assist_candidate_program(
     base_program: &tarsier_dsl::ast::Program,
-    options: &PipelineOptions,
     formula: &str,
     candidate_idx: usize,
-) -> Result<(), String> {
+) -> Result<tarsier_dsl::ast::Program, String> {
     let parsed_formula =
         parse_assist_formula_expr(formula).map_err(|e| format!("parse failed: {e}"))?;
-
     let mut candidate_program = base_program.clone();
     let candidate_property = tarsier_dsl::ast::PropertyDecl {
         name: format!("assist_candidate_{candidate_idx}"),
@@ -915,16 +924,34 @@ fn validate_assist_formula_with_smt(
         candidate_property,
         tarsier_dsl::ast::Span::new(0, 0),
     )];
+    Ok(candidate_program)
+}
 
-    // Keep assist validation bounded in wall-clock time even when prove timeout is large.
-    let mut validation_options = options.clone();
-    validation_options.dump_smt = None;
-    validation_options.timeout_secs = validation_options.timeout_secs.clamp(1, 15);
+fn run_assist_candidate_proof(
+    base_program: &tarsier_dsl::ast::Program,
+    options: &PipelineOptions,
+    formula: &str,
+    candidate_idx: usize,
+    timeout_cap_secs: Option<u64>,
+) -> Result<UnboundedSafetyResult, String> {
+    let candidate_program = build_assist_candidate_program(base_program, formula, candidate_idx)?;
+    let mut candidate_options = options.clone();
+    candidate_options.dump_smt = None;
+    if let Some(cap) = timeout_cap_secs {
+        candidate_options.timeout_secs = candidate_options.timeout_secs.clamp(1, cap);
+    }
+    tarsier_engine::pipeline::prove_safety_program_ast(&candidate_program, &candidate_options)
+        .map_err(|e| e.to_string())
+}
 
+fn validate_assist_formula_with_smt(
+    base_program: &tarsier_dsl::ast::Program,
+    options: &PipelineOptions,
+    formula: &str,
+    candidate_idx: usize,
+) -> Result<(), String> {
     let validation =
-        tarsier_engine::pipeline::prove_safety_program_ast(&candidate_program, &validation_options)
-            .map_err(|e| e.to_string())?;
-
+        run_assist_candidate_proof(base_program, options, formula, candidate_idx, Some(15))?;
     match validation {
         UnboundedSafetyResult::Safe { .. }
         | UnboundedSafetyResult::ProbabilisticallySafe { .. } => Ok(()),
@@ -940,54 +967,65 @@ fn validate_assist_formula_with_smt(
     }
 }
 
-fn maybe_emit_assist_suggestions(
+fn collect_assist_suggestions_report(
     source: &str,
     filename: &str,
     options: &PipelineOptions,
     result: &UnboundedSafetyResult,
     assist: Option<&ProveAssistConfig>,
-    output_format: OutputFormat,
-) -> miette::Result<()> {
+) -> miette::Result<Option<AssistSuggestionReport>> {
     let Some(assist) = assist else {
-        return Ok(());
+        return Ok(None);
     };
 
     let payload = match prove_failure_prompt_payload(source, filename, options, result)
         .map_err(|e| miette::miette!("Assist payload generation failed: {e}"))?
     {
         Some(payload) => payload,
-        None => return Ok(()),
+        None => return Ok(None),
     };
 
+    let mut payload_out_path = None;
     if let Some(path) = &assist.payload_out {
         let value = serde_json::to_value(&payload).into_diagnostic()?;
         write_json_artifact(path, &value)?;
-        if matches!(output_format, OutputFormat::Text) {
-            eprintln!("Assist payload written to {}", path.display());
-        }
+        payload_out_path = Some(path.clone());
     }
 
     let provider = assist_provider_from_kind(assist.provider);
     let suggestions = match provider.suggest_invariants(&payload, assist.max_suggestions) {
         Ok(suggestions) => suggestions,
         Err(reason) => {
-            if matches!(output_format, OutputFormat::Text) {
-                eprintln!(
-                    "Assist provider '{}' failed: {reason}",
-                    assist.provider.as_str()
-                );
-            }
-            return Ok(());
+            return Ok(Some(AssistSuggestionReport {
+                provider: assist.provider,
+                payload_out: payload_out_path,
+                raw_count: 0,
+                validated: Vec::new(),
+                rejected: vec![(
+                    format!("provider:{}", assist.provider.as_str()),
+                    format!("provider failed: {reason}"),
+                )],
+                rerun_results: Vec::new(),
+                rerun_errors: Vec::new(),
+            }));
         }
     };
 
     let base_program = match tarsier_dsl::parse(source, filename) {
         Ok(program) => program,
         Err(e) => {
-            if matches!(output_format, OutputFormat::Text) {
-                eprintln!("Assist validation skipped: failed to parse base protocol: {e}");
-            }
-            return Ok(());
+            return Ok(Some(AssistSuggestionReport {
+                provider: assist.provider,
+                payload_out: payload_out_path,
+                raw_count: suggestions.len(),
+                validated: Vec::new(),
+                rejected: vec![(
+                    "<protocol>".to_string(),
+                    format!("assist validation skipped: failed to parse base protocol: {e}"),
+                )],
+                rerun_results: Vec::new(),
+                rerun_errors: Vec::new(),
+            }));
         }
     };
 
@@ -1014,22 +1052,90 @@ fn maybe_emit_assist_suggestions(
         }
     }
 
-    if matches!(output_format, OutputFormat::Text) {
-        eprintln!(
-            "Assist suggestions (provider={}, raw_count={}, validated={}):",
-            assist.provider.as_str(),
-            suggestions.len(),
-            validated.len()
-        );
-        for (idx, formula) in validated.iter().enumerate() {
-            eprintln!("  [VALID] {}. {}", idx + 1, formula);
-        }
-        for (idx, (raw, reason)) in rejected.iter().enumerate() {
-            eprintln!("  [REJECTED] {}. {} ({reason})", idx + 1, raw);
+    let mut rerun_results = Vec::new();
+    let mut rerun_errors = Vec::new();
+    for (idx, formula) in validated.iter().enumerate() {
+        match run_assist_candidate_proof(&base_program, options, formula, idx + 1, None) {
+            Ok(result) => rerun_results.push((formula.clone(), result)),
+            Err(reason) => rerun_errors.push((formula.clone(), reason)),
         }
     }
 
-    Ok(())
+    Ok(Some(AssistSuggestionReport {
+        provider: assist.provider,
+        payload_out: payload_out_path,
+        raw_count: suggestions.len(),
+        validated,
+        rejected,
+        rerun_results,
+        rerun_errors,
+    }))
+}
+
+fn assist_suggestion_report_json(report: &AssistSuggestionReport) -> Value {
+    json!({
+        "provider": report.provider.as_str(),
+        "payload_out": report.payload_out.as_ref().map(|p| p.display().to_string()),
+        "raw_count": report.raw_count,
+        "validated_count": report.validated.len(),
+        "validated": report.validated,
+        "rejected": report
+            .rejected
+            .iter()
+            .map(|(raw, reason)| json!({"raw": raw, "reason": reason}))
+            .collect::<Vec<_>>(),
+        "rerun": {
+            "attempted": !report.validated.is_empty(),
+            "results": report
+                .rerun_results
+                .iter()
+                .map(|(formula, result)| {
+                    json!({
+                        "formula": formula,
+                        "result": unbounded_safety_result_kind(result),
+                        "details": unbounded_safety_result_details(result),
+                    })
+                })
+                .collect::<Vec<_>>(),
+            "errors": report
+                .rerun_errors
+                .iter()
+                .map(|(formula, reason)| json!({"formula": formula, "reason": reason}))
+                .collect::<Vec<_>>(),
+        }
+    })
+}
+
+fn emit_assist_report_text(report: &AssistSuggestionReport) {
+    if let Some(path) = &report.payload_out {
+        eprintln!("Assist payload written to {}", path.display());
+    }
+    eprintln!(
+        "Assist suggestions (provider={}, raw_count={}, validated={}):",
+        report.provider.as_str(),
+        report.raw_count,
+        report.validated.len()
+    );
+    for (idx, formula) in report.validated.iter().enumerate() {
+        eprintln!("  [VALID] {}. {}", idx + 1, formula);
+    }
+    for (idx, (raw, reason)) in report.rejected.iter().enumerate() {
+        eprintln!("  [REJECTED] {}. {} ({reason})", idx + 1, raw);
+    }
+    if !report.rerun_results.is_empty() || !report.rerun_errors.is_empty() {
+        eprintln!("Assist rerun outcomes:");
+    }
+    for (idx, (formula, result)) in report.rerun_results.iter().enumerate() {
+        eprintln!(
+            "  [RERUN] {}. {} => {}",
+            idx + 1,
+            formula,
+            unbounded_safety_result_kind(result)
+        );
+    }
+    for (idx, (formula, reason)) in report.rerun_errors.iter().enumerate() {
+        eprintln!("  [RERUN_ERROR] {}. {} ({reason})", idx + 1, formula);
+    }
 }
 
 /// Run `tarsier prove` in safety portfolio mode (parallel Z3 + cvc5).
@@ -1094,9 +1200,11 @@ fn run_prove_safety_portfolio(
         Err(_) => Err("thread panicked".into()),
     };
     let (result, details) = merge_portfolio_prove_results(z3_result, cvc5_result);
+    let assist_report =
+        collect_assist_suggestions_report(source, filename, options, &result, assist)?;
     match output_format {
         OutputFormat::Json => {
-            let artifact = json!({
+            let mut artifact = json!({
                 "schema_version": 1,
                 "file": filename,
                 "mode": "prove",
@@ -1106,6 +1214,9 @@ fn run_prove_safety_portfolio(
                 "output": format!("{result}"),
                 "portfolio": details,
             });
+            if let Some(report) = assist_report.as_ref() {
+                artifact["assist"] = assist_suggestion_report_json(report);
+            }
             println!(
                 "{}",
                 serde_json::to_string_pretty(&artifact).into_diagnostic()?
@@ -1118,11 +1229,14 @@ fn run_prove_safety_portfolio(
                 serde_json::to_string_pretty(&json!({"portfolio": details.clone()}))
                     .into_diagnostic()?
             );
+            if let Some(report) = assist_report.as_ref() {
+                emit_assist_report_text(report);
+            }
         }
     }
 
     if let Some(out) = cegar_report_out.clone() {
-        let artifact = json!({
+        let mut artifact = json!({
             "schema_version": 1,
             "file": filename,
             "mode": "prove",
@@ -1139,6 +1253,9 @@ fn run_prove_safety_portfolio(
             },
             "portfolio": details,
         });
+        if let Some(report) = assist_report.as_ref() {
+            artifact["assist"] = assist_suggestion_report_json(report);
+        }
         write_json_artifact(&out, &artifact)?;
         if matches!(output_format, OutputFormat::Text) {
             println!("CEGAR proof report written to {}", out.display());
@@ -1150,8 +1267,6 @@ fn run_prove_safety_portfolio(
             "Skipping certificate generation in portfolio mode. Use `certify-safety` with an explicit solver."
         );
     }
-
-    maybe_emit_assist_suggestions(source, filename, options, &result, assist, output_format)?;
     Ok(())
 }
 
@@ -1166,7 +1281,8 @@ fn run_prove_safety_single(
     output_format: OutputFormat,
     assist: Option<&ProveAssistConfig>,
 ) -> miette::Result<()> {
-    let result = if let Some(report_path) = cegar_report_out.clone() {
+    let mut cegar_artifact: Option<Value> = None;
+    let result = if let Some(_report_path) = cegar_report_out.clone() {
         let report = tarsier_engine::pipeline::prove_safety_with_cegar_report(
             source,
             filename,
@@ -1187,8 +1303,7 @@ fn run_prove_safety_single(
             "cegar": unbounded_safety_cegar_report_details(&report),
             "abstractions": run_diagnostics_details(&diagnostics),
         });
-        write_json_artifact(&report_path, &artifact)?;
-        println!("CEGAR proof report written to {}", report_path.display());
+        cegar_artifact = Some(artifact);
         result
     } else {
         let run = if cegar_iters > 0 {
@@ -1203,9 +1318,11 @@ fn run_prove_safety_single(
         };
         run.map_err(|e| miette::miette!("Error: {e}"))?
     };
+    let assist_report =
+        collect_assist_suggestions_report(source, filename, options, &result, assist)?;
     match output_format {
         OutputFormat::Json => {
-            let artifact = json!({
+            let mut artifact = json!({
                 "schema_version": 1,
                 "file": filename,
                 "mode": "prove",
@@ -1214,6 +1331,9 @@ fn run_prove_safety_single(
                 "details": unbounded_safety_result_details(&result),
                 "output": format!("{result}"),
             });
+            if let Some(report) = assist_report.as_ref() {
+                artifact["assist"] = assist_suggestion_report_json(report);
+            }
             println!(
                 "{}",
                 serde_json::to_string_pretty(&artifact).into_diagnostic()?
@@ -1231,6 +1351,35 @@ fn run_prove_safety_single(
             if let Some(pp) = render_phase_profile_summary(&prove_diag) {
                 eprintln!("{pp}");
             }
+            if let Some(report) = assist_report.as_ref() {
+                emit_assist_report_text(report);
+            }
+        }
+    }
+    if let Some(path) = cegar_report_out.as_ref() {
+        let mut artifact = cegar_artifact.unwrap_or_else(|| {
+            json!({
+                "schema_version": 1,
+                "file": filename,
+                "mode": "prove",
+                "prove_target": "safety",
+                "result": unbounded_safety_result_kind(&result),
+                "details": unbounded_safety_result_details(&result),
+                "output": format!("{result}"),
+                "cegar_controls": {
+                    "max_refinements": cegar_iters,
+                    "timeout_secs": options.timeout_secs,
+                    "solver": format!("{:?}", options.solver).to_lowercase(),
+                    "proof_engine": proof_engine_name(options.proof_engine),
+                },
+            })
+        });
+        if let Some(report) = assist_report.as_ref() {
+            artifact["assist"] = assist_suggestion_report_json(report);
+        }
+        write_json_artifact(path, &artifact)?;
+        if matches!(output_format, OutputFormat::Text) {
+            println!("CEGAR proof report written to {}", path.display());
         }
     }
     if let Some(out) = cert_out {
@@ -1251,8 +1400,6 @@ fn run_prove_safety_single(
             }
         }
     }
-
-    maybe_emit_assist_suggestions(source, filename, options, &result, assist, output_format)?;
     Ok(())
 }
 
@@ -1516,5 +1663,31 @@ mod tests {
             .expect("wrapped formula should parse");
         assert_eq!(parsed.quantifiers.len(), 1);
         assert_eq!(parsed.quantifiers[0].var, "p");
+    }
+
+    #[test]
+    fn assist_report_json_contains_rerun_results_and_errors() {
+        let report = AssistSuggestionReport {
+            provider: AssistProviderKind::Mock,
+            payload_out: Some(PathBuf::from("artifacts/assist_payload.json")),
+            raw_count: 3,
+            validated: vec!["forall p: Node. p.ok == true".to_string()],
+            rejected: vec![("bad".to_string(), "parse failed".to_string())],
+            rerun_results: vec![(
+                "forall p: Node. p.ok == true".to_string(),
+                UnboundedSafetyResult::Safe { induction_k: 2 },
+            )],
+            rerun_errors: vec![(
+                "forall p: Node. p.ok == false".to_string(),
+                "timeout".to_string(),
+            )],
+        };
+
+        let value = assist_suggestion_report_json(&report);
+        assert_eq!(value["provider"], "mock");
+        assert_eq!(value["validated_count"], 1);
+        assert_eq!(value["rerun"]["attempted"], true);
+        assert_eq!(value["rerun"]["results"][0]["result"], "safe");
+        assert_eq!(value["rerun"]["errors"][0]["reason"], "timeout");
     }
 }
