@@ -2,6 +2,7 @@
 
 pub(crate) mod analyze;
 pub(crate) mod codegen;
+pub(crate) mod equivalence;
 pub(crate) mod compose;
 pub(crate) mod conformance;
 #[cfg(feature = "governance")]

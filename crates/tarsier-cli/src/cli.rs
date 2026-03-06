@@ -919,6 +919,25 @@ pub(crate) enum Commands {
         format: String,
     },
 
+    /// Check behavioral equivalence between two protocols (bidirectional simulation)
+    #[command(display_order = 8)]
+    EquivalenceCheck {
+        /// Path to the first .trs protocol file
+        file: PathBuf,
+
+        /// Path to the second .trs protocol file
+        #[arg(long)]
+        other: PathBuf,
+
+        /// Maximum BMC depth for bounded equivalence check
+        #[arg(long, default_value_t = 10)]
+        depth: usize,
+
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
     /// Generate shell completions for the given shell
     #[command(display_order = 99)]
     Completions {

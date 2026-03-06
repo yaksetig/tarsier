@@ -442,6 +442,14 @@ fn run() -> miette::Result<()> {
                 &format,
             )?;
         }
+        Commands::EquivalenceCheck {
+            file,
+            other,
+            depth,
+            format,
+        } => {
+            commands::equivalence::run_equivalence_check(&file, &other, depth, &format)?;
+        }
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             clap_complete::generate(shell, &mut cmd, "tarsier", &mut std::io::stdout());

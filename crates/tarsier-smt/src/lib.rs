@@ -9,6 +9,7 @@
 pub mod backends;
 pub mod bmc;
 pub mod encoder;
+pub mod equivalence_encoder;
 pub mod refinement_encoder;
 pub mod solver;
 pub mod sorts;
