@@ -804,6 +804,9 @@ fn parse_collection(pair: Pair<'_>) -> Result<CollectionDecl, ParseError> {
     let kind = match kind_pair.as_str() {
         "log" => CollectionKind::Log,
         "sequence" => CollectionKind::Sequence,
+        // FIFO channels share bounded sequence surface syntax for now.
+        // Dedicated FIFO semantics are introduced in later IR/encoding tasks.
+        "fifo_channel" => CollectionKind::Sequence,
         other => {
             return Err(syntax_error_at(
                 &kind_pair,
@@ -811,7 +814,9 @@ fn parse_collection(pair: Pair<'_>) -> Result<CollectionDecl, ParseError> {
             ));
         }
     };
-    let name = next_child(&mut inner, "collection name")?.as_str().to_string();
+    let name = next_child(&mut inner, "collection name")?
+        .as_str()
+        .to_string();
     let element_type_pair = next_child(&mut inner, "collection element type")?;
     let element_type = element_type_pair.as_str().to_string();
     let capacity_pair = next_child(&mut inner, "collection capacity")?;
@@ -1422,7 +1427,9 @@ fn parse_expr(pair: Pair<'_>) -> Result<Expr, ParseError> {
         }
         Rule::index_access => {
             let mut inner = pair.into_inner();
-            let coll = next_child(&mut inner, "index_access collection")?.as_str().to_string();
+            let coll = next_child(&mut inner, "index_access collection")?
+                .as_str()
+                .to_string();
             let idx = parse_expr(next_child(&mut inner, "index_access index")?)?;
             Ok(Expr::Index(coll, Box::new(idx)))
         }
