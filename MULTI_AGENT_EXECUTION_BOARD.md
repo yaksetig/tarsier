@@ -208,3 +208,7 @@ Columns:
 2026-03-06T13:15:00Z | 2 | FIFO-02 | DONE | commit 41f84a7 tests=cargo test -p tarsier-ir -- lower_fifo lower_log_and_sequence_have_no_queue collection_update_enqueue && cargo test -p tarsier-smt queue_variable
 2026-03-06T13:16:06Z | 1 | AI-02 | PR_OPEN | codex/agent1-ai-02-v1 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-ai-02-v1 provider abstraction + prove --assist flags
 2026-03-06T13:16:06Z | 1 | AI-02 | DONE | commit 885d018 tests=CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-engine --lib && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-cli && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo test -p tarsier-cli parse_prove_accepts_assist_flags -- --nocapture
+2026-03-06T13:20:00Z | 2 | FIFO-03 | CLAIM | taking task — implementing on agent2/fifo-03 branch
+2026-03-06T13:20:00Z | 2 | FIFO-03 | START | implementation started
+2026-03-06T13:28:00Z | 2 | FIFO-03 | PR_OPEN | agent2/fifo-03 enqueue/dequeue DSL actions + parser + lowering + codegen
+2026-03-06T13:28:00Z | 2 | FIFO-03 | DONE | tests=cargo test -p tarsier-dsl -- parse_enqueue && cargo test -p tarsier-ir lower_enqueue_dequeue
