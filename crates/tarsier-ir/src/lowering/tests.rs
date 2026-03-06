@@ -3103,3 +3103,99 @@ protocol QueueTest {
     assert!(matches!(updates[0].kind, CollectionUpdateKind::Enqueue(_)));
     assert!(matches!(updates[1].kind, CollectionUpdateKind::Dequeue));
 }
+
+#[test]
+fn fifo_channel_end_to_end_pipeline() {
+    // Full pipeline: parse → lower → verify IR structure
+    let src = r#"
+protocol FifoE2E {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    fifo_channel MsgQueue: int[n];
+    message Request;
+    role Producer {
+        init Idle;
+        phase Idle {
+            when received >= 1 Request => {
+                enqueue MsgQueue 1;
+                goto phase Idle;
+            }
+        }
+    }
+    role Consumer {
+        init Waiting;
+        phase Waiting {
+            when received >= 1 Request => {
+                dequeue MsgQueue;
+                goto phase Waiting;
+            }
+        }
+    }
+    property safe: safety {
+        forall p: Producer. forall q: Consumer.
+            p.Idle == 0 || q.Waiting == 0
+    }
+}
+"#;
+    let prog = parse(src, "fifo_e2e.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    // Verify collection
+    assert_eq!(ta.collections.len(), 1);
+    let coll = &ta.collections[0];
+    assert_eq!(coll.name, "MsgQueue");
+    assert_eq!(coll.kind, IrCollectionKind::FifoChannel);
+    assert_eq!(coll.queue_model, QueueModel::LinearFifo);
+
+    // Verify enqueue rules exist
+    let enqueue_rules: Vec<_> = ta.rules.iter()
+        .filter(|r| r.collection_updates.iter()
+            .any(|cu| matches!(cu.kind, CollectionUpdateKind::Enqueue(_))))
+        .collect();
+    assert!(!enqueue_rules.is_empty(), "Should have enqueue rules");
+
+    // Verify dequeue rules exist
+    let dequeue_rules: Vec<_> = ta.rules.iter()
+        .filter(|r| r.collection_updates.iter()
+            .any(|cu| matches!(cu.kind, CollectionUpdateKind::Dequeue)))
+        .collect();
+    assert!(!dequeue_rules.is_empty(), "Should have dequeue rules");
+}
+
+#[test]
+fn fifo_channel_mixed_with_log_and_sequence() {
+    let src = r#"
+protocol MixedCollections {
+    params n, t;
+    resilience: n > 3*t;
+    log History: int[n];
+    sequence Buffer: int[10];
+    fifo_channel Queue: int[n];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {
+            when received >= 1 Vote => {
+                append History 1;
+                enqueue Queue 1;
+                goto phase Idle;
+            }
+        }
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let prog = parse(src, "mixed_coll.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    assert_eq!(ta.collections.len(), 3);
+    assert_eq!(ta.collections[0].kind, IrCollectionKind::Log);
+    assert_eq!(ta.collections[0].queue_model, QueueModel::None);
+    assert_eq!(ta.collections[1].kind, IrCollectionKind::Sequence);
+    assert_eq!(ta.collections[1].queue_model, QueueModel::None);
+    assert_eq!(ta.collections[2].kind, IrCollectionKind::FifoChannel);
+    assert_eq!(ta.collections[2].queue_model, QueueModel::LinearFifo);
+}

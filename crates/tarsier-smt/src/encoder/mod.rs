@@ -4231,4 +4231,66 @@ protocol BuggyBroadcast {
         });
         assert!(has_head_update, "Dequeue should update queue head");
     }
+
+    #[test]
+    fn fifo_queue_with_enqueue_and_dequeue_combined() {
+        let mut ta = make_simple_ta();
+
+        ta.add_collection(IrCollectionSpec {
+            name: "Chan".into(),
+            kind: IrCollectionKind::FifoChannel,
+            element_type: "int".into(),
+            capacity: LinearCombination::constant(5),
+            queue_model: QueueModel::LinearFifo,
+        });
+
+        // Rule 0: waiting->done enqueues
+        ta.rules[0].collection_updates.push(CollectionUpdate {
+            collection: CollectionId::new(0),
+            kind: CollectionUpdateKind::Enqueue(LinearCombination::constant(1)),
+        });
+
+        // Add a second rule for dequeue (done->waiting)
+        let dequeue_rule = Rule {
+            from: ta.rules[0].to, // done
+            to: ta.rules[0].from, // waiting
+            guard: Guard::trivial(),
+            updates: vec![],
+            collection_updates: vec![CollectionUpdate {
+                collection: CollectionId::new(0),
+                kind: CollectionUpdateKind::Dequeue,
+            }],
+        };
+        ta.rules.push(dequeue_rule);
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let encoding = encode_bmc(&cs, &property, 2);
+        let declarations: Vec<String> = encoding
+            .declarations
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        // Verify head/tail variables exist at steps 0, 1, 2
+        for step in 0..=2 {
+            assert!(
+                declarations.contains(&queue_head_var(step, 0)),
+                "qhead_{step}_0 should be declared"
+            );
+            assert!(
+                declarations.contains(&queue_tail_var(step, 0)),
+                "qtail_{step}_0 should be declared"
+            );
+        }
+
+        // Verify capacity bound (5) appears in assertions
+        let assertions: Vec<String> = encoding
+            .assertions
+            .iter()
+            .map(|t| to_smtlib(t))
+            .collect();
+        let has_cap = assertions.iter().any(|a| a.contains("clen_") && a.contains("5"));
+        assert!(has_cap, "Capacity bound of 5 should appear");
+    }
 }
