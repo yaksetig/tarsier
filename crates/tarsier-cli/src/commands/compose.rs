@@ -35,6 +35,7 @@ pub(crate) fn run_compose_check_command(file: PathBuf) -> miette::Result<()> {
                 tarsier_dsl::ast::ProtocolDecl {
                     name: module_decl.name.clone(),
                     imports: Vec::new(),
+                    refines: None,
                     modules: Vec::new(),
                     enums: Vec::new(),
                     parameters: module_decl.items.parameters.clone(),

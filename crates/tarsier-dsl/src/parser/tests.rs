@@ -2760,3 +2760,46 @@ protocol FifoTest {
     assert!(matches!(coll.kind, CollectionKind::FifoChannel));
     assert_eq!(coll.element_type, "int");
 }
+
+#[test]
+fn parse_refines_declaration() {
+    let src = r#"
+protocol Refined {
+    refines "base_protocol.trs";
+    params n, t;
+    resilience: n > 3*t;
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "refines_test.trs").expect("should parse");
+    let proto = &program.protocol.node;
+    let refines = proto.refines.as_ref().expect("should have refines");
+    assert_eq!(refines.path, "base_protocol.trs");
+}
+
+#[test]
+fn parse_no_refines_declaration() {
+    let src = r#"
+protocol NoRefines {
+    params n, t;
+    resilience: n > 3*t;
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "no_refines_test.trs").expect("should parse");
+    assert!(program.protocol.node.refines.is_none());
+}
