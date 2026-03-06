@@ -403,6 +403,8 @@ pub enum IrCollectionKind {
     Log,
     /// Random-access bounded sequence.
     Sequence,
+    /// FIFO channel with queue semantics (enqueue/dequeue).
+    FifoChannel,
 }
 
 impl fmt::Display for IrCollectionKind {
@@ -410,6 +412,7 @@ impl fmt::Display for IrCollectionKind {
         match self {
             IrCollectionKind::Log => write!(f, "log"),
             IrCollectionKind::Sequence => write!(f, "sequence"),
+            IrCollectionKind::FifoChannel => write!(f, "fifo_channel"),
         }
     }
 }

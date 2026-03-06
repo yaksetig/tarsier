@@ -411,6 +411,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         let kind = match coll.kind {
             ast::CollectionKind::Log => IrCollectionKind::Log,
             ast::CollectionKind::Sequence => IrCollectionKind::Sequence,
+            ast::CollectionKind::FifoChannel => IrCollectionKind::FifoChannel,
         };
         let capacity = lower_linear_expr_to_lc(&coll.capacity, &param_ids)?;
         ta.add_collection(IrCollectionSpec {

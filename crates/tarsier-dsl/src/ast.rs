@@ -261,6 +261,7 @@ pub enum CommitteeValue {
 pub enum CollectionKind {
     Log,
     Sequence,
+    FifoChannel,
 }
 
 /// Bounded log or sequence type declaration.

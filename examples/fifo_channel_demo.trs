@@ -1,0 +1,31 @@
+// Demonstrates FIFO channel type.
+// FIFO channels model bounded queues with enqueue/dequeue semantics.
+// Queue operations are introduced in follow-on IR/lowering tasks (FIFO-02+).
+
+protocol FifoChannelDemo {
+
+params n, t, f;
+resilience: n > 3*t;
+adversary { model: byzantine; bound: f; }
+
+fifo_channel RequestQueue: int[n];
+
+message Request;
+
+role Worker {
+    var processed: int = 0;
+    init Waiting;
+    phase Waiting {
+        when received >= 1 Request => {
+            processed = processed + 1;
+            goto phase Waiting;
+        }
+    }
+}
+
+property safe: safety {
+    forall p: Worker. forall q: Worker.
+        p.Waiting == 0 || q.Waiting == 0
+}
+
+}

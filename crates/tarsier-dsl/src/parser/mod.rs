@@ -804,6 +804,7 @@ fn parse_collection(pair: Pair<'_>) -> Result<CollectionDecl, ParseError> {
     let kind = match kind_pair.as_str() {
         "log" => CollectionKind::Log,
         "sequence" => CollectionKind::Sequence,
+        "fifo_channel" => CollectionKind::FifoChannel,
         other => {
             return Err(syntax_error_at(
                 &kind_pair,

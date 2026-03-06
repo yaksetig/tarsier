@@ -2991,3 +2991,30 @@ protocol BadAppend {
         "Error should mention the unknown collection name"
     );
 }
+
+#[test]
+fn lower_fifo_channel_declaration() {
+    let src = r#"
+protocol FifoTest {
+    params n, t;
+    resilience: n > 3*t;
+    fifo_channel MsgQueue: int[n];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let prog = parse(src, "fifo_test.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    assert_eq!(ta.collections.len(), 1);
+    let coll = &ta.collections[0];
+    assert_eq!(coll.name, "MsgQueue");
+    assert_eq!(coll.kind, IrCollectionKind::FifoChannel);
+    assert_eq!(coll.element_type, "int");
+}

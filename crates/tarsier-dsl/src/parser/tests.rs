@@ -2734,3 +2734,29 @@ protocol LenTest {
         other => panic!("Expected Assign, got {:?}", other),
     }
 }
+
+#[test]
+fn parse_fifo_channel_declaration() {
+    let src = r#"
+protocol FifoTest {
+    params n, t;
+    resilience: n > 3*t;
+    fifo_channel MsgQueue: int[n];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "fifo_test.trs").expect("should parse");
+    let proto = &program.protocol.node;
+    assert_eq!(proto.collections.len(), 1);
+    let coll = &proto.collections[0];
+    assert_eq!(coll.name, "MsgQueue");
+    assert!(matches!(coll.kind, CollectionKind::FifoChannel));
+    assert_eq!(coll.element_type, "int");
+}
