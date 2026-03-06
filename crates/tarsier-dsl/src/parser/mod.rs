@@ -170,6 +170,7 @@ fn parse_protocol(
         .to_string();
 
     let mut imports = Vec::new();
+    let mut refines = None;
     let mut modules = Vec::new();
     let mut parameters = Vec::new();
     let mut enums = Vec::new();
@@ -191,6 +192,19 @@ fn parse_protocol(
         match item.as_rule() {
             Rule::import_decl => {
                 imports.push(parse_import(item)?);
+            }
+            Rule::refines_decl => {
+                let decl = parse_refines(item)?;
+                if refines.is_some() {
+                    semantic_errors.push(ParseError::syntax(
+                        "Duplicate refines declaration",
+                        decl.span,
+                        "",
+                        "",
+                    ));
+                } else {
+                    refines = Some(decl);
+                }
             }
             Rule::module_decl => match parse_module(item, source, filename) {
                 Ok(m) => modules.push(m),
@@ -259,6 +273,7 @@ fn parse_protocol(
         ProtocolDecl {
             name,
             imports,
+            refines,
             modules,
             enums,
             parameters,
@@ -291,6 +306,18 @@ fn parse_import(pair: Pair<'_>) -> Result<ImportDecl, ParseError> {
         .unwrap_or(path_raw)
         .to_string();
     Ok(ImportDecl { name, path, span })
+}
+
+fn parse_refines(pair: Pair<'_>) -> Result<RefinesDecl, ParseError> {
+    let span = span_from(&pair);
+    let mut inner = pair.into_inner();
+    let path_raw = next_child(&mut inner, "refines path")?.as_str();
+    let path = path_raw
+        .strip_prefix('"')
+        .and_then(|s: &str| s.strip_suffix('"'))
+        .unwrap_or(path_raw)
+        .to_string();
+    Ok(RefinesDecl { path, span })
 }
 
 fn parse_module(pair: Pair<'_>, _source: &str, _filename: &str) -> Result<ModuleDecl, ParseError> {
@@ -330,6 +357,7 @@ fn parse_module(pair: Pair<'_>, _source: &str, _filename: &str) -> Result<Module
                 properties.push(parse_property(item)?);
             }
             Rule::import_decl
+            | Rule::refines_decl
             | Rule::enum_decl
             | Rule::crypto_object_decl
             | Rule::committee_decl
@@ -811,7 +839,9 @@ fn parse_collection(pair: Pair<'_>) -> Result<CollectionDecl, ParseError> {
             ));
         }
     };
-    let name = next_child(&mut inner, "collection name")?.as_str().to_string();
+    let name = next_child(&mut inner, "collection name")?
+        .as_str()
+        .to_string();
     let element_type_pair = next_child(&mut inner, "collection element type")?;
     let element_type = element_type_pair.as_str().to_string();
     let capacity_pair = next_child(&mut inner, "collection capacity")?;
@@ -1422,7 +1452,9 @@ fn parse_expr(pair: Pair<'_>) -> Result<Expr, ParseError> {
         }
         Rule::index_access => {
             let mut inner = pair.into_inner();
-            let coll = next_child(&mut inner, "index_access collection")?.as_str().to_string();
+            let coll = next_child(&mut inner, "index_access collection")?
+                .as_str()
+                .to_string();
             let idx = parse_expr(next_child(&mut inner, "index_access index")?)?;
             Ok(Expr::Index(coll, Box::new(idx)))
         }

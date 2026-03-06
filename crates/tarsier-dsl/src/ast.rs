@@ -39,6 +39,7 @@ pub struct Program {
 pub struct ProtocolDecl {
     pub name: String,
     pub imports: Vec<ImportDecl>,
+    pub refines: Option<RefinesDecl>,
     pub modules: Vec<ModuleDecl>,
     pub enums: Vec<EnumDecl>,
     pub parameters: Vec<ParamDef>,
@@ -61,6 +62,14 @@ pub struct ProtocolDecl {
 #[cfg_attr(feature = "serialize", derive(serde::Serialize))]
 pub struct ImportDecl {
     pub name: String,
+    pub path: String,
+    pub span: Span,
+}
+
+/// Refinement declaration: `refines "base_protocol.trs";`
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
+pub struct RefinesDecl {
     pub path: String,
     pub span: Span,
 }

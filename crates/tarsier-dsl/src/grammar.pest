@@ -10,6 +10,7 @@ protocol_decl = {
 
 protocol_item = _{
     import_decl
+    | refines_decl
     | module_decl
     | enum_decl
     | parameters_decl
@@ -30,6 +31,10 @@ protocol_item = _{
 // --- Import declarations ---
 import_decl = {
     "import" ~ ident ~ "from" ~ string_literal ~ ";"
+}
+
+refines_decl = {
+    "refines" ~ string_literal ~ ";"
 }
 
 string_literal = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }

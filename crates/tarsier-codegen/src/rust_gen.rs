@@ -810,6 +810,7 @@ mod tests {
         ProtocolDecl {
             name: "TestProtocol".to_string(),
             imports: vec![],
+            refines: None,
             modules: vec![],
             enums: vec![],
             parameters: vec![],
