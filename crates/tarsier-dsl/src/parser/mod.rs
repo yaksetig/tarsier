@@ -2,6 +2,8 @@
 // the zero-copy benefit and complicate call sites throughout the crate.
 #![allow(clippy::result_large_err)]
 
+use std::collections::BTreeSet;
+
 use pest::Parser;
 use pest_derive::Parser;
 
@@ -1175,6 +1177,46 @@ fn parse_transition(pair: Pair<'_>) -> Result<Spanned<TransitionRule>, ParseErro
                     }
                 }
                 actions.push(Action::JustifyCryptoObject { object_name, args });
+            }
+            Rule::reconfigure_action => {
+                let action_span = span_from(&item);
+                let mut seen_params = BTreeSet::new();
+                let mut local_updates = Vec::new();
+
+                for update in item.into_inner() {
+                    if update.as_rule() != Rule::reconfigure_item {
+                        continue;
+                    }
+                    let mut ui = update.into_inner();
+                    let param = next_child(&mut ui, "reconfigure parameter")?
+                        .as_str()
+                        .to_string();
+                    if !seen_params.insert(param.clone()) {
+                        return Err(ParseError::syntax(
+                            format!("Duplicate reconfigure parameter '{param}'"),
+                            action_span,
+                            "",
+                            "",
+                        ));
+                    }
+                    let value = parse_expr(next_child(&mut ui, "reconfigure value")?)?;
+                    local_updates.push((param, value));
+                }
+
+                if local_updates.is_empty() {
+                    return Err(ParseError::syntax(
+                        "reconfigure action requires at least one parameter assignment",
+                        action_span,
+                        "",
+                        "",
+                    ));
+                }
+
+                // Stage-1 lowering keeps reconfigure syntax local to DSL by
+                // desugaring into ordered assignment actions.
+                for (param, value) in local_updates {
+                    actions.push(Action::Assign { var: param, value });
+                }
             }
             Rule::append_action => {
                 let mut si = item.into_inner();

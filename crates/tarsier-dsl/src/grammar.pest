@@ -236,11 +236,17 @@ action = _{
     | form_crypto_action
     | lock_crypto_action
     | justify_crypto_action
+    | reconfigure_action
     | append_action
     | assign_action
     | goto_action
     | decide_action
 }
+
+reconfigure_action = {
+    "reconfigure" ~ reconfigure_item ~ ("," ~ reconfigure_item)* ~ ";"
+}
+reconfigure_item = { ident ~ "=" ~ expr }
 
 append_action = { "append" ~ ident ~ expr ~ ";" }
 

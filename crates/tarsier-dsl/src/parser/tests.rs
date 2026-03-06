@@ -1826,6 +1826,67 @@ role R {
     }
 }
 
+#[test]
+fn parse_reconfigure_action_desugars_into_assignments() {
+    let src = r#"
+protocol ReconfigureTest {
+params n, t;
+resilience: n > 3*t;
+message Vote;
+role Replica {
+    init p0;
+    phase p0 {
+        when received >= 1 Vote => {
+            reconfigure n = n + 1, t = t + 1;
+            goto phase p0;
+        }
+    }
+}
+property safe: safety {
+    forall p: Replica. p.p0 == 0
+}
+}
+"#;
+    let program = parse(src, "reconfigure_test.trs").expect("should parse");
+    let actions = &program.protocol.node.roles[0].node.phases[0]
+        .node
+        .transitions[0]
+        .node
+        .actions;
+    assert!(matches!(actions[0], Action::Assign { ref var, .. } if var == "n"));
+    assert!(matches!(actions[1], Action::Assign { ref var, .. } if var == "t"));
+    assert!(matches!(actions[2], Action::GotoPhase { ref phase } if phase == "p0"));
+}
+
+#[test]
+fn parse_reconfigure_action_rejects_duplicate_parameter() {
+    let src = r#"
+protocol ReconfigureDup {
+params n, t;
+resilience: n > 3*t;
+message Vote;
+role Replica {
+    init p0;
+    phase p0 {
+        when received >= 1 Vote => {
+            reconfigure n = n + 1, n = n + 2;
+            goto phase p0;
+        }
+    }
+}
+property safe: safety {
+    forall p: Replica. p.p0 == 0
+}
+}
+"#;
+    let err = parse(src, "reconfigure_dup.trs").expect_err("duplicate parameter should fail");
+    assert!(
+        err.to_string()
+            .contains("Duplicate reconfigure parameter 'n'"),
+        "unexpected error: {err:?}"
+    );
+}
+
 // ---------------------------------------------------------------
 // Assign action expression forms
 // ---------------------------------------------------------------
@@ -2268,6 +2329,7 @@ const DSL_KEYWORDS: &[&str] = &[
     "goto",
     "decide",
     "send",
+    "reconfigure",
     "message",
     "true",
     "false",
