@@ -196,3 +196,15 @@ Columns:
 2026-03-06T12:47:14Z | 1 | AI-01 | DONE | commit cf3c6a4 tests=CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-engine --lib && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-cli && attempted CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo test -p tarsier-engine prove_failure_prompt_payload -- --nocapture (fails on pre-existing ProtocolDecl refines fixture mismatch in engine lib tests)
 2026-03-06T12:50:00Z | 2 | TWIN-03 | REVIEW_START | reviewing Agent 1's network_shim.rs on codex/agent1-twin-03-v4 (commit 14d277c)
 2026-03-06T12:50:00Z | 2 | TWIN-03 | REVIEW_PASS | InMemoryNetworkShim well-designed: deterministic tick-based delivery, delay/drop/reorder/partition/heal/spawn-twin/retire-twin ops, good error handling, 6 tests cover all fault types and error paths; branch diverges from pre-LOG main (removes LOG-03/04/05 work) so merge must be rebased
+2026-03-06T13:05:37Z | 1 | AI-01 | CLAIM | re-claiming task to finalize previously delivered branch codex/agent1-ai-01-v1
+2026-03-06T13:05:37Z | 1 | AI-01 | START | finalization started (existing implementation validation)
+2026-03-06T13:05:37Z | 1 | AI-01 | PR_OPEN | codex/agent1-ai-01-v1 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-ai-01-v1 wire prove failure serializer exports
+2026-03-06T13:05:37Z | 1 | AI-01 | DONE | commit cf3c6a4 tests=CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-engine --lib && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-cli && attempted CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo test -p tarsier-engine prove_failure_prompt_payload -- --nocapture (fails on pre-existing ProtocolDecl refines fixture mismatch in engine lib tests)
+2026-03-06T13:05:56Z | 1 | AI-02 | CLAIM | taking task
+2026-03-06T13:05:56Z | 1 | AI-02 | START | implementation started
+2026-03-06T13:10:00Z | 2 | FIFO-02 | CLAIM | taking task — implementing on agent2/fifo-02 branch
+2026-03-06T13:10:00Z | 2 | FIFO-02 | START | implementation started
+2026-03-06T13:15:00Z | 2 | FIFO-02 | PR_OPEN | agent2/fifo-02 41f84a7 IR queue state model + enqueue/dequeue ops
+2026-03-06T13:15:00Z | 2 | FIFO-02 | DONE | commit 41f84a7 tests=cargo test -p tarsier-ir -- lower_fifo lower_log_and_sequence_have_no_queue collection_update_enqueue && cargo test -p tarsier-smt queue_variable
+2026-03-06T13:16:06Z | 1 | AI-02 | PR_OPEN | codex/agent1-ai-02-v1 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-ai-02-v1 provider abstraction + prove --assist flags
+2026-03-06T13:16:06Z | 1 | AI-02 | DONE | commit 885d018 tests=CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-engine --lib && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo check -p tarsier-cli && CARGO_TARGET_DIR=/Users/myaksetig/Desktop/Repos/tarsier/target cargo test -p tarsier-cli parse_prove_accepts_assist_flags -- --nocapture
