@@ -832,6 +832,9 @@ fn parse_collection(pair: Pair<'_>) -> Result<CollectionDecl, ParseError> {
     let kind = match kind_pair.as_str() {
         "log" => CollectionKind::Log,
         "sequence" => CollectionKind::Sequence,
+        // FIFO channels use collection syntax in this stage; queue semantics
+        // are introduced by follow-on IR/lowering tasks.
+        "fifo_channel" => CollectionKind::Sequence,
         other => {
             return Err(syntax_error_at(
                 &kind_pair,

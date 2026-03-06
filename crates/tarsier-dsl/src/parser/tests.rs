@@ -2302,6 +2302,7 @@ const DSL_KEYWORDS: &[&str] = &[
     "always",
     "eventually",
     "committee",
+    "fifo_channel",
     "and",
     "or",
     "not",
@@ -2693,6 +2694,32 @@ protocol SeqTest {
     assert_eq!(coll.name, "Decisions");
     assert!(matches!(coll.kind, CollectionKind::Sequence));
     assert_eq!(coll.element_type, "bool");
+}
+
+#[test]
+fn parse_fifo_channel_declaration() {
+    let src = r#"
+protocol FifoTest {
+    params n, t;
+    resilience: n > 3*t;
+    fifo_channel VoteQueue: int[n];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "fifo_test.trs").expect("should parse");
+    let proto = &program.protocol.node;
+    assert_eq!(proto.collections.len(), 1);
+    let coll = &proto.collections[0];
+    assert_eq!(coll.name, "VoteQueue");
+    assert!(matches!(coll.kind, CollectionKind::Sequence));
+    assert_eq!(coll.element_type, "int");
 }
 
 #[test]

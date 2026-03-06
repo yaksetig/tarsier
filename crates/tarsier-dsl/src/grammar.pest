@@ -150,7 +150,7 @@ committee_value = _{ float_literal | int_literal | ident }
 collection_decl = {
     collection_kind ~ ident ~ ":" ~ field_type ~ "[" ~ linear_expr ~ "]" ~ ";"
 }
-collection_kind = { "log" | "sequence" }
+collection_kind = { "log" | "sequence" | "fifo_channel" }
 
 // --- Messages ---
 message_decl = {
