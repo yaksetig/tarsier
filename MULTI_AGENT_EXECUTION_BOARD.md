@@ -148,3 +148,18 @@ Columns:
 2026-03-06T02:06:24Z | 1 | INV-01 | UNBLOCKED | tarsier-dsl parser now compiles; cargo check -p tarsier-engine passes
 2026-03-06T02:06:24Z | 1 | TWIN-01 | PR_OPEN | local patch ready (no remote PR yet); active harness API in tarsier-conformance
 2026-03-06T02:06:24Z | 1 | TWIN-01 | DONE | implemented active harness API + schedule injector interface; tests=cargo check -p tarsier-conformance && cargo test -p tarsier-conformance active:: -- --nocapture
+2026-03-06T02:07:23Z | 2 | LOG-01 | DONE | commit=9e5fdb7 tests=cargo test -p tarsier-dsl -- parse_log_declaration parse_sequence_declaration parse_append_action parse_index_access_expr parse_len_expr
+2026-03-06T02:08:01Z | 2 | TWIN-01 | REVIEW_START | reviewing TWIN-01 active harness API
+2026-03-06T02:08:27Z | 2 | TWIN-01 | REVIEW_PASS | validated; tests=cargo test -p tarsier-conformance (3 active tests pass, 64 total pass)
+2026-03-06T02:08:01Z | 2 | LOG-02 | CLAIM | taking task
+2026-03-06T02:08:01Z | 2 | LOG-02 | START | implementation started
+2026-03-06T02:12:49Z | 2 | LOG-02 | DONE | commit=b70d035 tests=cargo test -p tarsier-ir -- lower_bounded_collection_declarations
+2026-03-06T02:24:25Z | 1 | TWIN-02 | CLAIM | taking task
+2026-03-06T02:24:25Z | 1 | TWIN-02 | START | implementation started
+2026-03-06T02:24:33Z | 2 | LOG-03 | CLAIM | taking task
+2026-03-06T02:24:33Z | 2 | LOG-03 | START | implementation started
+2026-03-06T02:26:38Z | 1 | TWIN-02 | BLOCKED | cargo check -p tarsier-conformance fails in tarsier-ir (missing Rule.collection_updates initializers in lowering/mod.rs); blocked on concurrent IR/lowering stabilization (LOG-01 stream)
+2026-03-06T02:28:21Z | 1 | FIFO-01 | CLAIM | taking task
+2026-03-06T02:28:21Z | 1 | FIFO-01 | START | implementation started
+2026-03-06T02:31:56Z | 1 | FIFO-01 | PR_OPEN | branch=codex/agent1-fifo-01 commit=e8610b2 local patch ready (no remote PR yet)
+2026-03-06T02:31:56Z | 1 | FIFO-01 | DONE | commit=e8610b2 tests=cargo fmt --package tarsier-dsl && cargo test -p tarsier-dsl -- parse_fifo_channel_declaration parse_sequence_declaration parse_log_declaration
