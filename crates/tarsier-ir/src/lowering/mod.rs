@@ -950,6 +950,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                 let mut target_phase = phase_name.clone();
                 let mut assigns: Vec<(String, ast::Expr)> = Vec::new();
                 let mut pending_actions: Vec<PendingTransitionAction> = Vec::new();
+                let mut pending_collection_updates: Vec<CollectionUpdate> = Vec::new();
                 let mut decide_value: Option<ast::Expr> = None;
 
                 for action in &trans.actions {
@@ -1003,9 +1004,17 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             }
                             decide_value = Some(value.clone());
                         }
-                        ast::Action::Append { .. } => {
-                            // Append actions are handled by the LOG IR lowering pass (LOG-03).
-                            // For now, silently ignore during threshold automaton construction.
+                        ast::Action::Append { collection, value } => {
+                            let coll_id = ta.find_collection_by_name(collection).ok_or_else(|| {
+                                LoweringError::Unsupported(format!(
+                                    "Unknown collection '{collection}' in append action"
+                                ))
+                            })?;
+                            let lc = helpers::lower_expr_to_lc(value, &param_ids)?;
+                            pending_collection_updates.push(CollectionUpdate {
+                                collection: coll_id,
+                                kind: CollectionUpdateKind::Append(lc),
+                            });
                         }
                     }
                 }
@@ -1399,7 +1408,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     to: to_lid,
                                     guard: guard.clone(),
                                     updates: updates.clone(),
-                    collection_updates: vec![],
+                                    collection_updates: pending_collection_updates.clone(),
                                 });
                                 break;
                             }

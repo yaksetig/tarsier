@@ -2814,3 +2814,50 @@ protocol CollTest {
     assert_eq!(seq_coll.kind, IrCollectionKind::Sequence);
     assert_eq!(seq_coll.element_type, "bool");
 }
+
+#[test]
+fn lower_append_action_produces_collection_update() {
+    let src = r#"
+protocol AppendTest {
+    params n, t;
+    resilience: n > 3*t;
+    log Votes: int[n];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {
+            when received >= t+1 Vote => {
+                append Votes 1;
+                goto phase Done;
+            }
+        }
+        phase Done {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Done == 0
+    }
+}
+"#;
+    let prog = parse(src, "append_test.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    let rules_with_updates: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| !r.collection_updates.is_empty())
+        .collect();
+    assert!(
+        !rules_with_updates.is_empty(),
+        "Expected at least one rule with collection updates from append action"
+    );
+
+    let cu = &rules_with_updates[0].collection_updates[0];
+    assert_eq!(cu.collection, CollectionId::new(0));
+    match &cu.kind {
+        CollectionUpdateKind::Append(lc) => {
+            assert_eq!(lc.constant, 1);
+            assert!(lc.terms.is_empty(), "Expected constant-only linear combination");
+        }
+        other => panic!("Expected Append, got {:?}", other),
+    }
+}

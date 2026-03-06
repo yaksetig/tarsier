@@ -60,6 +60,42 @@ pub(super) fn lower_linear_expr_to_lc(
     }
 }
 
+/// Convert a general `ast::Expr` to a `LinearCombination`, supporting the
+/// subset that is linear over parameters (IntLit, Var→param, Add, Sub, Neg).
+pub(super) fn lower_expr_to_lc(
+    expr: &ast::Expr,
+    params: &IndexMap<String, ParamId>,
+) -> Result<LinearCombination, LoweringError> {
+    match expr {
+        ast::Expr::IntLit(c) => Ok(LinearCombination::constant(*c)),
+        ast::Expr::Var(name) => {
+            if let Some(&pid) = params.get(name) {
+                Ok(LinearCombination::param(pid))
+            } else {
+                Err(LoweringError::UnknownParameter(name.clone()))
+            }
+        }
+        ast::Expr::Add(lhs, rhs) => {
+            let l = lower_expr_to_lc(lhs, params)?;
+            let r = lower_expr_to_lc(rhs, params)?;
+            Ok(l.add(&r))
+        }
+        ast::Expr::Sub(lhs, rhs) => {
+            let l = lower_expr_to_lc(lhs, params)?;
+            let r = lower_expr_to_lc(rhs, params)?;
+            Ok(l.sub(&r))
+        }
+        ast::Expr::Neg(inner) => {
+            let lc = lower_expr_to_lc(inner, params)?;
+            Ok(lc.scale(-1))
+        }
+        _ => Err(LoweringError::Unsupported(
+            "Collection append value must be a linear expression over parameters and constants"
+                .into(),
+        )),
+    }
+}
+
 pub(super) fn lower_committee_value(
     value: &ast::CommitteeValue,
     params: &IndexMap<String, ParamId>,
