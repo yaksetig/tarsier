@@ -18,7 +18,7 @@ role Voter {
     init Listening;
     phase Listening {
         when received >= 2*t+1 Vote => {
-            append VoteHistory round;
+            append VoteHistory 1;
             round = round + 1;
             goto phase Listening;
         }

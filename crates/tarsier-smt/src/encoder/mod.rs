@@ -3999,4 +3999,73 @@ protocol BuggyBroadcast {
             .any(|a| a.contains("clen_") && a.contains("p_0"));
         assert!(has_cap_bound, "Collection length should be bounded by capacity");
     }
+
+    #[test]
+    fn collection_length_update_encodes_append_deltas() {
+        let mut ta = make_simple_ta();
+
+        // Add a log collection with constant capacity 5
+        ta.add_collection(IrCollectionSpec {
+            name: "Log".into(),
+            kind: IrCollectionKind::Log,
+            element_type: "int".into(),
+            capacity: LinearCombination::constant(5),
+        });
+
+        // The existing rule (waiting->done) appends to the log
+        ta.rules[0].collection_updates.push(CollectionUpdate {
+            collection: CollectionId::new(0),
+            kind: CollectionUpdateKind::Append(LinearCombination::constant(42)),
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let encoding = encode_bmc(&cs, &property, 1);
+        let assertions: Vec<String> = encoding
+            .assertions
+            .iter()
+            .map(|t| to_smtlib(t))
+            .collect();
+
+        // Length at step 1 should reference delta from rule 0 and clen_0_0
+        let has_len_update = assertions.iter().any(|a| {
+            a.contains("clen_1_0") && (a.contains("clen_0_0") || a.contains("delta_0_"))
+        });
+        assert!(
+            has_len_update,
+            "Step 1 length should be updated based on step 0 length + deltas"
+        );
+
+        // Capacity bound of 5 should appear
+        let has_const_cap = assertions.iter().any(|a| a.contains("clen_") && a.contains("5"));
+        assert!(has_const_cap, "Constant capacity 5 should appear in bounds");
+    }
+
+    #[test]
+    fn collection_no_appends_preserves_length() {
+        let mut ta = make_simple_ta();
+
+        // Add a collection but no rules reference it
+        ta.add_collection(IrCollectionSpec {
+            name: "Unused".into(),
+            kind: IrCollectionKind::Sequence,
+            element_type: "int".into(),
+            capacity: LinearCombination::constant(10),
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let encoding = encode_bmc(&cs, &property, 2);
+        let assertions: Vec<String> = encoding
+            .assertions
+            .iter()
+            .map(|t| to_smtlib(t))
+            .collect();
+
+        // Length should be preserved across all steps (= equality constraints)
+        let step0_eq = assertions.iter().any(|a| a.contains("clen_1_0") && a.contains("clen_0_0"));
+        let step1_eq = assertions.iter().any(|a| a.contains("clen_2_0") && a.contains("clen_1_0"));
+        assert!(step0_eq, "Unused collection length should be preserved step 0→1");
+        assert!(step1_eq, "Unused collection length should be preserved step 1→2");
+    }
 }

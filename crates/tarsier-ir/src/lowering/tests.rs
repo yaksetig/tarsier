@@ -2861,3 +2861,133 @@ protocol AppendTest {
         other => panic!("Expected Append, got {:?}", other),
     }
 }
+
+#[test]
+fn lower_collection_pipeline_end_to_end() {
+    let src = r#"
+protocol CollPipeline {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    log VoteLog: int[n];
+    sequence DecBuf: bool[10];
+    message Vote;
+    role Voter {
+        init Listening;
+        phase Listening {
+            when received >= 2*t+1 Vote => {
+                append VoteLog 1;
+                goto phase Done;
+            }
+        }
+        phase Done {}
+    }
+    property safe: safety {
+        forall p: Voter. forall q: Voter.
+            p.Done == 0 || q.Done == 0
+    }
+}
+"#;
+    let prog = parse(src, "coll_pipeline.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    // Verify collections lowered correctly
+    assert_eq!(ta.collections.len(), 2, "Expected 2 collections (log + sequence)");
+    assert_eq!(ta.collections[0].name, "VoteLog");
+    assert_eq!(ta.collections[0].kind, IrCollectionKind::Log);
+    assert_eq!(ta.collections[1].name, "DecBuf");
+    assert_eq!(ta.collections[1].kind, IrCollectionKind::Sequence);
+
+    // Verify at least one rule has an append collection update
+    let append_rules: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| {
+            r.collection_updates
+                .iter()
+                .any(|cu| matches!(cu.kind, CollectionUpdateKind::Append(_)))
+        })
+        .collect();
+    assert!(
+        !append_rules.is_empty(),
+        "Expected at least one rule with Append collection update"
+    );
+
+    // Verify the ThresholdAutomaton validates
+    ta.validate().unwrap();
+}
+
+#[test]
+fn lower_append_with_param_value() {
+    let src = r#"
+protocol ParamAppend {
+    params n, t;
+    resilience: n > 3*t;
+    log Buf: int[n];
+    message M;
+    role R {
+        init S;
+        phase S {
+            when received >= t+1 M => {
+                append Buf t;
+                goto phase Done;
+            }
+        }
+        phase Done {}
+    }
+    property safe: safety {
+        forall p: R. p.Done == 0
+    }
+}
+"#;
+    let prog = parse(src, "param_append.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    let rules_with_updates: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| !r.collection_updates.is_empty())
+        .collect();
+    assert!(!rules_with_updates.is_empty());
+
+    let cu = &rules_with_updates[0].collection_updates[0];
+    match &cu.kind {
+        CollectionUpdateKind::Append(lc) => {
+            assert_eq!(lc.constant, 0);
+            assert_eq!(lc.terms.len(), 1, "Expected one parameter term for 't'");
+        }
+        other => panic!("Expected Append, got {:?}", other),
+    }
+}
+
+#[test]
+fn lower_unknown_collection_in_append_returns_error() {
+    let src = r#"
+protocol BadAppend {
+    params n, t;
+    resilience: n > 3*t;
+    message M;
+    role R {
+        init S;
+        phase S {
+            when received >= t+1 M => {
+                append NonExistent 1;
+                goto phase Done;
+            }
+        }
+        phase Done {}
+    }
+    property safe: safety {
+        forall p: R. p.Done == 0
+    }
+}
+"#;
+    let prog = parse(src, "bad_append.trs").unwrap();
+    let result = lower(&prog);
+    assert!(result.is_err(), "Appending to nonexistent collection should fail");
+    let msg = format!("{}", result.unwrap_err());
+    assert!(
+        msg.contains("NonExistent"),
+        "Error should mention the unknown collection name"
+    );
+}
