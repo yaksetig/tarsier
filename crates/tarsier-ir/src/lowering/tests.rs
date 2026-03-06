@@ -3017,4 +3017,46 @@ protocol FifoTest {
     assert_eq!(coll.name, "MsgQueue");
     assert_eq!(coll.kind, IrCollectionKind::FifoChannel);
     assert_eq!(coll.element_type, "int");
+    assert_eq!(coll.queue_model, QueueModel::LinearFifo);
+}
+
+#[test]
+fn lower_log_and_sequence_have_no_queue_model() {
+    let src = r#"
+protocol CollTest {
+    params n, t;
+    resilience: n > 3*t;
+    log VoteHistory: int[n];
+    sequence Decisions: bool[10];
+    message Vote;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let prog = parse(src, "coll_test.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    assert_eq!(ta.collections.len(), 2);
+    assert_eq!(ta.collections[0].queue_model, QueueModel::None);
+    assert_eq!(ta.collections[1].queue_model, QueueModel::None);
+}
+
+#[test]
+fn collection_update_enqueue_dequeue_display() {
+    let enq = CollectionUpdate {
+        collection: CollectionId::new(0),
+        kind: CollectionUpdateKind::Enqueue(LinearCombination::constant(42)),
+    };
+    assert_eq!(format!("{enq}"), "c0.enqueue(42)");
+
+    let deq = CollectionUpdate {
+        collection: CollectionId::new(1),
+        kind: CollectionUpdateKind::Dequeue,
+    };
+    assert_eq!(format!("{deq}"), "c1.dequeue()");
 }

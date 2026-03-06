@@ -417,17 +417,39 @@ impl fmt::Display for IrCollectionKind {
     }
 }
 
+/// Queue state model for FIFO channels.
+///
+/// Tracks head (dequeue position) and tail (enqueue position) indices
+/// to enforce FIFO ordering and capacity constraints. The queue occupancy
+/// is `tail - head`, bounded by the collection's `capacity`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueueModel {
+    /// Not a queue — used for log and sequence collections.
+    None,
+    /// Unbounded-index FIFO queue: head and tail are monotonically increasing
+    /// integers. Occupancy = tail - head, bounded by capacity.
+    LinearFifo,
+}
+
+impl Default for QueueModel {
+    fn default() -> Self {
+        QueueModel::None
+    }
+}
+
 /// Bounded log or sequence specification in the IR.
 #[derive(Debug, Clone)]
 pub struct IrCollectionSpec {
     /// Name of this collection type.
     pub name: String,
-    /// Log or sequence.
+    /// Log, sequence, or FIFO channel.
     pub kind: IrCollectionKind,
     /// Element type name (e.g., "int", "bool", "Vote").
     pub element_type: String,
     /// Maximum capacity as a linear combination of parameters/constants.
     pub capacity: LinearCombination,
+    /// Queue state model (only meaningful for FifoChannel).
+    pub queue_model: QueueModel,
 }
 
 impl ThresholdAutomaton {
@@ -1056,6 +1078,10 @@ pub enum CollectionUpdateKind {
         index: LinearCombination,
         value: LinearCombination,
     },
+    /// Enqueue a value at the tail of a FIFO channel.
+    Enqueue(LinearCombination),
+    /// Dequeue (consume) the head element of a FIFO channel.
+    Dequeue,
 }
 
 impl fmt::Display for CollectionUpdate {
@@ -1065,6 +1091,10 @@ impl fmt::Display for CollectionUpdate {
             CollectionUpdateKind::SetAt { index, value } => {
                 write!(f, "c{}[{}] = {}", self.collection, index, value)
             }
+            CollectionUpdateKind::Enqueue(val) => {
+                write!(f, "c{}.enqueue({})", self.collection, val)
+            }
+            CollectionUpdateKind::Dequeue => write!(f, "c{}.dequeue()", self.collection),
         }
     }
 }

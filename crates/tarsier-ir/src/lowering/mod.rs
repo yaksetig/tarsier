@@ -414,11 +414,16 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             ast::CollectionKind::FifoChannel => IrCollectionKind::FifoChannel,
         };
         let capacity = lower_linear_expr_to_lc(&coll.capacity, &param_ids)?;
+        let queue_model = match kind {
+            IrCollectionKind::FifoChannel => QueueModel::LinearFifo,
+            _ => QueueModel::None,
+        };
         ta.add_collection(IrCollectionSpec {
             name: coll.name.clone(),
             kind,
             element_type: coll.element_type.clone(),
             capacity,
+            queue_model,
         });
     }
 

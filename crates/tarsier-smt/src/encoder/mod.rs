@@ -3968,6 +3968,7 @@ protocol BuggyBroadcast {
             kind: IrCollectionKind::Log,
             element_type: "int".into(),
             capacity: LinearCombination::param(ParamId::from(0)), // n
+            queue_model: QueueModel::None,
         });
 
         // Add an append rule (waiting->done appends to Votes)
@@ -4010,6 +4011,7 @@ protocol BuggyBroadcast {
             kind: IrCollectionKind::Log,
             element_type: "int".into(),
             capacity: LinearCombination::constant(5),
+            queue_model: QueueModel::None,
         });
 
         // The existing rule (waiting->done) appends to the log
@@ -4051,6 +4053,7 @@ protocol BuggyBroadcast {
             kind: IrCollectionKind::Sequence,
             element_type: "int".into(),
             capacity: LinearCombination::constant(10),
+            queue_model: QueueModel::None,
         });
 
         let cs: CounterSystem = ta.into();
@@ -4067,5 +4070,14 @@ protocol BuggyBroadcast {
         let step1_eq = assertions.iter().any(|a| a.contains("clen_2_0") && a.contains("clen_1_0"));
         assert!(step0_eq, "Unused collection length should be preserved step 0→1");
         assert!(step1_eq, "Unused collection length should be preserved step 1→2");
+    }
+
+    #[test]
+    fn queue_variable_naming_conventions() {
+        // Verify the queue head/tail variable naming follows conventions
+        assert_eq!(queue_head_var(0, 0), "qhead_0_0");
+        assert_eq!(queue_head_var(3, 1), "qhead_3_1");
+        assert_eq!(queue_tail_var(0, 0), "qtail_0_0");
+        assert_eq!(queue_tail_var(2, 5), "qtail_2_5");
     }
 }

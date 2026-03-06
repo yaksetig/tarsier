@@ -91,6 +91,16 @@ pub(super) fn coll_elem_var(step: usize, coll: usize, index: usize) -> String {
     format!("celem_{step}_{coll}_{index}")
 }
 
+/// Head index of FIFO queue `coll` at step `step`.
+pub(super) fn queue_head_var(step: usize, coll: usize) -> String {
+    format!("qhead_{step}_{coll}")
+}
+
+/// Tail index of FIFO queue `coll` at step `step`.
+pub(super) fn queue_tail_var(step: usize, coll: usize) -> String {
+    format!("qtail_{step}_{coll}")
+}
+
 /// Parse `__sent_g<N>` variable names back to their shared-var index.
 pub(super) fn parse_internal_sent_flag_var(name: &str) -> Option<usize> {
     name.strip_prefix("__sent_g")?.parse::<usize>().ok()
