@@ -29,6 +29,11 @@ formally verified model and a real-world implementation.
   properties to runtime monitoring obligations.
 - `obligations::generate_obligation_map(automaton, name, properties)` --
   Generate runtime monitoring obligations from verified safety properties.
+- `network_shim::InMemoryNetworkShim` -- Deterministic queue/shim primitives
+  for delay, drop, reorder, partition, and twin perturbations.
+- `network_shim::NetworkFaultAction` -- Fault action enum for active
+  perturbations (`delay_message`, `drop_message`, `reorder_channel`,
+  `partition_link`, `heal_partition`, `spawn_twin`, `retire_twin`).
 - `adapters` module -- Trace format adapters for different systems (native
   runtime traces, CometBFT, etcd-raft).
 

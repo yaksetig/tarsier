@@ -8,5 +8,6 @@
 pub mod adapters;
 pub mod checker;
 pub mod manifest;
+pub mod network_shim;
 pub mod obligations;
 pub mod replay;
