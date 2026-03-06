@@ -230,3 +230,7 @@ Columns:
 2026-03-06T14:40:00Z | 2 | REF-02 | DONE | commit 85a0465 tests=cargo test -p tarsier-ir -- refinement
 2026-03-06T14:45:00Z | 2 | REF-03 | CLAIM | taking task — implementing on agent2/ref-03 branch
 2026-03-06T14:45:00Z | 2 | REF-03 | START | implementation started
+2026-03-06T14:55:00Z | 2 | REF-03 | PR_OPEN | agent2/ref-03 07cd003 product automaton construction (locations, rules, merging, mismatches)
+2026-03-06T14:55:00Z | 2 | REF-03 | DONE | commit 07cd003 tests=cargo test -p tarsier-ir -- product
+2026-03-06T15:00:00Z | 2 | REF-04 | CLAIM | taking task — implementing on agent2/ref-04 branch
+2026-03-06T15:00:00Z | 2 | REF-04 | START | implementation started
