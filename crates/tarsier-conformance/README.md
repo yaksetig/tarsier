@@ -33,6 +33,8 @@ formally verified model and a real-world implementation.
   Convert model counterexamples into executable active fault schedules.
 - `active::ActiveScenario` -- Serializable scenario artifact for active
   conformance/adversarial replay flows.
+- `network_shim::InMemoryNetworkShim` -- Deterministic queue/shim primitives
+  for delay, drop, reorder, partition, and twin perturbations.
 - `adapters` module -- Trace format adapters for different systems (native
   runtime traces, CometBFT, etcd-raft).
 
