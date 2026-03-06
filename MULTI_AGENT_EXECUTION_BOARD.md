@@ -163,3 +163,4 @@ Columns:
 2026-03-06T07:10:00Z | 2 | LOG-04 | DONE | SMT collection length vars (clen_k_c), capacity bounds, append delta encoding, test (commit ba6a7d1)
 2026-03-06T07:15:00Z | 2 | LOG-05 | CLAIM | taking task
 2026-03-06T07:15:00Z | 2 | LOG-05 | START | implementation started
+2026-03-06T07:30:00Z | 2 | LOG-05 | DONE | E2E lowering tests, SMT encoding tests, demo protocol fix, error-path test (commit c858cd8)
