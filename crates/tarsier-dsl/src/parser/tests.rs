@@ -1170,6 +1170,26 @@ module M {
     );
 }
 
+#[test]
+fn parse_module_rejects_refines_inside() {
+    let src = r#"
+protocol P {
+module M {
+    refines "base.trs";
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    message M;
+    role R { init s; phase s {} }
+}
+}
+"#;
+    let err = parse(src, "test.trs").unwrap_err();
+    assert!(
+        matches!(err, ParseError::UnsupportedInModule { .. }),
+        "expected UnsupportedInModule for refines, got: {err:?}"
+    );
+}
+
 // ---------------------------------------------------------------
 // parse_import / resolve_imports tests
 // ---------------------------------------------------------------
@@ -1211,6 +1231,47 @@ role R { init s; phase s {} }
     assert_eq!(prog.protocol.node.imports[0].path, "types.trs");
     assert_eq!(prog.protocol.node.imports[1].name, "Roles");
     assert_eq!(prog.protocol.node.imports[1].path, "roles.trs");
+}
+
+#[test]
+fn parse_refines_declaration() {
+    let src = r#"
+protocol P {
+refines "base_protocol.trs";
+params n, t;
+resilience: n > 3*t;
+message M;
+role R { init s; phase s {} }
+}
+"#;
+    let prog = parse(src, "test.trs").expect("parse should succeed");
+    let refines = prog
+        .protocol
+        .node
+        .refines
+        .as_ref()
+        .expect("refines declaration should be present");
+    assert_eq!(refines.path, "base_protocol.trs");
+    assert!(refines.span.start < refines.span.end);
+}
+
+#[test]
+fn parse_duplicate_refines_fails() {
+    let src = r#"
+protocol P {
+refines "a.trs";
+refines "b.trs";
+params n, t;
+resilience: n > 3*t;
+message M;
+role R { init s; phase s {} }
+}
+"#;
+    let err = parse(src, "dup_refines.trs").expect_err("duplicate refines should fail");
+    assert!(
+        err.to_string().contains("Duplicate refines declaration"),
+        "unexpected error: {err:?}"
+    );
 }
 
 #[test]
@@ -2315,6 +2376,7 @@ const DSL_KEYWORDS: &[&str] = &[
     "justify",
     "module",
     "import",
+    "refines",
     "channel",
     "equivocation",
     "identity",
