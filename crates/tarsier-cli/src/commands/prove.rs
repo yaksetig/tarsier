@@ -1642,6 +1642,44 @@ fn run_prove_fair_single(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tarsier_engine::result::{CtiClassification, InductionCtiSummary};
+
+    fn sample_assist_source() -> &'static str {
+        r#"
+protocol AssistDemo {
+parameters { n: nat; t: nat; }
+resilience { n > 3*t; }
+message Vote;
+role Node {
+    var decided: bool = false;
+    init Init;
+    phase Init {}
+}
+property agreement: agreement {
+    forall p: Node. forall q: Node. p.decided == q.decided
+}
+}
+"#
+    }
+
+    fn sample_not_proved_result() -> UnboundedSafetyResult {
+        UnboundedSafetyResult::NotProved {
+            max_k: 3,
+            cti: Some(InductionCtiSummary {
+                k: 3,
+                params: vec![("n".to_string(), 4), ("t".to_string(), 1)],
+                hypothesis_locations: vec![("Node::Init".to_string(), 4)],
+                hypothesis_shared: vec![],
+                violating_locations: vec![("Node::Bad".to_string(), 1)],
+                violating_shared: vec![],
+                final_step_rules: vec![("Node::Init -> Node::Init".to_string(), 1)],
+                violated_condition: "agreement violated".to_string(),
+                classification: CtiClassification::LikelySpurious,
+                classification_evidence: vec!["inductive step SAT".to_string()],
+                rationale: "needs auxiliary invariants".to_string(),
+            }),
+        }
+    }
 
     #[test]
     fn sanitize_assist_formula_strips_fence_and_wrapper() {
@@ -1689,5 +1727,56 @@ mod tests {
         assert_eq!(value["rerun"]["attempted"], true);
         assert_eq!(value["rerun"]["results"][0]["result"], "safe");
         assert_eq!(value["rerun"]["errors"][0]["reason"], "timeout");
+    }
+
+    #[test]
+    fn collect_assist_report_with_mock_provider_rejects_unparseable_candidates() {
+        let options = PipelineOptions::default();
+        let assist = ProveAssistConfig {
+            provider: AssistProviderKind::Mock,
+            max_suggestions: 2,
+            payload_out: None,
+        };
+
+        let report = collect_assist_suggestions_report(
+            sample_assist_source(),
+            "assist_mock.trs",
+            &options,
+            &sample_not_proved_result(),
+            Some(&assist),
+        )
+        .expect("assist report should be collected")
+        .expect("report should be present");
+
+        assert_eq!(report.provider, AssistProviderKind::Mock);
+        assert!(report.raw_count > 0);
+        assert!(report.validated.is_empty());
+        assert!(!report.rejected.is_empty());
+        assert!(report.rerun_results.is_empty());
+    }
+
+    #[test]
+    fn collect_assist_report_with_openai_provider_surfaces_failure() {
+        let options = PipelineOptions::default();
+        let assist = ProveAssistConfig {
+            provider: AssistProviderKind::OpenAi,
+            max_suggestions: 2,
+            payload_out: None,
+        };
+
+        let report = collect_assist_suggestions_report(
+            sample_assist_source(),
+            "assist_openai.trs",
+            &options,
+            &sample_not_proved_result(),
+            Some(&assist),
+        )
+        .expect("assist report should be collected")
+        .expect("report should be present");
+
+        assert_eq!(report.provider, AssistProviderKind::OpenAi);
+        assert_eq!(report.raw_count, 0);
+        assert!(!report.rejected.is_empty());
+        assert!(report.rejected[0].1.contains("provider failed"));
     }
 }
