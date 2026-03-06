@@ -170,3 +170,19 @@ Columns:
 2026-03-06T07:45:00Z | 2 | TWIN-01 | REVIEW_PASS | ActiveScenario/FaultAction/ScheduleInjector API well-structured, 6 tests cover ordering/errors/mapping
 2026-03-06T07:45:00Z | 2 | TWIN-02 | REVIEW_START | reviewing Agent 1's TWIN-02 implementation (on codex/agent1-twin-02)
 2026-03-06T07:50:00Z | 2 | TWIN-02 | REVIEW_PASS | scenario_from_counterexample correctly maps Trace steps to ActiveScenario faults with bound enforcement
+2026-03-06T12:24:35Z | 1 | INV-01 | RELEASE | released due lane realignment (Agent-1 now AI/TWIN only)
+2026-03-06T12:24:35Z | 1 | AI-01 | RELEASE | temporarily released while resolving blocked state under one-active-task policy
+2026-03-06T12:24:35Z | 1 | TWIN-03 | CLAIM | taking task
+2026-03-06T12:24:35Z | 1 | TWIN-03 | START | implementation started
+2026-03-06T12:26:00Z | 2 | FIFO-01 | RELEASE | released previous withdrawn claim; re-implementing on agent2/fifo-01 branch
+2026-03-06T12:26:00Z | 2 | REF-01 | RELEASE | released previous withdrawn claim; will re-claim after FIFO-01
+2026-03-06T12:26:00Z | 2 | FIFO-01 | CLAIM | taking task — implementing on agent2/fifo-01 branch
+2026-03-06T12:26:00Z | 2 | FIFO-01 | START | implementation started
+2026-03-06T12:30:00Z | 2 | FIFO-01 | PR_OPEN | agent2/fifo-01 91948d3 fifo_channel DSL+parser+IR support
+2026-03-06T12:30:00Z | 2 | FIFO-01 | DONE | commit 91948d3 tests=cargo test -p tarsier-dsl -- parse_fifo && cargo test -p tarsier-ir -- lower_fifo
+2026-03-06T12:27:40Z | 1 | TWIN-03 | BLOCKED | workspace unexpectedly on agent2/fifo-01 with unowned edits in tarsier-dsl/tarsier-ir; overlap risk with Agent-2 lane
+2026-03-06T12:27:40Z | 1 | TWIN-03 | RELEASE | released due branch/workspace ownership conflict; awaiting clean Agent-1 worktree
+2026-03-06T12:29:55Z | 1 | TWIN-03 | CLAIM | taking task on clean worktree codex/agent1-twin-03-v4
+2026-03-06T12:29:55Z | 1 | TWIN-03 | START | implementation started in /Users/myaksetig/Desktop/Repos/tarsier-agent1-twin03
+2026-03-06T12:32:30Z | 1 | TWIN-03 | PR_OPEN | codex/agent1-twin-03-v4 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-twin-03-v4 network shim primitives (delay/drop/reorder/partition/twin)
+2026-03-06T12:32:30Z | 1 | TWIN-03 | DONE | commit 14d277c tests=cargo test -p tarsier-conformance network_shim -- --nocapture && cargo check -p tarsier-conformance
