@@ -1045,6 +1045,11 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                 kind: CollectionUpdateKind::Dequeue,
                             });
                         }
+                        ast::Action::Reconfigure { .. } => {
+                            return Err(LoweringError::Unsupported(
+                                "reconfigure actions require the dynamic membership extension (RECONF-02+)".into(),
+                            ));
+                        }
                     }
                 }
 

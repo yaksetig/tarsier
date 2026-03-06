@@ -666,6 +666,14 @@ fn write_actions_go(
                 let pascal = to_pascal_case(collection);
                 writeln!(out, "{indent}s.{pascal} = s.{pascal}[1:]")?;
             }
+            Action::Reconfigure { updates } => {
+                writeln!(out, "{indent}// reconfigure (dynamic membership)")?;
+                for upd in updates {
+                    writeln!(out, "{indent}// TODO: {param} = {val}",
+                        param = upd.param,
+                        val = upd.value)?;
+                }
+            }
         }
     }
     Ok(())

@@ -686,6 +686,14 @@ fn write_actions(
                 let snake = to_snake_case(collection);
                 writeln!(out, "{indent}self.{snake}.pop_front();")?;
             }
+            Action::Reconfigure { updates } => {
+                writeln!(out, "{indent}// reconfigure (dynamic membership)")?;
+                for upd in updates {
+                    writeln!(out, "{indent}// TODO: {param} = {val};",
+                        param = upd.param,
+                        val = upd.value)?;
+                }
+            }
         }
     }
     Ok(())

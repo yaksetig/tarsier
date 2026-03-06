@@ -1205,6 +1205,18 @@ fn parse_transition(pair: Pair<'_>) -> Result<Spanned<TransitionRule>, ParseErro
                 let value = parse_expr(next_child(&mut item.into_inner(), "decide_action")?)?;
                 actions.push(Action::Decide { value });
             }
+            Rule::reconfigure_action => {
+                let mut updates = Vec::new();
+                for upd_pair in item.into_inner() {
+                    if upd_pair.as_rule() == Rule::reconfigure_update {
+                        let mut si = upd_pair.into_inner();
+                        let param = next_child(&mut si, "reconfigure_update")?.as_str().to_string();
+                        let value = parse_expr(next_child(&mut si, "reconfigure_update")?)?;
+                        updates.push(crate::ast::ReconfigureUpdate { param, value });
+                    }
+                }
+                actions.push(Action::Reconfigure { updates });
+            }
             _ => {}
         }
     }

@@ -545,6 +545,17 @@ pub enum Action {
     Decide {
         value: Expr,
     },
+    Reconfigure {
+        updates: Vec<ReconfigureUpdate>,
+    },
+}
+
+/// A single parameter update inside a `reconfigure { ... }` action.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
+pub struct ReconfigureUpdate {
+    pub param: String,
+    pub value: Expr,
 }
 
 /// Argument to a send action.

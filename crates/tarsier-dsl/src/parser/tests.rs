@@ -2841,3 +2841,62 @@ protocol QueueTest {
         if collection == "MsgQueue"
     ));
 }
+
+#[test]
+fn parse_reconfigure_action() {
+    let src = r#"
+protocol Reconfig {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    message Vote;
+    role Replica {
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                reconfigure {
+                    n = 10;
+                    t = 3;
+                }
+                goto phase waiting;
+            }
+        }
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let program = parse(src, "reconfig.trs").expect("should parse reconfigure");
+    let role = &program.protocol.node.roles[0].node;
+    let transition = &role.phases[0].node.transitions[0].node;
+    assert!(matches!(&transition.actions[0], Action::Reconfigure { updates } if updates.len() == 2));
+    if let Action::Reconfigure { updates } = &transition.actions[0] {
+        assert_eq!(updates[0].param, "n");
+        assert!(matches!(updates[0].value, Expr::IntLit(10)));
+        assert_eq!(updates[1].param, "t");
+        assert!(matches!(updates[1].value, Expr::IntLit(3)));
+    }
+}
+
+#[test]
+fn parse_reconfigure_empty() {
+    let src = r#"
+protocol Reconfig {
+    parameters { n: nat; }
+    resilience { n > 1; }
+    message Vote;
+    role Replica {
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                reconfigure {}
+                goto phase waiting;
+            }
+        }
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let program = parse(src, "reconfig_empty.trs").expect("should parse empty reconfigure");
+    let role = &program.protocol.node.roles[0].node;
+    let transition = &role.phases[0].node.transitions[0].node;
+    assert!(matches!(&transition.actions[0], Action::Reconfigure { updates } if updates.is_empty()));
+}
