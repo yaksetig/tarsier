@@ -148,3 +148,7 @@ Columns:
 2026-03-06T02:06:24Z | 1 | INV-01 | UNBLOCKED | tarsier-dsl parser now compiles; cargo check -p tarsier-engine passes
 2026-03-06T02:06:24Z | 1 | TWIN-01 | PR_OPEN | local patch ready (no remote PR yet); active harness API in tarsier-conformance
 2026-03-06T02:06:24Z | 1 | TWIN-01 | DONE | implemented active harness API + schedule injector interface; tests=cargo check -p tarsier-conformance && cargo test -p tarsier-conformance active:: -- --nocapture
+2026-03-06T02:39:07Z | 1 | REF-01 | CLAIM | taking task
+2026-03-06T02:39:07Z | 1 | REF-01 | START | implementation started
+2026-03-06T02:42:13Z | 1 | REF-01 | PR_OPEN | branch=codex/agent1-ref-01-v2 commit=a224ac6 local patch ready (no remote PR yet)
+2026-03-06T02:42:13Z | 1 | REF-01 | DONE | commit=a224ac6 tests=cargo test -p tarsier-dsl -- parse_refines_declaration parse_duplicate_refines_fails parse_module_rejects_refines_inside && cargo check -p tarsier-dsl && cargo check -p tarsier-cli && cargo check -p tarsier-codegen
