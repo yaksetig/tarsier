@@ -186,3 +186,5 @@ Columns:
 2026-03-06T12:29:55Z | 1 | TWIN-03 | START | implementation started in /Users/myaksetig/Desktop/Repos/tarsier-agent1-twin03
 2026-03-06T12:32:30Z | 1 | TWIN-03 | PR_OPEN | codex/agent1-twin-03-v4 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-twin-03-v4 network shim primitives (delay/drop/reorder/partition/twin)
 2026-03-06T12:32:30Z | 1 | TWIN-03 | DONE | commit 14d277c tests=cargo test -p tarsier-conformance network_shim -- --nocapture && cargo check -p tarsier-conformance
+2026-03-06T12:33:00Z | 2 | REF-01 | CLAIM | taking task — implementing on agent2/ref-01 branch
+2026-03-06T12:33:00Z | 2 | REF-01 | START | implementation started
