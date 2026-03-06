@@ -1036,6 +1036,34 @@ pub struct Rule {
     pub to: LocationId,
     pub guard: Guard,
     pub updates: Vec<Update>,
+    pub collection_updates: Vec<CollectionUpdate>,
+}
+
+/// An update to a bounded collection (log append or sequence set).
+#[derive(Debug, Clone)]
+pub struct CollectionUpdate {
+    pub collection: CollectionId,
+    pub kind: CollectionUpdateKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum CollectionUpdateKind {
+    Append(LinearCombination),
+    SetAt {
+        index: LinearCombination,
+        value: LinearCombination,
+    },
+}
+
+impl fmt::Display for CollectionUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            CollectionUpdateKind::Append(val) => write!(f, "c{}.append({})", self.collection, val),
+            CollectionUpdateKind::SetAt { index, value } => {
+                write!(f, "c{}[{}] = {}", self.collection, index, value)
+            }
+        }
+    }
 }
 
 /// Guard on a rule — conjunction of guard atoms.
@@ -1323,6 +1351,7 @@ mod tests {
                 var: SharedVarId::from(0),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
         ta.constraints.adversary_bound_param = Some(ParamId::from(2)); // f
         ta.constraints.resilience_condition = Some(LinearConstraint {
@@ -1361,6 +1390,7 @@ mod tests {
             to: LocationId::from(0),
             guard: Guard::trivial(),
             updates: vec![],
+            collection_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1380,6 +1410,7 @@ mod tests {
             to: LocationId::from(999),
             guard: Guard::trivial(),
             updates: vec![],
+            collection_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1404,6 +1435,7 @@ mod tests {
                 distinct: false,
             }),
             updates: vec![],
+            collection_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1428,6 +1460,7 @@ mod tests {
                 distinct: false,
             }),
             updates: vec![],
+            collection_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1450,6 +1483,7 @@ mod tests {
                 var: SharedVarId::from(999),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(

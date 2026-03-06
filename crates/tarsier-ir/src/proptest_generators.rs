@@ -114,6 +114,7 @@ pub fn arb_threshold_automaton() -> impl Strategy<Value = ThresholdAutomaton> {
                     to: LocationId::from(to),
                     guard,
                     updates,
+                    collection_updates: vec![],
                 });
             }
 

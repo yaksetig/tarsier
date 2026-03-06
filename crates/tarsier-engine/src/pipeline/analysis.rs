@@ -253,6 +253,7 @@ pub(super) fn apply_round_erasure_abstraction(
                     kind: update.kind.clone(),
                 })
                 .collect(),
+            collection_updates: rule.collection_updates.clone(),
         })
         .collect();
 
@@ -1666,6 +1667,7 @@ mod tests {
                     kind: UpdateKind::Increment,
                 },
             ],
+            collection_updates: vec![],
         });
         ta
     }

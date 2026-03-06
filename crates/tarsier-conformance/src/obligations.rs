@@ -175,12 +175,14 @@ mod tests {
             to: tarsier_ir::threshold_automaton::LocationId::from(1),
             guard: Guard::trivial(),
             updates: vec![],
+            collection_updates: vec![],
         });
         ta.add_rule(Rule {
             from: tarsier_ir::threshold_automaton::LocationId::from(0),
             to: tarsier_ir::threshold_automaton::LocationId::from(2),
             guard: Guard::trivial(),
             updates: vec![],
+            collection_updates: vec![],
         });
         ta
     }

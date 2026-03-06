@@ -1252,6 +1252,7 @@ mod tests {
                 var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
 
         ta
@@ -1322,6 +1323,7 @@ mod tests {
                 var: sig,
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
 
         ta
@@ -1471,6 +1473,7 @@ mod tests {
             to: 0.into(),
             guard: Guard::trivial(),
             updates: vec![],
+            collection_updates: vec![],
         });
         let cs = ta;
         let property = SafetyProperty::Agreement {
@@ -1521,6 +1524,7 @@ mod tests {
                 var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
         ta.add_rule(Rule {
             from: 0.into(),
@@ -1535,6 +1539,7 @@ mod tests {
                 var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
 
         let cs = ta;
@@ -2523,6 +2528,7 @@ mod tests {
                 var: vote,
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
         ta.add_rule(Rule {
             from: 0.into(),
@@ -2537,6 +2543,7 @@ mod tests {
                 var: qc,
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
 
         let cs = ta;
@@ -2590,6 +2597,7 @@ mod tests {
                     var: qc_false,
                     kind: UpdateKind::Increment,
                 }],
+                collection_updates: vec![],
             });
             ta.add_rule(Rule {
                 from: 0.into(),
@@ -2599,6 +2607,7 @@ mod tests {
                     var: qc_true,
                     kind: UpdateKind::Increment,
                 }],
+                collection_updates: vec![],
             });
             ta.security.crypto_objects.insert(
                 "QC".into(),
@@ -3044,6 +3053,7 @@ mod tests {
                 var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
 
         // With Full POR, duplicate should be pruned

@@ -573,6 +573,7 @@ mod tests {
             to: 0.into(),
             guard: Guard::trivial(),
             updates: vec![],
+                    collection_updates: vec![],
         });
         ta
     }

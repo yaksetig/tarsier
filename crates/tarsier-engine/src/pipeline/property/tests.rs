@@ -93,18 +93,21 @@ fn test_ta() -> ThresholdAutomaton {
         to: 1.into(),
         guard: Guard::trivial(),
         updates: vec![],
+                    collection_updates: vec![],
     });
     ta.rules.push(Rule {
         from: 1.into(),
         to: 2.into(),
         guard: Guard::trivial(),
         updates: vec![],
+                    collection_updates: vec![],
     });
     ta.rules.push(Rule {
         from: 3.into(),
         to: 3.into(),
         guard: Guard::trivial(),
         updates: vec![],
+                    collection_updates: vec![],
     });
     ta
 }

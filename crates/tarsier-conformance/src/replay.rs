@@ -247,6 +247,7 @@ mod tests {
                 var: SharedVarId::from(0),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
 
         ta
@@ -288,6 +289,7 @@ mod tests {
                     terms: vec![(4, ParamId::from(0)), (7, ParamId::from(1))],
                 }),
             }],
+            collection_updates: vec![],
         });
 
         ta

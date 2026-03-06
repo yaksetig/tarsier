@@ -688,6 +688,7 @@ mod tests {
                 var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
         ta.security.role_identities.insert(
             "Replica".to_string(),
@@ -992,6 +993,7 @@ mod tests {
                 var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
         let cs = ta;
         let model = test_model(&[

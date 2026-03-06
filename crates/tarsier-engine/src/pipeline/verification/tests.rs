@@ -490,6 +490,7 @@ fn make_default_program() -> ast::Program {
             node: ProtocolDecl {
                 name: "test".into(),
                 imports: vec![],
+                refines: None,
                 modules: vec![],
                 enums: vec![],
                 parameters: vec![],
@@ -759,6 +760,7 @@ fn is_pure_stutter_rule_detection() {
         to: 0.into(),
         guard: make_guard(vec![]),
         updates: vec![],
+        collection_updates: vec![],
     };
     assert!(is_pure_stutter_rule(&stutter));
 
@@ -767,6 +769,7 @@ fn is_pure_stutter_rule_detection() {
         to: 1.into(),
         guard: make_guard(vec![]),
         updates: vec![],
+        collection_updates: vec![],
     };
     assert!(!is_pure_stutter_rule(&non_stutter_move));
 
@@ -778,6 +781,7 @@ fn is_pure_stutter_rule_detection() {
             var: 0.into(),
             kind: UpdateKind::Increment,
         }],
+        collection_updates: vec![],
     };
     assert!(!is_pure_stutter_rule(&non_stutter_update));
 }
@@ -842,6 +846,7 @@ fn rules_independent_disjoint_locations_and_vars() {
             var: 0.into(),
             kind: UpdateKind::Increment,
         }],
+        collection_updates: vec![],
     };
     // Rule B: 2 -> 3 (role B), writes var 1
     let rule_b = Rule {
@@ -852,6 +857,7 @@ fn rules_independent_disjoint_locations_and_vars() {
             var: 1.into(),
             kind: UpdateKind::Increment,
         }],
+        collection_updates: vec![],
     };
     assert!(rules_independent(&ta, &rule_a, &rule_b));
 }
@@ -865,12 +871,14 @@ fn rules_not_independent_shared_location() {
         to: 1.into(),
         guard: make_guard(vec![]),
         updates: vec![],
+        collection_updates: vec![],
     };
     let rule_b = Rule {
         from: 0.into(),
         to: 1.into(),
         guard: make_guard(vec![]),
         updates: vec![],
+        collection_updates: vec![],
     };
     assert!(!rules_independent(&ta, &rule_a, &rule_b));
 }
@@ -887,6 +895,7 @@ fn rules_not_independent_write_read_conflict() {
             var: 0.into(),
             kind: UpdateKind::Increment,
         }],
+        collection_updates: vec![],
     };
     // Rule B: 2 -> 3, reads var 0 (in guard)
     let rule_b = Rule {
@@ -894,6 +903,7 @@ fn rules_not_independent_write_read_conflict() {
         to: 3.into(),
         guard: make_guard(vec![make_guard_atom(vec![0], CmpOp::Ge, 1, vec![], false)]),
         updates: vec![],
+        collection_updates: vec![],
     };
     assert!(!rules_independent(&ta, &rule_a, &rule_b));
 }

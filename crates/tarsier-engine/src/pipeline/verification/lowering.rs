@@ -764,6 +764,7 @@ mod tests {
         ast::ProtocolDecl {
             name: "Test".into(),
             imports: vec![],
+            refines: None,
             modules: vec![],
             enums: vec![],
             parameters: vec![],
@@ -1090,6 +1091,7 @@ mod tests {
             to: 0.into(),
             guard: Guard::trivial(),
             updates: vec![],
+            collection_updates: vec![],
         };
         assert!(is_pure_stutter_rule(&rule));
     }
@@ -1101,6 +1103,7 @@ mod tests {
             to: 1.into(),
             guard: Guard::trivial(),
             updates: vec![],
+            collection_updates: vec![],
         };
         assert!(!is_pure_stutter_rule(&rule));
     }
@@ -1115,6 +1118,7 @@ mod tests {
                 var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         };
         assert!(!is_pure_stutter_rule(&rule));
     }

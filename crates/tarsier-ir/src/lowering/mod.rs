@@ -1399,6 +1399,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     to: to_lid,
                                     guard: guard.clone(),
                                     updates: updates.clone(),
+                    collection_updates: vec![],
                                 });
                                 break;
                             }
@@ -1477,6 +1478,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     to: to_lid,
                                     guard: Guard::trivial(),
                                     updates: Vec::new(),
+                    collection_updates: vec![],
                                 });
                                 break;
                             }
@@ -1523,6 +1525,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     var: crash_counter_var,
                                     kind: UpdateKind::Increment,
                                 }],
+                                collection_updates: vec![],
                             });
                             break;
                         }
@@ -1569,6 +1572,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     to: to_lid,
                                     guard: Guard::trivial(),
                                     updates: vec![],
+                    collection_updates: vec![],
                                 });
                                 break;
                             }
@@ -1580,6 +1584,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             to: init_lid,
                             guard: Guard::trivial(),
                             updates: vec![],
+                    collection_updates: vec![],
                         });
                     }
                 }

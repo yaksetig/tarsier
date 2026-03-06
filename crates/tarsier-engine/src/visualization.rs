@@ -733,6 +733,7 @@ mod tests {
                 var: 0.into(),
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
 
         let trace = Trace {
@@ -837,6 +838,7 @@ mod tests {
                 var: qc_var,
                 kind: UpdateKind::Increment,
             }],
+            collection_updates: vec![],
         });
 
         let trace = Trace {

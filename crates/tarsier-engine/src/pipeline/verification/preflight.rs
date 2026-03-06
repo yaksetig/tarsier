@@ -903,6 +903,7 @@ mod tests {
         let proto = ast::ProtocolDecl {
             name: "Test".into(),
             imports: vec![],
+            refines: None,
             modules: vec![],
             enums: vec![],
             parameters: vec![],
@@ -932,6 +933,7 @@ mod tests {
         let proto = ast::ProtocolDecl {
             name: "Test".into(),
             imports: vec![],
+            refines: None,
             modules: vec![],
             enums: vec![],
             parameters: vec![],
@@ -957,6 +959,7 @@ mod tests {
         let proto = ast::ProtocolDecl {
             name: "Test".into(),
             imports: vec![],
+            refines: None,
             modules: vec![],
             enums: vec![],
             parameters: vec![],
@@ -987,6 +990,7 @@ mod tests {
         let proto = ast::ProtocolDecl {
             name: "Test".into(),
             imports: vec![],
+            refines: None,
             modules: vec![],
             enums: vec![],
             parameters: vec![],

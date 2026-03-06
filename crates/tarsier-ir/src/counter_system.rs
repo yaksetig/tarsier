@@ -309,6 +309,7 @@ mod tests {
             to: 1.into(),
             guard: Guard::trivial(),
             updates: vec![],
+                    collection_updates: vec![],
         });
 
         let cs: CounterSystem = ta;

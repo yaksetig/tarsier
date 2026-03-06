@@ -522,6 +522,7 @@ mod tests {
                 distinct: false,
             }),
             updates: vec![],
+            collection_updates: vec![],
         });
 
         // Rule 1: L0 -> L2, trivial guard
@@ -530,6 +531,7 @@ mod tests {
             to: LocationId::from(2),
             guard: Guard::trivial(),
             updates: vec![],
+            collection_updates: vec![],
         });
 
         ta
