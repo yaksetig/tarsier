@@ -704,3 +704,180 @@ fn find_enum_init_insertion(
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Program {
+        tarsier_dsl::parse_with_diagnostics(src, "test.trs")
+            .unwrap()
+            .0
+    }
+
+    #[test]
+    fn levenshtein_identical() {
+        assert_eq!(levenshtein("abc", "abc"), 0);
+    }
+
+    #[test]
+    fn levenshtein_empty() {
+        assert_eq!(levenshtein("", ""), 0);
+        assert_eq!(levenshtein("abc", ""), 3);
+        assert_eq!(levenshtein("", "xyz"), 3);
+    }
+
+    #[test]
+    fn levenshtein_one_edit() {
+        assert_eq!(levenshtein("abc", "axc"), 1);
+        assert_eq!(levenshtein("abc", "ab"), 1);
+        assert_eq!(levenshtein("abc", "abcd"), 1);
+    }
+
+    #[test]
+    fn find_closest_match() {
+        let candidates = vec!["waiting".into(), "done".into(), "echo".into()];
+        assert_eq!(find_closest("waitng", &candidates), Some("waiting".into()));
+        assert_eq!(find_closest("don", &candidates), Some("done".into()));
+    }
+
+    #[test]
+    fn find_closest_no_match() {
+        let candidates = vec!["waiting".into(), "done".into()];
+        assert_eq!(find_closest("zzzzz", &candidates), None);
+    }
+
+    #[test]
+    fn extract_quoted_name_basic() {
+        assert_eq!(
+            extract_quoted_name("Unknown phase 'foobar' in goto"),
+            Some("foobar".into())
+        );
+    }
+
+    #[test]
+    fn extract_quoted_name_no_quotes() {
+        assert_eq!(extract_quoted_name("No quotes here"), None);
+    }
+
+    #[test]
+    fn extract_second_quoted_name_basic() {
+        assert_eq!(
+            extract_second_quoted_name("Unknown enum variant 'foo' for enum 'Status'"),
+            Some("Status".into())
+        );
+    }
+
+    #[test]
+    fn extract_second_quoted_name_only_one() {
+        assert_eq!(extract_second_quoted_name("Only 'one' quote pair"), None);
+    }
+
+    #[test]
+    fn collect_phase_names_from_program() {
+        let src = r#"protocol P {
+    message Echo;
+    role Node {
+        init waiting;
+        phase waiting {
+            when received >= 1 Echo => { goto phase done; }
+        }
+        phase done {}
+    }
+}"#;
+        let program = parse(src);
+        let names = collect_phase_names(&program);
+        assert!(names.contains(&"waiting".to_string()));
+        assert!(names.contains(&"done".to_string()));
+    }
+
+    #[test]
+    fn build_document_symbols_protocol_root() {
+        let src = r#"protocol TestProto {
+    message Echo;
+    role Node {
+        init w;
+        phase w {
+            when received >= 1 Echo => { goto phase w; }
+        }
+    }
+}"#;
+        let program = parse(src);
+        let symbols = build_document_symbols(src, &program);
+        assert_eq!(symbols.len(), 1);
+        assert_eq!(symbols[0].name, "TestProto");
+        assert_eq!(symbols[0].kind, SymbolKind::MODULE);
+        assert!(symbols[0].children.is_some());
+    }
+
+    #[test]
+    fn build_document_symbols_has_message_and_role() {
+        let src = r#"protocol P {
+    message Echo;
+    role Node {
+        init w;
+        phase w {
+            when received >= 1 Echo => { goto phase w; }
+        }
+    }
+}"#;
+        let program = parse(src);
+        let symbols = build_document_symbols(src, &program);
+        let children = symbols[0].children.as_ref().unwrap();
+        let names: Vec<&str> = children.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains(&"Echo"));
+        assert!(names.contains(&"Node"));
+    }
+
+    #[test]
+    fn build_document_symbols_role_has_phase_children() {
+        let src = r#"protocol P {
+    message Echo;
+    role Node {
+        var x: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= 1 Echo => { goto phase waiting; }
+        }
+    }
+}"#;
+        let program = parse(src);
+        let symbols = build_document_symbols(src, &program);
+        let children = symbols[0].children.as_ref().unwrap();
+        let role = children.iter().find(|c| c.name == "Node").unwrap();
+        let role_children = role.children.as_ref().unwrap();
+        let role_child_names: Vec<&str> = role_children.iter().map(|c| c.name.as_str()).collect();
+        assert!(role_child_names.contains(&"waiting"));
+        assert!(role_child_names.contains(&"x"));
+    }
+
+    #[test]
+    fn build_code_actions_empty_diagnostics() {
+        let uri = Url::parse("file:///test.trs").unwrap();
+        let actions = build_code_actions(&uri, "protocol P {}", None, &[]);
+        assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn build_document_symbols_params() {
+        let src = r#"protocol P {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    message Echo;
+    role Node {
+        init w;
+        phase w {
+            when received >= 1 Echo => { goto phase w; }
+        }
+    }
+}"#;
+        let program = parse(src);
+        let symbols = build_document_symbols(src, &program);
+        let children = symbols[0].children.as_ref().unwrap();
+        let param_symbols: Vec<_> = children
+            .iter()
+            .filter(|c| c.kind == SymbolKind::CONSTANT)
+            .collect();
+        assert_eq!(param_symbols.len(), 2);
+    }
+}

@@ -296,3 +296,114 @@ pub(crate) fn build_semantic_tokens(
         data: tokens,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Program {
+        tarsier_dsl::parse_with_diagnostics(src, "test.trs").unwrap().0
+    }
+
+    #[test]
+    fn test_legend_has_expected_types() {
+        let legend = semantic_tokens_legend();
+        assert!(legend.token_types.contains(&SemanticTokenType::KEYWORD));
+        assert!(legend.token_types.contains(&SemanticTokenType::TYPE));
+        assert!(legend.token_types.contains(&SemanticTokenType::VARIABLE));
+        assert!(legend.token_types.contains(&SemanticTokenType::NUMBER));
+    }
+
+    #[test]
+    fn test_keyword_classified_correctly() {
+        let candidates = collect_semantic_token_candidates("protocol", None);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].token_type, SEMANTIC_TOKEN_KEYWORD);
+    }
+
+    #[test]
+    fn test_multiple_keywords() {
+        let candidates = collect_semantic_token_candidates("protocol role phase", None);
+        let keywords: Vec<_> = candidates.iter().filter(|c| c.token_type == SEMANTIC_TOKEN_KEYWORD).collect();
+        assert_eq!(keywords.len(), 3);
+    }
+
+    #[test]
+    fn test_numeric_literal_classified() {
+        let candidates = collect_semantic_token_candidates("42", None);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].token_type, SEMANTIC_TOKEN_NUMBER);
+    }
+
+    #[test]
+    fn test_operator_classified() {
+        let candidates = collect_semantic_token_candidates(">=", None);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].token_type, SEMANTIC_TOKEN_OPERATOR);
+    }
+
+    #[test]
+    fn test_string_literal_classified() {
+        let candidates = collect_semantic_token_candidates(r#""hello""#, None);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].token_type, SEMANTIC_TOKEN_STRING);
+    }
+
+    #[test]
+    fn test_definition_names_get_type_token() {
+        let src = "protocol P {\n    message Echo;\n    role Node {\n        init w;\n        phase w {\n            when received >= 1 Echo => { goto phase w; }\n        }\n    }\n}";
+        let program = parse(src);
+        let candidates = collect_semantic_token_candidates(src, Some(&program));
+        let echo_tokens: Vec<_> = candidates.iter().filter(|c| &src[c.start..c.end] == "Echo").collect();
+        assert!(!echo_tokens.is_empty());
+        for tok in &echo_tokens {
+            assert_eq!(tok.token_type, SEMANTIC_TOKEN_TYPE);
+        }
+    }
+
+    #[test]
+    fn test_line_comment_skipped() {
+        let candidates = collect_semantic_token_candidates("// comment\nprotocol", None);
+        let kw: Vec<_> = candidates.iter().filter(|c| c.token_type == SEMANTIC_TOKEN_KEYWORD).collect();
+        assert_eq!(kw.len(), 1);
+    }
+
+    #[test]
+    fn test_block_comment_skipped() {
+        let candidates = collect_semantic_token_candidates("/* block */ protocol", None);
+        let kw: Vec<_> = candidates.iter().filter(|c| c.token_type == SEMANTIC_TOKEN_KEYWORD).collect();
+        assert_eq!(kw.len(), 1);
+    }
+
+    #[test]
+    fn test_build_semantic_tokens_delta_encoding() {
+        let tokens = build_semantic_tokens("protocol P {\n    role Node {\n    }\n}", None, None);
+        assert!(!tokens.data.is_empty());
+        assert_eq!(tokens.data[0].delta_line, 0);
+        assert_eq!(tokens.data[0].delta_start, 0);
+    }
+
+    #[test]
+    fn test_semantic_token_type_for_definition_coverage() {
+        assert_eq!(semantic_token_type_for_definition(&DefinitionKind::Message), SEMANTIC_TOKEN_TYPE);
+        assert_eq!(semantic_token_type_for_definition(&DefinitionKind::Phase), SEMANTIC_TOKEN_FUNCTION);
+        assert_eq!(semantic_token_type_for_definition(&DefinitionKind::Param), SEMANTIC_TOKEN_PROPERTY);
+        assert_eq!(semantic_token_type_for_definition(&DefinitionKind::Var), SEMANTIC_TOKEN_VARIABLE);
+    }
+
+    #[test]
+    fn test_floating_point_number_classified() {
+        let candidates = collect_semantic_token_candidates("1.5e-3", None);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].token_type, SEMANTIC_TOKEN_NUMBER);
+    }
+
+    #[test]
+    fn test_range_filter_limits_tokens() {
+        let src = "protocol P {\n    role Node {\n    }\n}";
+        let filter = Range::new(Position::new(1, 0), Position::new(2, 0));
+        let tokens = build_semantic_tokens(src, None, Some(&filter));
+        let full = build_semantic_tokens(src, None, None);
+        assert!(tokens.data.len() <= full.data.len());
+    }
+}

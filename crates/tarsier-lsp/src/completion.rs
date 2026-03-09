@@ -339,3 +339,123 @@ pub(crate) fn build_completions(
 
     items
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_context_top_level() {
+        let src = "protocol Foo {\n    ";
+        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::TopLevel);
+    }
+
+    #[test]
+    fn test_context_role_level() {
+        let src = "protocol P {\n    role Node {\n        ";
+        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::RoleLevel);
+    }
+
+    #[test]
+    fn test_context_phase_level() {
+        let src = "protocol P {\n    role Node {\n        phase waiting {\n            ";
+        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::PhaseLevel);
+    }
+
+    #[test]
+    fn test_context_action_level() {
+        let src = "protocol P {\n    role Node {\n        phase w {\n            when true => {\n                ";
+        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::ActionLevel);
+    }
+
+    #[test]
+    fn test_context_after_colon() {
+        let src = "protocol P {\n    role Node {\n        var x:";
+        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::AfterColon);
+    }
+
+    #[test]
+    fn test_context_after_property_colon() {
+        let src = "protocol P {\n    property agr:";
+        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::AfterPropertyColon);
+    }
+
+    #[test]
+    fn test_context_unknown_outside_protocol() {
+        assert_eq!(infer_cursor_context("", 0), CursorContext::Unknown);
+    }
+
+    #[test]
+    fn test_top_level_completions_include_keywords() {
+        let items = build_completions(&CursorContext::TopLevel, None);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"role"));
+        assert!(labels.contains(&"message"));
+        assert!(labels.contains(&"parameters"));
+        assert!(labels.contains(&"property"));
+    }
+
+    #[test]
+    fn test_role_level_completions() {
+        let items = build_completions(&CursorContext::RoleLevel, None);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"var"));
+        assert!(labels.contains(&"init"));
+        assert!(labels.contains(&"phase"));
+    }
+
+    #[test]
+    fn test_phase_level_completions() {
+        let items = build_completions(&CursorContext::PhaseLevel, None);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"when"));
+        assert!(labels.contains(&"received"));
+    }
+
+    #[test]
+    fn test_action_level_completions_with_program() {
+        let src = "protocol P {\n    message Echo;\n    role Node {\n        init waiting;\n        phase waiting {\n            when received >= 1 Echo => { goto phase waiting; }\n        }\n    }\n}";
+        let (program, _) = tarsier_dsl::parse_with_diagnostics(src, "test.trs").unwrap();
+        let items = build_completions(&CursorContext::ActionLevel, Some(&program));
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"send"));
+        assert!(labels.contains(&"goto phase"));
+        assert!(labels.contains(&"Echo"));
+        assert!(labels.contains(&"waiting"));
+    }
+
+    #[test]
+    fn test_after_colon_completions_include_types() {
+        let items = build_completions(&CursorContext::AfterColon, None);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"bool"));
+        assert!(labels.contains(&"nat"));
+        assert!(labels.contains(&"int"));
+    }
+
+    #[test]
+    fn test_after_colon_completions_include_enums() {
+        let src = "protocol P {\n    enum Status { idle, active }\n}";
+        let (program, _) = tarsier_dsl::parse_with_diagnostics(src, "test.trs").unwrap();
+        let items = build_completions(&CursorContext::AfterColon, Some(&program));
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"Status"));
+    }
+
+    #[test]
+    fn test_after_property_colon_completions() {
+        let items = build_completions(&CursorContext::AfterPropertyColon, None);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"agreement"));
+        assert!(labels.contains(&"safety"));
+        assert!(labels.contains(&"liveness"));
+    }
+
+    #[test]
+    fn test_formula_context_completions() {
+        let items = build_completions(&CursorContext::FormulaContext, None);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"forall"));
+        assert!(labels.contains(&"exists"));
+    }
+}

@@ -397,3 +397,368 @@ pub(super) fn build_message_policy_overrides(
 
     Ok(policies)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fault_model_byzantine() {
+        assert!(matches!(
+            parse_fault_model("byzantine"),
+            Ok(FaultModel::Byzantine)
+        ));
+    }
+
+    #[test]
+    fn fault_model_crash_aliases() {
+        assert!(matches!(parse_fault_model("crash"), Ok(FaultModel::Crash)));
+        assert!(matches!(
+            parse_fault_model("crash_stop"),
+            Ok(FaultModel::Crash)
+        ));
+    }
+
+    #[test]
+    fn fault_model_crash_recovery() {
+        assert!(matches!(
+            parse_fault_model("crash_recovery"),
+            Ok(FaultModel::CrashRecovery)
+        ));
+    }
+
+    #[test]
+    fn fault_model_omission() {
+        assert!(matches!(
+            parse_fault_model("omission"),
+            Ok(FaultModel::Omission)
+        ));
+    }
+
+    #[test]
+    fn fault_model_unknown_returns_error() {
+        assert!(parse_fault_model("unknown").is_err());
+    }
+
+    #[test]
+    fn timing_model_async_aliases() {
+        assert!(matches!(
+            parse_timing_model("async"),
+            Ok(TimingModel::Asynchronous)
+        ));
+        assert!(matches!(
+            parse_timing_model("asynchronous"),
+            Ok(TimingModel::Asynchronous)
+        ));
+    }
+
+    #[test]
+    fn timing_model_partial_sync_aliases() {
+        assert!(matches!(
+            parse_timing_model("partial_synchrony"),
+            Ok(TimingModel::PartialSynchrony)
+        ));
+        assert!(matches!(
+            parse_timing_model("partial_sync"),
+            Ok(TimingModel::PartialSynchrony)
+        ));
+    }
+
+    #[test]
+    fn timing_model_unknown_returns_error() {
+        assert!(parse_timing_model("sync").is_err());
+    }
+
+    #[test]
+    fn value_abstraction_exact_and_sign() {
+        assert!(matches!(
+            parse_value_abstraction_mode("exact"),
+            Ok(ValueAbstractionMode::Exact)
+        ));
+        assert!(matches!(
+            parse_value_abstraction_mode("sign"),
+            Ok(ValueAbstractionMode::Sign)
+        ));
+    }
+
+    #[test]
+    fn value_abstraction_unknown_returns_error() {
+        assert!(parse_value_abstraction_mode("interval").is_err());
+    }
+
+    #[test]
+    fn equivocation_full_aliases() {
+        for alias in &["full", "enabled", "on"] {
+            assert!(matches!(
+                parse_equivocation_mode(alias),
+                Ok(EquivocationMode::Full)
+            ));
+        }
+    }
+
+    #[test]
+    fn equivocation_none_aliases() {
+        for alias in &["none", "disabled", "off"] {
+            assert!(matches!(
+                parse_equivocation_mode(alias),
+                Ok(EquivocationMode::None)
+            ));
+        }
+    }
+
+    #[test]
+    fn auth_mode_none_aliases() {
+        assert!(matches!(
+            parse_authentication_mode("none"),
+            Ok(AuthenticationMode::None)
+        ));
+        assert!(matches!(
+            parse_authentication_mode("off"),
+            Ok(AuthenticationMode::None)
+        ));
+    }
+
+    #[test]
+    fn auth_mode_signed_aliases() {
+        for alias in &["signed", "signature", "signatures", "authenticated"] {
+            assert!(matches!(
+                parse_authentication_mode(alias),
+                Ok(AuthenticationMode::Signed)
+            ));
+        }
+    }
+
+    #[test]
+    fn network_semantics_classic_aliases() {
+        for alias in &["classic", "counter", "legacy"] {
+            assert!(matches!(
+                parse_network_semantics(alias),
+                Ok(NetworkSemantics::Classic)
+            ));
+        }
+    }
+
+    #[test]
+    fn network_semantics_identity_selective_aliases() {
+        for alias in &[
+            "identity_selective",
+            "faithful",
+            "selective",
+            "selective_delivery",
+        ] {
+            assert!(matches!(
+                parse_network_semantics(alias),
+                Ok(NetworkSemantics::IdentitySelective)
+            ));
+        }
+    }
+
+    #[test]
+    fn network_semantics_process_selective() {
+        assert!(matches!(
+            parse_network_semantics("process_selective"),
+            Ok(NetworkSemantics::ProcessSelective)
+        ));
+        assert!(matches!(
+            parse_network_semantics("per_process"),
+            Ok(NetworkSemantics::ProcessSelective)
+        ));
+    }
+
+    #[test]
+    fn network_semantics_unknown_returns_error() {
+        assert!(parse_network_semantics("fully_connected").is_err());
+    }
+
+    #[test]
+    fn delivery_control_legacy_aliases() {
+        for alias in &["legacy", "legacy_counter", "counter"] {
+            assert!(matches!(
+                parse_delivery_control_mode(alias),
+                Ok(DeliveryControlMode::LegacyCounter)
+            ));
+        }
+    }
+
+    #[test]
+    fn delivery_control_per_recipient() {
+        assert!(matches!(
+            parse_delivery_control_mode("per_recipient"),
+            Ok(DeliveryControlMode::PerRecipient)
+        ));
+    }
+
+    #[test]
+    fn delivery_control_global() {
+        assert!(matches!(
+            parse_delivery_control_mode("global"),
+            Ok(DeliveryControlMode::Global)
+        ));
+    }
+
+    #[test]
+    fn fault_budget_scope_variants() {
+        assert!(matches!(
+            parse_fault_budget_scope("legacy"),
+            Ok(FaultBudgetScope::LegacyCounter)
+        ));
+        assert!(matches!(
+            parse_fault_budget_scope("per_recipient"),
+            Ok(FaultBudgetScope::PerRecipient)
+        ));
+        assert!(matches!(
+            parse_fault_budget_scope("global"),
+            Ok(FaultBudgetScope::Global)
+        ));
+    }
+
+    #[test]
+    fn por_mode_variants() {
+        assert!(matches!(parse_por_mode("full"), Ok(PorMode::Full)));
+        assert!(matches!(parse_por_mode("static"), Ok(PorMode::Static)));
+        assert!(matches!(parse_por_mode("off"), Ok(PorMode::Off)));
+        assert!(matches!(parse_por_mode("none"), Ok(PorMode::Off)));
+        assert!(matches!(parse_por_mode("disabled"), Ok(PorMode::Off)));
+    }
+
+    #[test]
+    fn por_mode_unknown_returns_error() {
+        assert!(parse_por_mode("dynamic").is_err());
+    }
+
+    #[test]
+    fn default_key_name_lowercased() {
+        assert_eq!(default_key_name_for_role("Leader"), "leader_key");
+        assert_eq!(default_key_name_for_role("Replica"), "replica_key");
+    }
+
+    #[test]
+    fn build_key_ownership_simple() {
+        let mut identities: IndexMap<String, RoleIdentityConfig> = IndexMap::new();
+        identities.insert(
+            "Leader".into(),
+            RoleIdentityConfig {
+                scope: RoleIdentityScope::Role,
+                process_var: None,
+                key_name: "leader_key".into(),
+            },
+        );
+        identities.insert(
+            "Replica".into(),
+            RoleIdentityConfig {
+                scope: RoleIdentityScope::Role,
+                process_var: None,
+                key_name: "replica_key".into(),
+            },
+        );
+        let owners = build_key_ownership(&identities).unwrap();
+        assert_eq!(owners.get("leader_key").unwrap(), "Leader");
+        assert_eq!(owners.get("replica_key").unwrap(), "Replica");
+    }
+
+    #[test]
+    fn build_key_ownership_duplicate_key_different_roles_fails() {
+        let mut identities: IndexMap<String, RoleIdentityConfig> = IndexMap::new();
+        identities.insert(
+            "Leader".into(),
+            RoleIdentityConfig {
+                scope: RoleIdentityScope::Role,
+                process_var: None,
+                key_name: "shared_key".into(),
+            },
+        );
+        identities.insert(
+            "Replica".into(),
+            RoleIdentityConfig {
+                scope: RoleIdentityScope::Role,
+                process_var: None,
+                key_name: "shared_key".into(),
+            },
+        );
+        assert!(build_key_ownership(&identities).is_err());
+    }
+
+    #[test]
+    fn validate_compromised_keys_known() {
+        let mut owners: IndexMap<String, String> = IndexMap::new();
+        owners.insert("leader_key".into(), "Leader".into());
+        let mut compromised = IndexSet::new();
+        compromised.insert("leader_key".into());
+        assert!(validate_compromised_keys(&compromised, &owners).is_ok());
+    }
+
+    #[test]
+    fn validate_compromised_keys_unknown_fails() {
+        let owners: IndexMap<String, String> = IndexMap::new();
+        let mut compromised = IndexSet::new();
+        compromised.insert("unknown_key".into());
+        assert!(validate_compromised_keys(&compromised, &owners).is_err());
+    }
+
+    #[test]
+    fn process_selective_channels_generates_channel_names() {
+        let role = ast::RoleDecl {
+            name: "Replica".into(),
+            is_leader: false,
+            vars: vec![ast::VarDecl {
+                name: "pid".into(),
+                ty: ast::VarType::Nat,
+                range: Some(ast::VarRange { min: 0, max: 2 }),
+                init: Some(ast::Expr::IntLit(0)),
+                span: ast::Span { start: 0, end: 0 },
+            }],
+            init_phase: Some("start".into()),
+            phases: vec![],
+        };
+        let channels = process_selective_channels_for_role(&role, "pid").unwrap();
+        assert_eq!(channels, vec!["Replica#0", "Replica#1", "Replica#2"]);
+    }
+
+    #[test]
+    fn process_selective_channels_missing_pid_var_fails() {
+        let role = ast::RoleDecl {
+            name: "Replica".into(),
+            is_leader: false,
+            vars: vec![],
+            init_phase: Some("start".into()),
+            phases: vec![],
+        };
+        assert!(process_selective_channels_for_role(&role, "pid").is_err());
+    }
+
+    #[test]
+    fn process_selective_channels_negative_min_fails() {
+        let role = ast::RoleDecl {
+            name: "Replica".into(),
+            is_leader: false,
+            vars: vec![ast::VarDecl {
+                name: "pid".into(),
+                ty: ast::VarType::Int,
+                range: Some(ast::VarRange { min: -1, max: 2 }),
+                init: Some(ast::Expr::IntLit(0)),
+                span: ast::Span { start: 0, end: 0 },
+            }],
+            init_phase: Some("start".into()),
+            phases: vec![],
+        };
+        assert!(process_selective_channels_for_role(&role, "pid").is_err());
+    }
+
+    #[test]
+    fn process_selective_channels_bool_type_fails() {
+        let role = ast::RoleDecl {
+            name: "Replica".into(),
+            is_leader: false,
+            vars: vec![ast::VarDecl {
+                name: "pid".into(),
+                ty: ast::VarType::Bool,
+                range: None,
+                init: Some(ast::Expr::BoolLit(false)),
+                span: ast::Span { start: 0, end: 0 },
+            }],
+            init_phase: Some("start".into()),
+            phases: vec![],
+        };
+        assert!(process_selective_channels_for_role(&role, "pid").is_err());
+    }
+}

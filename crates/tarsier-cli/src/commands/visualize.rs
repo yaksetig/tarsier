@@ -1080,3 +1080,367 @@ pub(crate) fn run_debug_cex_command(args: DebugCexCommandArgs) -> miette::Result
     run_trace_debugger(&cex.trace, cex.loop_start, ta.as_ref(), initial_filter)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tarsier_ir::counter_system::{
+        MessageAuthMetadata, MessageDeliveryEvent, MessageEventKind, MessageIdentity,
+        MessagePayloadVariant, SignatureProvenance,
+    };
+    use tarsier_ir::threshold_automaton::{LinearCombination, ParamId};
+
+    // -----------------------------------------------------------------------
+    // DebugFilter -- construction & is_active
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn debug_filter_default_inactive() {
+        let f = DebugFilter::default();
+        assert!(!f.is_active());
+    }
+
+    #[test]
+    fn debug_filter_sender_active() {
+        let f = DebugFilter {
+            sender_role: Some("Validator".into()),
+            ..Default::default()
+        };
+        assert!(f.is_active());
+    }
+
+    #[test]
+    fn debug_filter_all_active() {
+        let f = DebugFilter {
+            sender_role: Some("A".into()),
+            recipient_role: Some("B".into()),
+            message_family: Some("Vote".into()),
+            kind: Some("deliver".into()),
+            payload_variant: Some("x".into()),
+            payload_field: Some(("k".into(), "v".into())),
+            auth: Some("authenticated".into()),
+        };
+        assert!(f.is_active());
+    }
+
+    // -----------------------------------------------------------------------
+    // DebugFilter -- summary
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn debug_filter_summary_none() {
+        let f = DebugFilter::default();
+        assert_eq!(f.summary(), "(none)");
+    }
+
+    #[test]
+    fn debug_filter_summary_parts() {
+        let f = DebugFilter {
+            sender_role: Some("A".into()),
+            message_family: Some("Vote".into()),
+            ..Default::default()
+        };
+        let s = f.summary();
+        assert!(s.contains("sender=A"));
+        assert!(s.contains("message=Vote"));
+    }
+
+    #[test]
+    fn debug_filter_summary_field() {
+        let f = DebugFilter {
+            payload_field: Some(("round".into(), "3".into())),
+            ..Default::default()
+        };
+        assert!(f.summary().contains("field:round=3"));
+    }
+
+    #[test]
+    fn debug_filter_summary_auth() {
+        let f = DebugFilter {
+            auth: Some("compromised".into()),
+            ..Default::default()
+        };
+        assert!(f.summary().contains("auth~=compromised"));
+    }
+
+    // -----------------------------------------------------------------------
+    // DebugFilter -- matches
+    // -----------------------------------------------------------------------
+
+    fn make_delivery(
+        sender_role: &str,
+        recipient_role: &str,
+        family: &str,
+        kind: MessageEventKind,
+    ) -> MessageDeliveryEvent {
+        MessageDeliveryEvent {
+            kind,
+            count: 1,
+            shared_var: 0,
+            shared_var_name: "cnt".into(),
+            sender: MessageIdentity {
+                role: sender_role.into(),
+                process: None,
+                key: None,
+            },
+            recipient: MessageIdentity {
+                role: recipient_role.into(),
+                process: None,
+                key: None,
+            },
+            payload: MessagePayloadVariant {
+                family: family.into(),
+                fields: vec![],
+                variant: "default".into(),
+            },
+            auth: MessageAuthMetadata {
+                authenticated_channel: false,
+                signature_key: None,
+                key_owner_role: None,
+                key_compromised: false,
+                provenance: SignatureProvenance::OwnedKey,
+            },
+        }
+    }
+
+    #[test]
+    fn filter_matches_empty() {
+        let f = DebugFilter::default();
+        let d = make_delivery("A", "B", "Vote", MessageEventKind::Deliver);
+        assert!(f.matches(&d));
+    }
+
+    #[test]
+    fn filter_matches_sender() {
+        let f = DebugFilter {
+            sender_role: Some("A".into()),
+            ..Default::default()
+        };
+        let d = make_delivery("A", "B", "Vote", MessageEventKind::Deliver);
+        assert!(f.matches(&d));
+        let d2 = make_delivery("C", "B", "Vote", MessageEventKind::Deliver);
+        assert!(!f.matches(&d2));
+    }
+
+    #[test]
+    fn filter_matches_case_insensitive() {
+        let f = DebugFilter {
+            sender_role: Some("validator".into()),
+            ..Default::default()
+        };
+        let d = make_delivery("Validator", "B", "Vote", MessageEventKind::Deliver);
+        assert!(f.matches(&d));
+    }
+
+    #[test]
+    fn filter_matches_recipient() {
+        let f = DebugFilter {
+            recipient_role: Some("B".into()),
+            ..Default::default()
+        };
+        let d = make_delivery("A", "B", "Vote", MessageEventKind::Deliver);
+        assert!(f.matches(&d));
+        let d2 = make_delivery("A", "C", "Vote", MessageEventKind::Deliver);
+        assert!(!f.matches(&d2));
+    }
+
+    #[test]
+    fn filter_matches_family() {
+        let f = DebugFilter {
+            message_family: Some("vote".into()),
+            ..Default::default()
+        };
+        let d = make_delivery("A", "B", "Vote", MessageEventKind::Deliver);
+        assert!(f.matches(&d));
+    }
+
+    #[test]
+    fn filter_matches_auth_authenticated() {
+        let f = DebugFilter {
+            auth: Some("authenticated".into()),
+            ..Default::default()
+        };
+        let mut d = make_delivery("A", "B", "Vote", MessageEventKind::Deliver);
+        d.auth.authenticated_channel = true;
+        assert!(f.matches(&d));
+
+        let d2 = make_delivery("A", "B", "Vote", MessageEventKind::Deliver);
+        assert!(!f.matches(&d2));
+    }
+
+    #[test]
+    fn filter_matches_auth_compromised() {
+        let f = DebugFilter {
+            auth: Some("compromised".into()),
+            ..Default::default()
+        };
+        let mut d = make_delivery("A", "B", "Vote", MessageEventKind::Deliver);
+        d.auth.key_compromised = true;
+        assert!(f.matches(&d));
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_counter_metadata_for_crypto
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_counter_metadata_basic() {
+        let result = parse_counter_metadata_for_crypto("cnt_Vote@Validator");
+        assert!(result.is_some());
+        let (family, recipient, sender, fields) = result.unwrap();
+        assert_eq!(family, "Vote");
+        assert_eq!(recipient, "Validator");
+        assert!(sender.is_none());
+        assert!(fields.is_empty());
+    }
+
+    #[test]
+    fn parse_counter_metadata_with_sender() {
+        let result = parse_counter_metadata_for_crypto("cnt_Vote@Validator<-Proposer");
+        assert!(result.is_some());
+        let (family, recipient, sender, _) = result.unwrap();
+        assert_eq!(family, "Vote");
+        assert_eq!(recipient, "Validator");
+        assert_eq!(sender, Some("Proposer".to_string()));
+    }
+
+    #[test]
+    fn parse_counter_metadata_with_fields() {
+        // Fields are extracted from the overall stripped name after split_once('[')
+        // The format is cnt_FAMILY[k=v,...]@RECIPIENT, but fields parsing uses
+        // the first '[' in stripped. Since '@' appears after ']', the strip_suffix(']')
+        // on the rest blob won't match. So fields from a counter like
+        // cnt_Vote@Validator[round=1,val=2] would work.
+        let result = parse_counter_metadata_for_crypto("cnt_Vote@Validator[round=1,val=2]");
+        assert!(result.is_some());
+        let (family, _, _, fields) = result.unwrap();
+        assert_eq!(family, "Vote");
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0], ("round".to_string(), "1".to_string()));
+        assert_eq!(fields[1], ("val".to_string(), "2".to_string()));
+    }
+
+    #[test]
+    fn parse_counter_metadata_no_prefix() {
+        assert!(parse_counter_metadata_for_crypto("Vote@Validator").is_none());
+    }
+
+    #[test]
+    fn parse_counter_metadata_no_at() {
+        let result = parse_counter_metadata_for_crypto("cnt_Vote");
+        assert!(result.is_some());
+        let (family, recipient, _, _) = result.unwrap();
+        assert_eq!(family, "Vote");
+        assert_eq!(recipient, "*");
+    }
+
+    // -----------------------------------------------------------------------
+    // sender_role_from_channel
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn sender_role_from_channel_none() {
+        assert!(sender_role_from_channel(None).is_none());
+    }
+
+    #[test]
+    fn sender_role_from_channel_simple() {
+        assert_eq!(
+            sender_role_from_channel(Some("Validator")),
+            Some("Validator")
+        );
+    }
+
+    #[test]
+    fn sender_role_from_channel_with_process() {
+        assert_eq!(
+            sender_role_from_channel(Some("Validator#3")),
+            Some("Validator")
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // eval_threshold_lc
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn eval_threshold_lc_constant() {
+        let lc = LinearCombination {
+            constant: 5,
+            terms: vec![],
+        };
+        assert_eq!(eval_threshold_lc(&lc, &[]), 5);
+    }
+
+    #[test]
+    fn eval_threshold_lc_with_terms() {
+        let lc = LinearCombination {
+            constant: 1,
+            terms: vec![(2, ParamId::new(0)), (3, ParamId::new(1))],
+        };
+        assert_eq!(eval_threshold_lc(&lc, &[10, 20]), 1 + 2 * 10 + 3 * 20);
+    }
+
+    #[test]
+    fn eval_threshold_lc_missing_param() {
+        let lc = LinearCombination {
+            constant: 0,
+            terms: vec![(5, ParamId::new(99))],
+        };
+        // Missing param defaults to 0
+        assert_eq!(eval_threshold_lc(&lc, &[1, 2, 3]), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // VisualizeCommandArgs construction
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn visualize_command_args_debug() {
+        let args = VisualizeCommandArgs {
+            file: PathBuf::from("test.trs"),
+            check: "verify".into(),
+            solver: "z3".into(),
+            depth: 5,
+            k: 10,
+            timeout: 60,
+            soundness: "strict".into(),
+            fairness: "weak".into(),
+            engine: "kinduction".into(),
+            format: "timeline".into(),
+            out: None,
+            bundle: None,
+            cli_network_mode: CliNetworkSemanticsMode::Dsl,
+        };
+        let debug_str = format!("{:?}", args);
+        assert!(debug_str.contains("test.trs"));
+    }
+
+    // -----------------------------------------------------------------------
+    // DebugCexCommandArgs construction
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn debug_cex_command_args_debug() {
+        let args = DebugCexCommandArgs {
+            file: PathBuf::from("test.trs"),
+            check: "verify".into(),
+            solver: "z3".into(),
+            depth: 5,
+            k: 10,
+            timeout: 60,
+            soundness: "strict".into(),
+            fairness: "weak".into(),
+            engine: "kinduction".into(),
+            filter_sender: None,
+            filter_recipient: None,
+            filter_message: None,
+            filter_kind: None,
+            filter_variant: None,
+            filter_auth: None,
+            cli_network_mode: CliNetworkSemanticsMode::Dsl,
+        };
+        let debug_str = format!("{:?}", args);
+        assert!(debug_str.contains("test.trs"));
+    }
+}

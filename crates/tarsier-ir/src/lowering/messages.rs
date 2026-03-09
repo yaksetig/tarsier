@@ -210,3 +210,298 @@ pub(super) fn format_msg_counter_name(
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn abstract_nat_sign_zero_and_positive() {
+        assert_eq!(abstract_nat_values_sign(0, 5), vec!["zero", "pos"]);
+    }
+
+    #[test]
+    fn abstract_nat_sign_positive_only() {
+        assert_eq!(abstract_nat_values_sign(1, 5), vec!["pos"]);
+    }
+
+    #[test]
+    fn abstract_nat_sign_zero_only() {
+        assert_eq!(abstract_nat_values_sign(0, 0), vec!["zero"]);
+    }
+
+    #[test]
+    fn abstract_int_sign_all_three() {
+        assert_eq!(
+            abstract_int_values_sign(-3, 3),
+            vec!["neg", "zero", "pos"]
+        );
+    }
+
+    #[test]
+    fn abstract_int_sign_neg_only() {
+        assert_eq!(abstract_int_values_sign(-5, -1), vec!["neg"]);
+    }
+
+    #[test]
+    fn abstract_int_sign_neg_and_zero() {
+        assert_eq!(abstract_int_values_sign(-3, 0), vec!["neg", "zero"]);
+    }
+
+    #[test]
+    fn abstract_int_sign_pos_only() {
+        assert_eq!(abstract_int_values_sign(1, 10), vec!["pos"]);
+    }
+
+    #[test]
+    fn msg_key_no_sender_no_values() {
+        assert_eq!(msg_key("Vote", "Replica", None, &[]), "Vote@Replica");
+    }
+
+    #[test]
+    fn msg_key_with_sender() {
+        assert_eq!(
+            msg_key("Vote", "Replica", Some("Leader#0"), &[]),
+            "Vote@Replica<-Leader#0"
+        );
+    }
+
+    #[test]
+    fn msg_key_with_values() {
+        let values = vec!["v0".to_string(), "true".to_string()];
+        assert_eq!(
+            msg_key("Vote", "Replica", None, &values),
+            "Vote@Replica|v0|true"
+        );
+    }
+
+    #[test]
+    fn msg_key_with_sender_and_values() {
+        let values = vec!["42".to_string()];
+        assert_eq!(
+            msg_key("Msg", "R", Some("S#1"), &values),
+            "Msg@R<-S#1|42"
+        );
+    }
+
+    #[test]
+    fn format_counter_name_no_fields() {
+        let fields: Vec<MessageFieldInfo> = vec![];
+        assert_eq!(
+            format_msg_counter_name("Vote", "Replica", None, &fields, &[]),
+            "cnt_Vote@Replica"
+        );
+    }
+
+    #[test]
+    fn format_counter_name_with_sender() {
+        let fields: Vec<MessageFieldInfo> = vec![];
+        assert_eq!(
+            format_msg_counter_name("Vote", "Replica", Some("Leader"), &fields, &[]),
+            "cnt_Vote@Replica<-Leader"
+        );
+    }
+
+    #[test]
+    fn format_counter_name_with_fields() {
+        let fields = vec![
+            MessageFieldInfo {
+                name: "view".into(),
+                domain: FieldDomain::Enum(vec!["v0".into(), "v1".into()]),
+            },
+            MessageFieldInfo {
+                name: "flag".into(),
+                domain: FieldDomain::Bool,
+            },
+        ];
+        let values = vec!["v0".to_string(), "true".to_string()];
+        assert_eq!(
+            format_msg_counter_name("Vote", "Replica", None, &fields, &values),
+            "cnt_Vote@Replica[view=v0,flag=true]"
+        );
+    }
+
+    #[test]
+    fn enumerate_no_fields() {
+        let fields: Vec<MessageFieldInfo> = vec![];
+        let results = enumerate_field_values(&fields);
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_empty());
+    }
+
+    #[test]
+    fn enumerate_bool_field() {
+        let fields = vec![MessageFieldInfo {
+            name: "flag".into(),
+            domain: FieldDomain::Bool,
+        }];
+        let results = enumerate_field_values(&fields);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0], vec!["false"]);
+        assert_eq!(results[1], vec!["true"]);
+    }
+
+    #[test]
+    fn enumerate_int_range_field() {
+        let fields = vec![MessageFieldInfo {
+            name: "x".into(),
+            domain: FieldDomain::Int { min: 0, max: 2 },
+        }];
+        let results = enumerate_field_values(&fields);
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0], vec!["0"]);
+        assert_eq!(results[2], vec!["2"]);
+    }
+
+    #[test]
+    fn enumerate_cross_product_fields() {
+        let fields = vec![
+            MessageFieldInfo {
+                name: "a".into(),
+                domain: FieldDomain::Bool,
+            },
+            MessageFieldInfo {
+                name: "b".into(),
+                domain: FieldDomain::Enum(vec!["x".into(), "y".into(), "z".into()]),
+            },
+        ];
+        let results = enumerate_field_values(&fields);
+        assert_eq!(results.len(), 6);
+    }
+
+    #[test]
+    fn build_message_infos_simple_no_fields() {
+        let messages = vec![ast::MessageDecl {
+            name: "Echo".into(),
+            fields: vec![],
+            span: ast::Span { start: 0, end: 0 },
+        }];
+        let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        let infos = build_message_infos(
+            &messages,
+            &enum_defs,
+            ValueAbstractionMode::Exact,
+        )
+        .unwrap();
+        assert_eq!(infos.len(), 1);
+        assert!(infos["Echo"].fields.is_empty());
+    }
+
+    #[test]
+    fn build_message_infos_bool_field() {
+        let messages = vec![ast::MessageDecl {
+            name: "Vote".into(),
+            fields: vec![ast::FieldDef {
+                name: "value".into(),
+                ty: "bool".into(),
+                range: None,
+            }],
+            span: ast::Span { start: 0, end: 0 },
+        }];
+        let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        let infos = build_message_infos(
+            &messages,
+            &enum_defs,
+            ValueAbstractionMode::Exact,
+        )
+        .unwrap();
+        assert_eq!(infos["Vote"].fields.len(), 1);
+        assert!(matches!(infos["Vote"].fields[0].domain, FieldDomain::Bool));
+    }
+
+    #[test]
+    fn build_message_infos_nat_exact_requires_range() {
+        let messages = vec![ast::MessageDecl {
+            name: "Msg".into(),
+            fields: vec![ast::FieldDef {
+                name: "x".into(),
+                ty: "nat".into(),
+                range: None,
+            }],
+            span: ast::Span { start: 0, end: 0 },
+        }];
+        let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        assert!(build_message_infos(
+            &messages,
+            &enum_defs,
+            ValueAbstractionMode::Exact
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn build_message_infos_nat_sign_no_range_defaults() {
+        let messages = vec![ast::MessageDecl {
+            name: "Msg".into(),
+            fields: vec![ast::FieldDef {
+                name: "x".into(),
+                ty: "nat".into(),
+                range: None,
+            }],
+            span: ast::Span { start: 0, end: 0 },
+        }];
+        let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        let infos =
+            build_message_infos(&messages, &enum_defs, ValueAbstractionMode::Sign)
+                .unwrap();
+        match &infos["Msg"].fields[0].domain {
+            FieldDomain::AbstractNatSign(vals) => {
+                assert_eq!(
+                    *vals,
+                    vec!["zero".to_string(), "pos".to_string()]
+                );
+            }
+            other => panic!("expected AbstractNatSign, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn build_message_infos_enum_field() {
+        let messages = vec![ast::MessageDecl {
+            name: "Msg".into(),
+            fields: vec![ast::FieldDef {
+                name: "view".into(),
+                ty: "View".into(),
+                range: None,
+            }],
+            span: ast::Span { start: 0, end: 0 },
+        }];
+        let mut enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        enum_defs.insert("View".into(), vec!["v0".into(), "v1".into()]);
+        let infos = build_message_infos(
+            &messages,
+            &enum_defs,
+            ValueAbstractionMode::Exact,
+        )
+        .unwrap();
+        match &infos["Msg"].fields[0].domain {
+            FieldDomain::Enum(variants) => {
+                assert_eq!(
+                    *variants,
+                    vec!["v0".to_string(), "v1".to_string()]
+                );
+            }
+            other => panic!("expected Enum, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn build_message_infos_unknown_enum_error() {
+        let messages = vec![ast::MessageDecl {
+            name: "Msg".into(),
+            fields: vec![ast::FieldDef {
+                name: "view".into(),
+                ty: "UnknownType".into(),
+                range: None,
+            }],
+            span: ast::Span { start: 0, end: 0 },
+        }];
+        let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        assert!(build_message_infos(
+            &messages,
+            &enum_defs,
+            ValueAbstractionMode::Exact
+        )
+        .is_err());
+    }
+}

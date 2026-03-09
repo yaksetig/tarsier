@@ -201,3 +201,223 @@ pub(crate) fn build_folding_ranges(source: &str, program: &Program) -> Vec<Foldi
     ranges.sort_by_key(|r| (r.start_line, r.end_line));
     ranges
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Program {
+        tarsier_dsl::parse_with_diagnostics(src, "test.trs")
+            .unwrap()
+            .0
+    }
+
+    #[test]
+    fn protocol_block_foldable() {
+        let src = "protocol Foo {\n    message M;\n}";
+        let program = parse(src);
+        let ranges = build_folding_ranges(src, &program);
+        let proto_fold = ranges.iter().find(|r| {
+            r.collapsed_text
+                .as_deref()
+                .is_some_and(|t| t.contains("protocol Foo"))
+        });
+        assert!(proto_fold.is_some(), "protocol block should be foldable");
+        let pf = proto_fold.unwrap();
+        assert_eq!(pf.start_line, 0);
+        assert_eq!(pf.end_line, 2);
+    }
+
+    #[test]
+    fn single_line_protocol_not_foldable() {
+        let src = "protocol Foo { message M; }";
+        let result = tarsier_dsl::parse_with_diagnostics(src, "test.trs");
+        if let Ok((program, _)) = result {
+            let ranges = build_folding_ranges(src, &program);
+            let proto_fold = ranges.iter().find(|r| {
+                r.collapsed_text
+                    .as_deref()
+                    .is_some_and(|t| t.contains("protocol Foo"))
+            });
+            assert!(proto_fold.is_none());
+        }
+    }
+
+    #[test]
+    fn role_block_foldable() {
+        let src = r#"protocol P {
+    message Echo;
+    role Node {
+        init waiting;
+        phase waiting {
+            when received >= 1 Echo => {
+                goto phase waiting;
+            }
+        }
+    }
+}"#;
+        let program = parse(src);
+        let ranges = build_folding_ranges(src, &program);
+        let role_fold = ranges.iter().find(|r| {
+            r.collapsed_text
+                .as_deref()
+                .is_some_and(|t| t.contains("role Node"))
+        });
+        assert!(role_fold.is_some(), "role block should be foldable");
+    }
+
+    #[test]
+    fn phase_block_foldable() {
+        let src = r#"protocol P {
+    message Echo;
+    role Node {
+        init waiting;
+        phase waiting {
+            when received >= 1 Echo => {
+                goto phase waiting;
+            }
+        }
+    }
+}"#;
+        let program = parse(src);
+        let ranges = build_folding_ranges(src, &program);
+        let phase_fold = ranges.iter().find(|r| {
+            r.collapsed_text
+                .as_deref()
+                .is_some_and(|t| t.contains("phase waiting"))
+        });
+        assert!(phase_fold.is_some(), "phase block should be foldable");
+    }
+
+    #[test]
+    fn transition_block_foldable() {
+        let src = r#"protocol P {
+    message Echo;
+    role Node {
+        init waiting;
+        phase waiting {
+            when received >= 1 Echo => {
+                goto phase waiting;
+            }
+        }
+    }
+}"#;
+        let program = parse(src);
+        let ranges = build_folding_ranges(src, &program);
+        let transition_fold = ranges.iter().find(|r| {
+            r.collapsed_text
+                .as_deref()
+                .is_some_and(|t| t.contains("when"))
+        });
+        assert!(
+            transition_fold.is_some(),
+            "multi-line transition should be foldable"
+        );
+    }
+
+    #[test]
+    fn comment_block_foldable() {
+        let src = r#"// line1
+// line2
+// line3
+protocol P {
+    message M;
+}"#;
+        let program = parse(src);
+        let ranges = build_folding_ranges(src, &program);
+        let comment_fold = ranges
+            .iter()
+            .find(|r| r.kind == Some(FoldingRangeKind::Comment));
+        assert!(
+            comment_fold.is_some(),
+            "consecutive comments should be foldable"
+        );
+        let cf = comment_fold.unwrap();
+        assert_eq!(cf.start_line, 0);
+        assert_eq!(cf.end_line, 2);
+    }
+
+    #[test]
+    fn single_comment_line_not_foldable() {
+        let src = "// one comment\nprotocol P {\n    message M;\n}";
+        let program = parse(src);
+        let ranges = build_folding_ranges(src, &program);
+        let comment_fold = ranges
+            .iter()
+            .find(|r| r.kind == Some(FoldingRangeKind::Comment));
+        assert!(
+            comment_fold.is_none(),
+            "a single comment line should not be foldable"
+        );
+    }
+
+    #[test]
+    fn enum_block_foldable() {
+        let src = r#"protocol P {
+    enum Status {
+        idle,
+        done
+    }
+}"#;
+        let program = parse(src);
+        let ranges = build_folding_ranges(src, &program);
+        let enum_fold = ranges.iter().find(|r| {
+            r.collapsed_text
+                .as_deref()
+                .is_some_and(|t| t.contains("enum Status"))
+        });
+        assert!(enum_fold.is_some(), "enum block should be foldable");
+    }
+
+    #[test]
+    fn ranges_sorted_by_start_line() {
+        let src = r#"protocol P {
+    message Echo;
+    role Node {
+        init waiting;
+        phase waiting {
+            when received >= 1 Echo => {
+                goto phase waiting;
+            }
+        }
+    }
+}"#;
+        let program = parse(src);
+        let ranges = build_folding_ranges(src, &program);
+        for i in 1..ranges.len() {
+            assert!(
+                (ranges[i].start_line, ranges[i].end_line)
+                    >= (ranges[i - 1].start_line, ranges[i - 1].end_line),
+                "folding ranges should be sorted by start_line"
+            );
+        }
+    }
+
+    #[test]
+    fn property_block_foldable() {
+        let src = r#"protocol P {
+    message Echo;
+    role Node {
+        var decided: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= 1 Echo => {
+                goto phase waiting;
+            }
+        }
+    }
+    property agr: agreement {
+        forall p: Node. forall q: Node.
+            (p.decided == true && q.decided == true) ==> (p.decided == q.decided)
+    }
+}"#;
+        let program = parse(src);
+        let ranges = build_folding_ranges(src, &program);
+        let prop_fold = ranges.iter().find(|r| {
+            r.collapsed_text
+                .as_deref()
+                .is_some_and(|t| t.contains("property agr"))
+        });
+        assert!(prop_fold.is_some(), "property block should be foldable");
+    }
+}

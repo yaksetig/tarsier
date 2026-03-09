@@ -287,3 +287,180 @@ pub(super) fn build_common_encoder_context(cs: &CounterSystem) -> CommonEncoderC
         time_varying_param_ids,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tarsier_ir::threshold_automaton::*;
+
+    fn minimal_ta() -> ThresholdAutomaton {
+        let mut ta = ThresholdAutomaton::new();
+        ta.parameters.push(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
+        ta.locations.push(Location {
+            name: "Init".into(),
+            role: "R".into(),
+            phase: "init".into(),
+            local_vars: Default::default(),
+        });
+        ta.locations.push(Location {
+            name: "Done".into(),
+            role: "R".into(),
+            phase: "done".into(),
+            local_vars: Default::default(),
+        });
+        ta.initial_locations = vec![0.into()];
+        ta.shared_vars.push(SharedVar {
+            name: "x".into(),
+            kind: SharedVarKind::Shared,
+            distinct: false,
+            distinct_role: None,
+        });
+        ta
+    }
+
+    #[test]
+    fn context_counts_match_ta() {
+        let ta = minimal_ta();
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.num_locs, 2);
+        assert_eq!(ctx.num_svars, 1);
+        assert_eq!(ctx.num_params, 1);
+        assert_eq!(ctx.num_rules, 0);
+    }
+
+    #[test]
+    fn context_n_param_found() {
+        let ta = minimal_ta();
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.n_param, Some(0));
+    }
+
+    #[test]
+    fn context_n_param_missing_when_no_params() {
+        let mut ta = ThresholdAutomaton::new();
+        ta.locations.push(Location {
+            name: "A".into(),
+            role: "R".into(),
+            phase: "a".into(),
+            local_vars: Default::default(),
+        });
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.n_param, None);
+    }
+
+    #[test]
+    fn context_default_fault_model_is_byzantine() {
+        let ta = minimal_ta();
+        let ctx = build_common_encoder_context(&ta);
+        assert!(ctx.byzantine_faults);
+        assert!(!ctx.crash_faults);
+        assert!(!ctx.omission_style_faults);
+        assert!(!ctx.crash_recovery);
+    }
+
+    #[test]
+    fn context_crash_faults_detected() {
+        let mut ta = minimal_ta();
+        ta.semantics.fault_model = FaultModel::Crash;
+        let ctx = build_common_encoder_context(&ta);
+        assert!(ctx.crash_faults);
+        assert!(!ctx.byzantine_faults);
+    }
+
+    #[test]
+    fn context_role_loc_ids_grouped() {
+        let ta = minimal_ta();
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.role_loc_ids.get("R").unwrap(), &vec![0, 1]);
+    }
+
+    #[test]
+    fn context_message_counter_flags_all_false_when_no_counters() {
+        let ta = minimal_ta();
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.message_counter_flags, vec![false]);
+        assert!(ctx.all_message_counter_vars.is_empty());
+    }
+
+    #[test]
+    fn context_message_counter_flags_detected() {
+        let mut ta = minimal_ta();
+        ta.shared_vars.push(SharedVar {
+            name: "cnt_vote@Alice".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.message_counter_flags, vec![false, true]);
+        assert_eq!(ctx.all_message_counter_vars, vec![1]);
+    }
+
+    #[test]
+    fn context_distinct_vars_collected() {
+        let mut ta = minimal_ta();
+        ta.shared_vars[0].distinct = true;
+        ta.shared_vars[0].distinct_role = Some("R".into());
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.distinct_vars, vec![(0, Some("R".to_string()))]);
+    }
+
+    #[test]
+    fn context_active_rules_all_when_por_off() {
+        let mut ta = minimal_ta();
+        ta.semantics.por_mode = PorMode::Off;
+        ta.rules.push(Rule {
+            from: 0.into(),
+            to: 1.into(),
+            guard: Guard { atoms: vec![] },
+            updates: vec![],
+            collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
+            param_updates: vec![],
+        });
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.active_rule_ids, vec![0]);
+    }
+
+    #[test]
+    fn context_time_varying_params_collected() {
+        let mut ta = minimal_ta();
+        ta.parameters.push(Parameter {
+            name: "epoch_n".into(),
+            time_varying: true,
+        });
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.time_varying_param_ids, vec![1]);
+    }
+
+    #[test]
+    fn context_dead_locs_empty_when_not_crash_recovery() {
+        let ta = minimal_ta();
+        let ctx = build_common_encoder_context(&ta);
+        assert!(ctx.dead_loc_ids.is_empty());
+    }
+
+    #[test]
+    fn context_dead_locs_found_for_crash_recovery() {
+        let mut ta = minimal_ta();
+        ta.semantics.fault_model = FaultModel::CrashRecovery;
+        ta.locations[1]
+            .local_vars
+            .insert("__alive".into(), LocalValue::Bool(false));
+        let ctx = build_common_encoder_context(&ta);
+        assert_eq!(ctx.dead_loc_ids, vec![1]);
+    }
+
+    #[test]
+    fn context_lossy_delivery_for_omission() {
+        let mut ta = minimal_ta();
+        ta.semantics.fault_model = FaultModel::Omission;
+        let ctx = build_common_encoder_context(&ta);
+        assert!(ctx.lossy_delivery);
+        assert!(ctx.omission_style_faults);
+    }
+}

@@ -601,3 +601,124 @@ pub(crate) fn collect_lowering_diagnostics(
 
     diagnostics
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Program {
+        tarsier_dsl::parse_with_diagnostics(src, "test.trs").unwrap().0
+    }
+
+    fn diag_codes(diagnostics: &[Diagnostic]) -> Vec<String> {
+        diagnostics.iter().filter_map(|d| match &d.code {
+            Some(NumberOrString::String(s)) => Some(s.clone()),
+            _ => None,
+        }).collect()
+    }
+
+    #[test]
+    fn test_diagnostic_has_code_positive() {
+        let diag = Diagnostic {
+            code: Some(NumberOrString::String("tarsier::lower::unknown_phase".into())),
+            ..Default::default()
+        };
+        assert!(diagnostic_has_code(&diag, "tarsier::lower::unknown_phase"));
+    }
+
+    #[test]
+    fn test_diagnostic_has_code_negative() {
+        let diag = Diagnostic {
+            code: Some(NumberOrString::String("tarsier::lower::unknown_phase".into())),
+            ..Default::default()
+        };
+        assert!(!diagnostic_has_code(&diag, "tarsier::lower::unknown_message"));
+    }
+
+    #[test]
+    fn test_diagnostic_has_code_number() {
+        let diag = Diagnostic { code: Some(NumberOrString::Number(42)), ..Default::default() };
+        assert!(!diagnostic_has_code(&diag, "42"));
+    }
+
+    #[test]
+    fn test_has_diagnostic_code_in_list() {
+        let diags = vec![
+            Diagnostic { code: Some(NumberOrString::String("tarsier::lower::unknown_phase".into())), ..Default::default() },
+            Diagnostic { code: Some(NumberOrString::String("tarsier::lower::no_init_phase".into())), ..Default::default() },
+        ];
+        assert!(has_diagnostic_code(&diags, "tarsier::lower::no_init_phase"));
+        assert!(!has_diagnostic_code(&diags, "tarsier::lower::unknown_enum"));
+    }
+
+    #[test]
+    fn test_is_structural_lowering_code_known() {
+        assert!(is_structural_lowering_code("tarsier::lower::no_init_phase"));
+        assert!(is_structural_lowering_code("tarsier::lower::unknown_enum"));
+        assert!(is_structural_lowering_code("tarsier::lower::unknown_phase"));
+        assert!(is_structural_lowering_code("tarsier::lower::unknown_message"));
+    }
+
+    #[test]
+    fn test_is_structural_lowering_code_unknown() {
+        assert!(!is_structural_lowering_code("tarsier::lower::unsupported"));
+        assert!(!is_structural_lowering_code("tarsier::parse::syntax"));
+        assert!(!is_structural_lowering_code("random"));
+    }
+
+    #[test]
+    fn test_push_unique_diagnostic_deduplicates() {
+        let mut diags = Vec::new();
+        let d = Diagnostic { range: Range::new(Position::new(0, 0), Position::new(0, 5)), code: Some(NumberOrString::String("test".into())), message: "test msg".into(), ..Default::default() };
+        push_unique_diagnostic(&mut diags, d.clone());
+        push_unique_diagnostic(&mut diags, d.clone());
+        assert_eq!(diags.len(), 1);
+    }
+
+    #[test]
+    fn test_push_unique_diagnostic_allows_different() {
+        let mut diags = Vec::new();
+        push_unique_diagnostic(&mut diags, Diagnostic { message: "msg1".into(), ..Default::default() });
+        push_unique_diagnostic(&mut diags, Diagnostic { message: "msg2".into(), ..Default::default() });
+        assert_eq!(diags.len(), 2);
+    }
+
+    #[test]
+    fn test_structural_diag_no_init_phase() {
+        let src = "protocol P {\n    message Echo;\n    role Node {\n        phase waiting {\n            when received >= 1 Echo => { goto phase waiting; }\n        }\n    }\n}";
+        let program = parse(src);
+        let diags = collect_structural_lowering_diagnostics(&program, src);
+        assert!(diag_codes(&diags).contains(&"tarsier::lower::no_init_phase".to_string()));
+    }
+
+    #[test]
+    fn test_structural_diag_unknown_phase() {
+        let src = "protocol P {\n    message Echo;\n    role Node {\n        init waiting;\n        phase waiting {\n            when received >= 1 Echo => { goto phase nonexistent; }\n        }\n    }\n}";
+        let program = parse(src);
+        let diags = collect_structural_lowering_diagnostics(&program, src);
+        assert!(diag_codes(&diags).contains(&"tarsier::lower::unknown_phase".to_string()));
+    }
+
+    #[test]
+    fn test_structural_diag_unknown_message() {
+        let src = "protocol P {\n    message Echo;\n    role Node {\n        init waiting;\n        phase waiting {\n            when received >= 1 NonExistent => { goto phase waiting; }\n        }\n    }\n}";
+        let program = parse(src);
+        let diags = collect_structural_lowering_diagnostics(&program, src);
+        assert!(diag_codes(&diags).contains(&"tarsier::lower::unknown_message".to_string()));
+    }
+
+    #[test]
+    fn test_structural_diag_clean_protocol() {
+        let src = "protocol P {\n    message Echo;\n    role Node {\n        init waiting;\n        phase waiting {\n            when received >= 1 Echo => { send Echo; goto phase waiting; }\n        }\n    }\n}";
+        let program = parse(src);
+        let diags = collect_structural_lowering_diagnostics(&program, src);
+        assert!(diags.is_empty(), "got: {:?}", diag_codes(&diags));
+    }
+
+    #[test]
+    fn test_range_from_span_or_default_valid() {
+        let range = range_from_span_or_default("hello world", ast::Span { start: 0, end: 5 });
+        assert_eq!(range.start, Position::new(0, 0));
+        assert_eq!(range.end, Position::new(0, 5));
+    }
+}

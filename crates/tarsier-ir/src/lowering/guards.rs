@@ -389,3 +389,325 @@ pub(super) fn eval_local_comparison(
         ast::CmpOp::Ge => l >= r,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn threshold_guard(msg: &str) -> ast::GuardExpr {
+        ast::GuardExpr::Threshold(ast::ThresholdGuard {
+            op: ast::CmpOp::Ge,
+            threshold: ast::LinearExpr::Const(1),
+            message_type: msg.into(),
+            message_args: vec![],
+            distinct: false,
+            distinct_role: None,
+        })
+    }
+
+    #[test]
+    fn dnf_raw_single_atom() {
+        let g = threshold_guard("Vote");
+        let clauses = guard_to_dnf_raw_clauses(&g);
+        assert_eq!(clauses.len(), 1);
+    }
+
+    #[test]
+    fn dnf_raw_or_splits() {
+        let g = ast::GuardExpr::Or(
+            Box::new(threshold_guard("A")),
+            Box::new(threshold_guard("B")),
+        );
+        let clauses = guard_to_dnf_raw_clauses(&g);
+        assert_eq!(clauses.len(), 2);
+    }
+
+    #[test]
+    fn dnf_raw_and_distributes_over_or() {
+        let g = ast::GuardExpr::And(
+            Box::new(ast::GuardExpr::Or(
+                Box::new(threshold_guard("A")),
+                Box::new(threshold_guard("B")),
+            )),
+            Box::new(threshold_guard("C")),
+        );
+        let clauses = guard_to_dnf_raw_clauses(&g);
+        assert_eq!(clauses.len(), 2);
+    }
+
+    #[test]
+    fn dnf_raw_nested_or() {
+        let g = ast::GuardExpr::Or(
+            Box::new(ast::GuardExpr::Or(
+                Box::new(threshold_guard("A")),
+                Box::new(threshold_guard("B")),
+            )),
+            Box::new(threshold_guard("C")),
+        );
+        let clauses = guard_to_dnf_raw_clauses(&g);
+        assert_eq!(clauses.len(), 3);
+    }
+
+    #[test]
+    fn dnf_deduplicates_clauses() {
+        let g = ast::GuardExpr::Or(
+            Box::new(threshold_guard("A")),
+            Box::new(threshold_guard("A")),
+        );
+        let clauses = guard_to_dnf_clauses(&g);
+        assert_eq!(clauses.len(), 1);
+    }
+
+    #[test]
+    fn dnf_prunes_subsumed() {
+        let g = ast::GuardExpr::Or(
+            Box::new(threshold_guard("A")),
+            Box::new(ast::GuardExpr::And(
+                Box::new(threshold_guard("A")),
+                Box::new(threshold_guard("B")),
+            )),
+        );
+        let clauses = guard_to_dnf_clauses(&g);
+        assert_eq!(clauses.len(), 1);
+    }
+
+    #[test]
+    fn collect_conjuncts_single() {
+        let g = threshold_guard("X");
+        let mut out = Vec::new();
+        collect_guard_conjuncts(&g, &mut out);
+        assert_eq!(out.len(), 1);
+    }
+
+    #[test]
+    fn collect_conjuncts_nested_and() {
+        let g = ast::GuardExpr::And(
+            Box::new(ast::GuardExpr::And(
+                Box::new(threshold_guard("A")),
+                Box::new(threshold_guard("B")),
+            )),
+            Box::new(threshold_guard("C")),
+        );
+        let mut out = Vec::new();
+        collect_guard_conjuncts(&g, &mut out);
+        assert_eq!(out.len(), 3);
+    }
+
+    #[test]
+    fn normalize_sorts_and_deduplicates() {
+        let g = ast::GuardExpr::And(
+            Box::new(ast::GuardExpr::And(
+                Box::new(threshold_guard("B")),
+                Box::new(threshold_guard("A")),
+            )),
+            Box::new(threshold_guard("A")),
+        );
+        let normalized = normalize_guard_clause(&g);
+        assert_eq!(normalized.len(), 2);
+        assert!(normalized[0].0 <= normalized[1].0);
+    }
+
+    #[test]
+    fn subset_check_true() {
+        let subset = vec!["a".to_string(), "c".to_string()];
+        let superset = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        assert!(sorted_guard_keys_subset(&subset, &superset));
+    }
+
+    #[test]
+    fn subset_check_false() {
+        let subset = vec!["a".to_string(), "d".to_string()];
+        let superset = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        assert!(!sorted_guard_keys_subset(&subset, &superset));
+    }
+
+    #[test]
+    fn subset_larger_than_superset() {
+        let subset = vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ];
+        let superset = vec!["a".to_string(), "b".to_string()];
+        assert!(!sorted_guard_keys_subset(&subset, &superset));
+    }
+
+    #[test]
+    fn subset_empty_is_always_subset() {
+        let subset: Vec<String> = vec![];
+        let superset = vec!["a".to_string()];
+        assert!(sorted_guard_keys_subset(&subset, &superset));
+    }
+
+    #[test]
+    fn local_guard_bool_var_satisfied() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("ready".into(), LocalValue::Bool(true));
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let g = ast::GuardExpr::BoolVar("ready".into());
+        assert!(local_guard_satisfied(&g, &locals, &types, &enums).unwrap());
+    }
+
+    #[test]
+    fn local_guard_bool_var_not_satisfied() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("ready".into(), LocalValue::Bool(false));
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let g = ast::GuardExpr::BoolVar("ready".into());
+        assert!(!local_guard_satisfied(&g, &locals, &types, &enums).unwrap());
+    }
+
+    #[test]
+    fn local_guard_threshold_always_true() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let g = threshold_guard("Vote");
+        assert!(local_guard_satisfied(&g, &locals, &types, &enums).unwrap());
+    }
+
+    #[test]
+    fn local_guard_and_both_true() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("a".into(), LocalValue::Bool(true));
+        locals.insert("b".into(), LocalValue::Bool(true));
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let g = ast::GuardExpr::And(
+            Box::new(ast::GuardExpr::BoolVar("a".into())),
+            Box::new(ast::GuardExpr::BoolVar("b".into())),
+        );
+        assert!(local_guard_satisfied(&g, &locals, &types, &enums).unwrap());
+    }
+
+    #[test]
+    fn local_guard_and_one_false() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("a".into(), LocalValue::Bool(true));
+        locals.insert("b".into(), LocalValue::Bool(false));
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let g = ast::GuardExpr::And(
+            Box::new(ast::GuardExpr::BoolVar("a".into())),
+            Box::new(ast::GuardExpr::BoolVar("b".into())),
+        );
+        assert!(!local_guard_satisfied(&g, &locals, &types, &enums).unwrap());
+    }
+
+    #[test]
+    fn local_guard_or_one_true() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("a".into(), LocalValue::Bool(false));
+        locals.insert("b".into(), LocalValue::Bool(true));
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let g = ast::GuardExpr::Or(
+            Box::new(ast::GuardExpr::BoolVar("a".into())),
+            Box::new(ast::GuardExpr::BoolVar("b".into())),
+        );
+        assert!(local_guard_satisfied(&g, &locals, &types, &enums).unwrap());
+    }
+
+    #[test]
+    fn eval_local_comparison_int_ge() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("x".into(), LocalValue::Int(5));
+        let mut types: IndexMap<String, LocalVarType> = IndexMap::new();
+        types.insert("x".into(), LocalVarType::Int { min: 0, max: 10 });
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        assert!(eval_local_comparison(
+            &ast::Expr::Var("x".into()),
+            ast::CmpOp::Ge,
+            &ast::Expr::IntLit(3),
+            &locals,
+            &types,
+            &enums,
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn eval_local_comparison_bool_eq() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("flag".into(), LocalValue::Bool(true));
+        let mut types: IndexMap<String, LocalVarType> = IndexMap::new();
+        types.insert("flag".into(), LocalVarType::Bool);
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        assert!(eval_local_comparison(
+            &ast::Expr::Var("flag".into()),
+            ast::CmpOp::Eq,
+            &ast::Expr::BoolLit(true),
+            &locals,
+            &types,
+            &enums,
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn eval_local_comparison_bool_gt_error() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("flag".into(), LocalValue::Bool(true));
+        let mut types: IndexMap<String, LocalVarType> = IndexMap::new();
+        types.insert("flag".into(), LocalVarType::Bool);
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        assert!(eval_local_comparison(
+            &ast::Expr::Var("flag".into()),
+            ast::CmpOp::Gt,
+            &ast::Expr::BoolLit(false),
+            &locals,
+            &types,
+            &enums,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn eval_local_comparison_enum() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("view".into(), LocalValue::Enum("v1".into()));
+        let mut types: IndexMap<String, LocalVarType> = IndexMap::new();
+        types.insert("view".into(), LocalVarType::Enum("View".into()));
+        let mut enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        enums.insert("View".into(), vec!["v0".into(), "v1".into(), "v2".into()]);
+        assert!(eval_local_comparison(
+            &ast::Expr::Var("view".into()),
+            ast::CmpOp::Ge,
+            &ast::Expr::Var("v0".into()),
+            &locals,
+            &types,
+            &enums,
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn sort_key_deterministic_for_and() {
+        let g = ast::GuardExpr::And(
+            Box::new(threshold_guard("B")),
+            Box::new(threshold_guard("A")),
+        );
+        let key = guard_expr_sort_key(&g);
+        assert!(key.starts_with("and("));
+    }
+
+    #[test]
+    fn rebuild_single_conjunct() {
+        let conjuncts = vec![("key".into(), threshold_guard("X"))];
+        let rebuilt = rebuild_guard_clause(conjuncts);
+        assert!(matches!(rebuilt, ast::GuardExpr::Threshold(_)));
+    }
+
+    #[test]
+    fn rebuild_multiple_conjuncts() {
+        let conjuncts = vec![
+            ("a".into(), threshold_guard("A")),
+            ("b".into(), threshold_guard("B")),
+        ];
+        let rebuilt = rebuild_guard_clause(conjuncts);
+        assert!(matches!(rebuilt, ast::GuardExpr::And(_, _)));
+    }
+}

@@ -375,3 +375,141 @@ pub(crate) fn dedup_and_sort_workspace_symbols(symbols: &mut Vec<SymbolInformati
         workspace_symbol_sort_key(a) == workspace_symbol_sort_key(b) && a.kind == b.kind
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Program {
+        tarsier_dsl::parse_with_diagnostics(src, "test.trs").unwrap().0
+    }
+
+    fn test_uri() -> Url {
+        Url::parse("file:///test.trs").unwrap()
+    }
+
+    static EXAMPLE_SRC: &str = "protocol P {\n    parameters { n: nat; t: nat; }\n    resilience { n > 3*t; }\n    message Echo;\n    message Ready;\n    role Node {\n        var decided: bool = false;\n        init waiting;\n        phase waiting {\n            when received >= 1 Echo => {\n                send Ready;\n                goto phase done;\n            }\n        }\n        phase done {\n        }\n    }\n    property agr: agreement {\n        forall p: Node. forall q: Node.\n            (p.decided == true && q.decided == true) ==> (p.decided == q.decided)\n    }\n}";
+
+    #[test]
+    fn test_definition_spans_for_message() {
+        let program = parse(EXAMPLE_SRC);
+        let spans = definition_spans_for_name(&program, "Echo");
+        assert!(!spans.is_empty());
+    }
+
+    #[test]
+    fn test_definition_locations_for_role() {
+        let program = parse(EXAMPLE_SRC);
+        let locs = definition_locations(EXAMPLE_SRC, &program, &test_uri(), "Node");
+        assert_eq!(locs.len(), 1);
+    }
+
+    #[test]
+    fn test_definition_locations_for_nonexistent() {
+        let program = parse(EXAMPLE_SRC);
+        let locs = definition_locations(EXAMPLE_SRC, &program, &test_uri(), "DoesNotExist");
+        assert!(locs.is_empty());
+    }
+
+    #[test]
+    fn test_definition_kind_sort_key_ordering() {
+        assert!(definition_kind_sort_key(&DefinitionKind::Message) < definition_kind_sort_key(&DefinitionKind::Role));
+        assert!(definition_kind_sort_key(&DefinitionKind::Role) < definition_kind_sort_key(&DefinitionKind::Phase));
+        assert!(definition_kind_sort_key(&DefinitionKind::Phase) < definition_kind_sort_key(&DefinitionKind::Param));
+    }
+
+    #[test]
+    fn test_dedup_symbol_targets_removes_duplicates() {
+        let targets = vec![
+            SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None },
+            SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None },
+            SymbolTarget { name: "Node".into(), kind: DefinitionKind::Role, parent: None },
+        ];
+        assert_eq!(dedup_symbol_targets(targets).len(), 2);
+    }
+
+    #[test]
+    fn test_dedup_symbol_targets_keeps_different_kinds() {
+        let targets = vec![
+            SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None },
+            SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Var, parent: Some("Node".into()) },
+        ];
+        assert_eq!(dedup_symbol_targets(targets).len(), 2);
+    }
+
+    #[test]
+    fn test_symbol_target_matches_occurrence_positive() {
+        let target = SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None };
+        let occ = SymbolOccurrence { name: "Echo".into(), kind: DefinitionKind::Message, parent: None, start: 0, end: 4, declaration: true };
+        assert!(symbol_target_matches_occurrence(&target, &occ));
+    }
+
+    #[test]
+    fn test_symbol_target_matches_occurrence_negative() {
+        let target = SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None };
+        let occ = SymbolOccurrence { name: "Ready".into(), kind: DefinitionKind::Message, parent: None, start: 0, end: 5, declaration: true };
+        assert!(!symbol_target_matches_occurrence(&target, &occ));
+    }
+
+    #[test]
+    fn test_workspace_symbol_query_matches_empty() {
+        assert!(workspace_symbol_query_matches("anything", ""));
+        assert!(workspace_symbol_query_matches("anything", "   "));
+    }
+
+    #[test]
+    fn test_workspace_symbol_query_matches_substring() {
+        assert!(workspace_symbol_query_matches("waiting", "wait"));
+        assert!(workspace_symbol_query_matches("Process", "proc"));
+    }
+
+    #[test]
+    fn test_workspace_symbol_query_matches_case_insensitive() {
+        assert!(workspace_symbol_query_matches("Process", "process"));
+    }
+
+    #[test]
+    fn test_workspace_symbol_query_matches_levenshtein() {
+        assert!(workspace_symbol_query_matches("Process", "Procesx"));
+    }
+
+    #[test]
+    fn test_workspace_symbol_query_no_match() {
+        assert!(!workspace_symbol_query_matches("abc", "xyz"));
+    }
+
+    #[test]
+    fn test_as_goto_definition_response_empty() {
+        assert!(as_goto_definition_response(vec![]).is_none());
+    }
+
+    #[test]
+    fn test_as_goto_definition_response_single() {
+        let loc = Location { uri: test_uri(), range: Range::new(Position::new(0, 0), Position::new(0, 5)) };
+        match as_goto_definition_response(vec![loc]).unwrap() {
+            GotoDefinitionResponse::Scalar(l) => assert_eq!(l.uri, test_uri()),
+            _ => panic!("expected scalar"),
+        }
+    }
+
+    #[test]
+    fn test_as_goto_definition_response_multiple() {
+        let loc1 = Location { uri: test_uri(), range: Range::new(Position::new(0, 0), Position::new(0, 5)) };
+        let loc2 = Location { uri: test_uri(), range: Range::new(Position::new(1, 0), Position::new(1, 5)) };
+        match as_goto_definition_response(vec![loc1, loc2]).unwrap() {
+            GotoDefinitionResponse::Array(locs) => assert_eq!(locs.len(), 2),
+            _ => panic!("expected array"),
+        }
+    }
+
+    #[test]
+    fn test_symbol_kind_for_definition_kind_mapping() {
+        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Message), SymbolKind::STRUCT);
+        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Role), SymbolKind::CLASS);
+        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Phase), SymbolKind::METHOD);
+        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Param), SymbolKind::CONSTANT);
+        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Var), SymbolKind::VARIABLE);
+        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Property), SymbolKind::PROPERTY);
+        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Enum), SymbolKind::ENUM);
+    }
+}

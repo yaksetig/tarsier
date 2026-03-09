@@ -245,3 +245,155 @@ fn committee_bound_hint(source: &str, committee: &CommitteeDecl) -> Option<Inlay
         data: None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Program {
+        tarsier_dsl::parse_with_diagnostics(src, "test.trs")
+            .unwrap()
+            .0
+    }
+
+    #[test]
+    fn describe_threshold_single_message() {
+        assert_eq!(describe_threshold(&LinearExpr::Const(1)), "single message");
+    }
+
+    #[test]
+    fn describe_threshold_n_messages() {
+        assert_eq!(describe_threshold(&LinearExpr::Const(5)), "5 messages");
+    }
+
+    #[test]
+    fn describe_threshold_variable() {
+        let expr = LinearExpr::Var("n".into());
+        assert_eq!(describe_threshold(&expr), "n");
+    }
+
+    #[test]
+    fn describe_threshold_quorum() {
+        // 2*t + 1
+        let expr = LinearExpr::Add(
+            Box::new(LinearExpr::Mul(2, Box::new(LinearExpr::Var("t".into())))),
+            Box::new(LinearExpr::Const(1)),
+        );
+        assert_eq!(describe_threshold(&expr), "quorum (2*t+1)");
+    }
+
+    #[test]
+    fn describe_threshold_weak_quorum() {
+        // t + 1
+        let expr = LinearExpr::Add(
+            Box::new(LinearExpr::Var("t".into())),
+            Box::new(LinearExpr::Const(1)),
+        );
+        let result = describe_threshold(&expr);
+        assert!(
+            result.contains("weak quorum"),
+            "should describe weak quorum, got: {result}"
+        );
+    }
+
+    #[test]
+    fn describe_threshold_all_minus() {
+        // n - t
+        let expr = LinearExpr::Sub(
+            Box::new(LinearExpr::Var("n".into())),
+            Box::new(LinearExpr::Var("t".into())),
+        );
+        assert_eq!(describe_threshold(&expr), "all-minus (n - ...)");
+    }
+
+    #[test]
+    fn var_type_hint_bool_returns_none() {
+        let var = VarDecl {
+            name: "x".into(),
+            ty: VarType::Bool,
+            init: None,
+            range: None,
+            span: tarsier_dsl::ast::Span { start: 0, end: 10 },
+        };
+        assert!(var_type_hint("var x: bool;", &var).is_none());
+    }
+
+    #[test]
+    fn var_type_hint_int_with_range() {
+        let var = VarDecl {
+            name: "x".into(),
+            ty: VarType::Int,
+            init: None,
+            range: Some(tarsier_dsl::ast::VarRange { min: 0, max: 10 }),
+            span: tarsier_dsl::ast::Span { start: 0, end: 20 },
+        };
+        let hint = var_type_hint("var x: int [0, 10];", &var);
+        assert!(hint.is_some());
+        let h = hint.unwrap();
+        if let InlayHintLabel::String(s) = &h.label {
+            assert!(s.contains("[0, 10]"));
+        } else {
+            panic!("expected string label");
+        }
+    }
+
+    #[test]
+    fn var_type_hint_enum() {
+        let var = VarDecl {
+            name: "status".into(),
+            ty: VarType::Enum("Status".into()),
+            init: None,
+            range: None,
+            span: tarsier_dsl::ast::Span { start: 0, end: 20 },
+        };
+        let hint = var_type_hint("var status: Status;", &var);
+        assert!(hint.is_some());
+        let h = hint.unwrap();
+        if let InlayHintLabel::String(s) = &h.label {
+            assert!(s.contains("Status"));
+        } else {
+            panic!("expected string label");
+        }
+    }
+
+    #[test]
+    fn build_inlay_hints_threshold_guard() {
+        let src = r#"protocol P {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    message Echo;
+    role Node {
+        init waiting;
+        phase waiting {
+            when received >= 2*t+1 Echo => {
+                goto phase waiting;
+            }
+        }
+    }
+}"#;
+        let program = parse(src);
+        let hints = build_inlay_hints(src, &program);
+        let threshold_hints: Vec<_> = hints
+            .iter()
+            .filter(|h| h.kind == Some(InlayHintKind::PARAMETER))
+            .collect();
+        assert!(
+            !threshold_hints.is_empty(),
+            "should produce threshold guard hints"
+        );
+        if let InlayHintLabel::String(s) = &threshold_hints[0].label {
+            assert!(
+                s.contains("quorum"),
+                "hint should describe quorum, got: {s}"
+            );
+        }
+    }
+
+    #[test]
+    fn build_inlay_hints_empty_protocol() {
+        let src = "protocol P { message M; }";
+        let program = parse(src);
+        let hints = build_inlay_hints(src, &program);
+        assert!(hints.is_empty());
+    }
+}

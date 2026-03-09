@@ -438,3 +438,349 @@ pub(super) fn resolve_message_counter_from_guard(
     }
     Ok(resolved)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── collect_distinct_messages_in_guard ────────────────────────────
+
+    #[test]
+    fn collect_distinct_threshold_true() {
+        let guard = ast::GuardExpr::Threshold(ast::ThresholdGuard {
+            op: ast::CmpOp::Ge,
+            threshold: ast::LinearExpr::Const(1),
+            message_type: "Vote".into(),
+            message_args: vec![],
+            distinct: true,
+            distinct_role: None,
+        });
+        let mut out = HashSet::new();
+        collect_distinct_messages_in_guard(&guard, &mut out);
+        assert!(out.contains("Vote"));
+    }
+
+    #[test]
+    fn collect_distinct_threshold_false() {
+        let guard = ast::GuardExpr::Threshold(ast::ThresholdGuard {
+            op: ast::CmpOp::Ge,
+            threshold: ast::LinearExpr::Const(1),
+            message_type: "Vote".into(),
+            message_args: vec![],
+            distinct: false,
+            distinct_role: None,
+        });
+        let mut out = HashSet::new();
+        collect_distinct_messages_in_guard(&guard, &mut out);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn collect_distinct_and_propagates() {
+        let guard = ast::GuardExpr::And(
+            Box::new(ast::GuardExpr::Threshold(ast::ThresholdGuard {
+                op: ast::CmpOp::Ge,
+                threshold: ast::LinearExpr::Const(1),
+                message_type: "A".into(),
+                message_args: vec![],
+                distinct: true,
+                distinct_role: None,
+            })),
+            Box::new(ast::GuardExpr::Threshold(ast::ThresholdGuard {
+                op: ast::CmpOp::Ge,
+                threshold: ast::LinearExpr::Const(1),
+                message_type: "B".into(),
+                message_args: vec![],
+                distinct: false,
+                distinct_role: None,
+            })),
+        );
+        let mut out = HashSet::new();
+        collect_distinct_messages_in_guard(&guard, &mut out);
+        assert_eq!(out.len(), 1);
+        assert!(out.contains("A"));
+    }
+
+    #[test]
+    fn collect_distinct_or_propagates() {
+        let guard = ast::GuardExpr::Or(
+            Box::new(ast::GuardExpr::Threshold(ast::ThresholdGuard {
+                op: ast::CmpOp::Ge,
+                threshold: ast::LinearExpr::Const(1),
+                message_type: "X".into(),
+                message_args: vec![],
+                distinct: true,
+                distinct_role: None,
+            })),
+            Box::new(ast::GuardExpr::Threshold(ast::ThresholdGuard {
+                op: ast::CmpOp::Ge,
+                threshold: ast::LinearExpr::Const(1),
+                message_type: "Y".into(),
+                message_args: vec![],
+                distinct: true,
+                distinct_role: None,
+            })),
+        );
+        let mut out = HashSet::new();
+        collect_distinct_messages_in_guard(&guard, &mut out);
+        assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn collect_distinct_has_crypto_ignored() {
+        let guard = ast::GuardExpr::HasCryptoObject {
+            object_name: "Cert".into(),
+            object_args: vec![],
+        };
+        let mut out = HashSet::new();
+        collect_distinct_messages_in_guard(&guard, &mut out);
+        assert!(out.is_empty());
+    }
+
+    // ── collect_sent_messages_in_role ────────────────────────────────
+
+    #[test]
+    fn collect_sent_messages_finds_sends() {
+        use tarsier_dsl::ast::*;
+        let role = RoleDecl {
+            name: "Replica".into(),
+            is_leader: false,
+            vars: vec![],
+            init_phase: Some("start".into()),
+            phases: vec![Spanned {
+                node: PhaseDecl {
+                    name: "start".into(),
+                    transitions: vec![Spanned {
+                        node: TransitionRule {
+                            guard: GuardExpr::Threshold(ThresholdGuard {
+                                op: CmpOp::Ge,
+                                threshold: LinearExpr::Const(0),
+                                message_type: "Vote".into(),
+                                message_args: vec![],
+                                distinct: false,
+                                distinct_role: None,
+                            }),
+                            actions: vec![
+                                Action::Send {
+                                    message_type: "Echo".into(),
+                                    args: vec![],
+                                    recipient_role: None,
+                                },
+                                Action::Send {
+                                    message_type: "Ready".into(),
+                                    args: vec![],
+                                    recipient_role: None,
+                                },
+                            ],
+                        },
+                        span: Span { start: 0, end: 0 },
+                    }],
+                },
+                span: Span { start: 0, end: 0 },
+            }],
+        };
+        let sent = collect_sent_messages_in_role(&role);
+        assert!(sent.contains("Echo"));
+        assert!(sent.contains("Ready"));
+        assert_eq!(sent.len(), 2);
+    }
+
+    #[test]
+    fn collect_sent_messages_includes_crypto_objects() {
+        use tarsier_dsl::ast::*;
+        let role = RoleDecl {
+            name: "Replica".into(),
+            is_leader: false,
+            vars: vec![],
+            init_phase: Some("start".into()),
+            phases: vec![Spanned {
+                node: PhaseDecl {
+                    name: "start".into(),
+                    transitions: vec![Spanned {
+                        node: TransitionRule {
+                            guard: GuardExpr::Threshold(ThresholdGuard {
+                                op: CmpOp::Ge,
+                                threshold: LinearExpr::Const(0),
+                                message_type: "Vote".into(),
+                                message_args: vec![],
+                                distinct: false,
+                                distinct_role: None,
+                            }),
+                            actions: vec![Action::FormCryptoObject {
+                                object_name: "Cert".into(),
+                                args: vec![],
+                                recipient_role: None,
+                            }],
+                        },
+                        span: Span { start: 0, end: 0 },
+                    }],
+                },
+                span: Span { start: 0, end: 0 },
+            }],
+        };
+        let sent = collect_sent_messages_in_role(&role);
+        assert!(sent.contains("Cert"));
+    }
+
+    // ── message_effective_authenticated ──────────────────────────────
+
+    #[test]
+    fn effective_auth_explicit_authenticated() {
+        let mut ta = ThresholdAutomaton::new();
+        ta.security.message_policies.insert(
+            "Vote".into(),
+            MessagePolicy {
+                auth: MessageAuthPolicy::Authenticated,
+                equivocation: MessageEquivocationPolicy::Inherit,
+            },
+        );
+        ta.semantics.authentication_mode = AuthenticationMode::None;
+        assert!(message_effective_authenticated(&ta, "Vote"));
+    }
+
+    #[test]
+    fn effective_auth_explicit_unauthenticated() {
+        let mut ta = ThresholdAutomaton::new();
+        ta.security.message_policies.insert(
+            "Vote".into(),
+            MessagePolicy {
+                auth: MessageAuthPolicy::Unauthenticated,
+                equivocation: MessageEquivocationPolicy::Inherit,
+            },
+        );
+        ta.semantics.authentication_mode = AuthenticationMode::Signed;
+        assert!(!message_effective_authenticated(&ta, "Vote"));
+    }
+
+    #[test]
+    fn effective_auth_inherit_signed() {
+        let mut ta = ThresholdAutomaton::new();
+        ta.semantics.authentication_mode = AuthenticationMode::Signed;
+        assert!(message_effective_authenticated(&ta, "Vote"));
+    }
+
+    #[test]
+    fn effective_auth_inherit_none() {
+        let mut ta = ThresholdAutomaton::new();
+        ta.semantics.authentication_mode = AuthenticationMode::None;
+        assert!(!message_effective_authenticated(&ta, "Vote"));
+    }
+
+    // ── recipient_channel_for_location ───────────────────────────────
+
+    #[test]
+    fn recipient_channel_classic() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let result =
+            recipient_channel_for_location("Replica", &locals, NetworkSemantics::Classic, "pid")
+                .unwrap();
+        assert_eq!(result, "Replica");
+    }
+
+    #[test]
+    fn recipient_channel_identity_selective() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let result = recipient_channel_for_location(
+            "Replica",
+            &locals,
+            NetworkSemantics::IdentitySelective,
+            "pid",
+        )
+        .unwrap();
+        assert_eq!(result, "Replica");
+    }
+
+    #[test]
+    fn recipient_channel_process_selective() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("pid".into(), LocalValue::Int(2));
+        let result = recipient_channel_for_location(
+            "Replica",
+            &locals,
+            NetworkSemantics::ProcessSelective,
+            "pid",
+        )
+        .unwrap();
+        assert_eq!(result, "Replica#2");
+    }
+
+    #[test]
+    fn recipient_channel_process_selective_negative_pid_error() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("pid".into(), LocalValue::Int(-1));
+        assert!(recipient_channel_for_location(
+            "Replica",
+            &locals,
+            NetworkSemantics::ProcessSelective,
+            "pid",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn recipient_channel_process_selective_missing_pid_error() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        assert!(recipient_channel_for_location(
+            "Replica",
+            &locals,
+            NetworkSemantics::ProcessSelective,
+            "pid",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn recipient_channel_cohort_selective() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert(INTERNAL_DELIVERY_LANE_VAR.into(), LocalValue::Int(1));
+        let result = recipient_channel_for_location(
+            "Replica",
+            &locals,
+            NetworkSemantics::CohortSelective,
+            "pid",
+        )
+        .unwrap();
+        assert_eq!(result, "Replica#1");
+    }
+
+    #[test]
+    fn recipient_channel_cohort_selective_missing_lane_error() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        assert!(recipient_channel_for_location(
+            "Replica",
+            &locals,
+            NetworkSemantics::CohortSelective,
+            "pid",
+        )
+        .is_err());
+    }
+
+    // ── object_counter_vars_for_recipient ────────────────────────────
+
+    #[test]
+    fn object_counter_vars_empty_ta() {
+        let ta = ThresholdAutomaton::new();
+        let result = object_counter_vars_for_recipient(&ta, "Vote", "Replica");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn object_counter_vars_finds_matching() {
+        let mut ta = ThresholdAutomaton::new();
+        let id = ta.add_shared_var(SharedVar {
+            name: "cnt_Vote@Replica".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        // Add a non-matching one
+        ta.add_shared_var(SharedVar {
+            name: "cnt_Echo@Leader".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        let result = object_counter_vars_for_recipient(&ta, "Vote", "Replica");
+        assert_eq!(result, vec![id]);
+    }
+}

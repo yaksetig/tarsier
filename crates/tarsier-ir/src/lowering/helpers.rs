@@ -426,3 +426,466 @@ pub(super) fn enum_variant_index(
         LoweringError::UnknownEnumVariant(variant.to_string(), enum_name.to_string())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collect_params_constant_yields_none() {
+        let expr = ast::LinearExpr::Const(42);
+        let mut out = Vec::new();
+        let mut seen = HashSet::new();
+        collect_params_from_linear_expr(&expr, &mut out, &mut seen);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn collect_params_var_yields_name() {
+        let expr = ast::LinearExpr::Var("n".into());
+        let mut out = Vec::new();
+        let mut seen = HashSet::new();
+        collect_params_from_linear_expr(&expr, &mut out, &mut seen);
+        assert_eq!(out, vec!["n"]);
+    }
+
+    #[test]
+    fn collect_params_deduplicates() {
+        let expr = ast::LinearExpr::Add(
+            Box::new(ast::LinearExpr::Var("n".into())),
+            Box::new(ast::LinearExpr::Var("n".into())),
+        );
+        let mut out = Vec::new();
+        let mut seen = HashSet::new();
+        collect_params_from_linear_expr(&expr, &mut out, &mut seen);
+        assert_eq!(out, vec!["n"]);
+    }
+
+    #[test]
+    fn collect_params_complex_expr() {
+        let expr = ast::LinearExpr::Sub(
+            Box::new(ast::LinearExpr::Add(
+                Box::new(ast::LinearExpr::Mul(
+                    3,
+                    Box::new(ast::LinearExpr::Var("t".into())),
+                )),
+                Box::new(ast::LinearExpr::Var("n".into())),
+            )),
+            Box::new(ast::LinearExpr::Const(1)),
+        );
+        let mut out = Vec::new();
+        let mut seen = HashSet::new();
+        collect_params_from_linear_expr(&expr, &mut out, &mut seen);
+        assert_eq!(out, vec!["t", "n"]);
+    }
+
+    #[test]
+    fn lower_linear_constant() {
+        let params: IndexMap<String, ParamId> = IndexMap::new();
+        let lc = lower_linear_expr_to_lc(&ast::LinearExpr::Const(5), &params).unwrap();
+        assert_eq!(lc.constant, 5);
+        assert!(lc.terms.is_empty());
+    }
+
+    #[test]
+    fn lower_linear_var() {
+        let mut params: IndexMap<String, ParamId> = IndexMap::new();
+        params.insert("n".into(), ParamId::from(0));
+        let lc =
+            lower_linear_expr_to_lc(&ast::LinearExpr::Var("n".into()), &params).unwrap();
+        assert_eq!(lc.constant, 0);
+        assert_eq!(lc.terms.len(), 1);
+        assert_eq!(lc.terms[0], (1, ParamId::from(0)));
+    }
+
+    #[test]
+    fn lower_linear_unknown_param_error() {
+        let params: IndexMap<String, ParamId> = IndexMap::new();
+        assert!(
+            lower_linear_expr_to_lc(&ast::LinearExpr::Var("x".into()), &params).is_err()
+        );
+    }
+
+    #[test]
+    fn lower_linear_add_sub() {
+        let mut params: IndexMap<String, ParamId> = IndexMap::new();
+        params.insert("n".into(), ParamId::from(0));
+        let expr = ast::LinearExpr::Add(
+            Box::new(ast::LinearExpr::Var("n".into())),
+            Box::new(ast::LinearExpr::Const(3)),
+        );
+        let lc = lower_linear_expr_to_lc(&expr, &params).unwrap();
+        assert_eq!(lc.constant, 3);
+        assert_eq!(lc.terms.len(), 1);
+    }
+
+    #[test]
+    fn lower_linear_mul() {
+        let mut params: IndexMap<String, ParamId> = IndexMap::new();
+        params.insert("t".into(), ParamId::from(0));
+        let expr =
+            ast::LinearExpr::Mul(3, Box::new(ast::LinearExpr::Var("t".into())));
+        let lc = lower_linear_expr_to_lc(&expr, &params).unwrap();
+        assert_eq!(lc.constant, 0);
+        assert_eq!(lc.terms[0], (3, ParamId::from(0)));
+    }
+
+    #[test]
+    fn lower_cmp_op_all_variants() {
+        assert_eq!(lower_cmp_op(ast::CmpOp::Ge), CmpOp::Ge);
+        assert_eq!(lower_cmp_op(ast::CmpOp::Le), CmpOp::Le);
+        assert_eq!(lower_cmp_op(ast::CmpOp::Gt), CmpOp::Gt);
+        assert_eq!(lower_cmp_op(ast::CmpOp::Lt), CmpOp::Lt);
+        assert_eq!(lower_cmp_op(ast::CmpOp::Eq), CmpOp::Eq);
+        assert_eq!(lower_cmp_op(ast::CmpOp::Ne), CmpOp::Ne);
+    }
+
+    #[test]
+    fn enumerate_empty_domains() {
+        let domains: Vec<(String, Vec<LocalValue>)> = vec![];
+        let assigns = enumerate_local_assignments(&domains);
+        assert_eq!(assigns.len(), 1);
+        assert!(assigns[0].is_empty());
+    }
+
+    #[test]
+    fn enumerate_single_bool_domain() {
+        let domains = vec![(
+            "decided".into(),
+            vec![LocalValue::Bool(false), LocalValue::Bool(true)],
+        )];
+        let assigns = enumerate_local_assignments(&domains);
+        assert_eq!(assigns.len(), 2);
+    }
+
+    #[test]
+    fn enumerate_cross_product() {
+        let domains = vec![
+            (
+                "a".into(),
+                vec![LocalValue::Bool(false), LocalValue::Bool(true)],
+            ),
+            (
+                "b".into(),
+                vec![LocalValue::Int(0), LocalValue::Int(1), LocalValue::Int(2)],
+            ),
+        ];
+        let assigns = enumerate_local_assignments(&domains);
+        assert_eq!(assigns.len(), 6);
+    }
+
+    #[test]
+    fn eval_bool_literal() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        assert!(eval_bool_expr(&ast::Expr::BoolLit(true), &locals).unwrap());
+        assert!(!eval_bool_expr(&ast::Expr::BoolLit(false), &locals).unwrap());
+    }
+
+    #[test]
+    fn eval_bool_var() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("flag".into(), LocalValue::Bool(true));
+        assert!(eval_bool_expr(&ast::Expr::Var("flag".into()), &locals).unwrap());
+    }
+
+    #[test]
+    fn eval_bool_not() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let expr = ast::Expr::Not(Box::new(ast::Expr::BoolLit(true)));
+        assert!(!eval_bool_expr(&expr, &locals).unwrap());
+    }
+
+    #[test]
+    fn eval_bool_unknown_var_error() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        assert!(eval_bool_expr(&ast::Expr::Var("missing".into()), &locals).is_err());
+    }
+
+    #[test]
+    fn eval_int_literal() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        assert_eq!(eval_int_expr(&ast::Expr::IntLit(42), &locals).unwrap(), 42);
+    }
+
+    #[test]
+    fn eval_int_arithmetic() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let expr = ast::Expr::Mul(
+            Box::new(ast::Expr::Add(
+                Box::new(ast::Expr::IntLit(3)),
+                Box::new(ast::Expr::IntLit(2)),
+            )),
+            Box::new(ast::Expr::IntLit(4)),
+        );
+        assert_eq!(eval_int_expr(&expr, &locals).unwrap(), 20);
+    }
+
+    #[test]
+    fn eval_int_div_by_zero_error() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let expr = ast::Expr::Div(
+            Box::new(ast::Expr::IntLit(10)),
+            Box::new(ast::Expr::IntLit(0)),
+        );
+        assert!(eval_int_expr(&expr, &locals).is_err());
+    }
+
+    #[test]
+    fn eval_int_neg() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let expr = ast::Expr::Neg(Box::new(ast::Expr::IntLit(5)));
+        assert_eq!(eval_int_expr(&expr, &locals).unwrap(), -5);
+    }
+
+    #[test]
+    fn eval_int_var() {
+        let mut locals: IndexMap<String, LocalValue> = IndexMap::new();
+        locals.insert("x".into(), LocalValue::Int(7));
+        assert_eq!(
+            eval_int_expr(&ast::Expr::Var("x".into()), &locals).unwrap(),
+            7
+        );
+    }
+
+    #[test]
+    fn is_bool_expr_checks() {
+        let mut types: IndexMap<String, LocalVarType> = IndexMap::new();
+        types.insert("flag".into(), LocalVarType::Bool);
+        types.insert("count".into(), LocalVarType::Int { min: 0, max: 10 });
+        assert!(is_bool_expr(&ast::Expr::BoolLit(true), &types));
+        assert!(is_bool_expr(&ast::Expr::Var("flag".into()), &types));
+        assert!(!is_bool_expr(&ast::Expr::Var("count".into()), &types));
+        assert!(!is_bool_expr(&ast::Expr::IntLit(0), &types));
+    }
+
+    #[test]
+    fn eval_enum_literal_valid() {
+        let mut enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        enum_defs.insert("Color".into(), vec!["red".into(), "blue".into()]);
+        let result =
+            eval_enum_literal(&ast::Expr::Var("red".into()), "Color", &enum_defs).unwrap();
+        assert_eq!(result, LocalValue::Enum("red".into()));
+    }
+
+    #[test]
+    fn eval_enum_literal_unknown_variant_error() {
+        let mut enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        enum_defs.insert("Color".into(), vec!["red".into(), "blue".into()]);
+        assert!(
+            eval_enum_literal(&ast::Expr::Var("green".into()), "Color", &enum_defs).is_err()
+        );
+    }
+
+    #[test]
+    fn eval_enum_literal_unknown_enum_error() {
+        let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        assert!(
+            eval_enum_literal(&ast::Expr::Var("x".into()), "Missing", &enum_defs).is_err()
+        );
+    }
+
+    #[test]
+    fn enum_variant_index_valid() {
+        let mut enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        enum_defs.insert(
+            "View".into(),
+            vec!["v0".into(), "v1".into(), "v2".into()],
+        );
+        assert_eq!(enum_variant_index("View", "v0", &enum_defs).unwrap(), 0);
+        assert_eq!(enum_variant_index("View", "v2", &enum_defs).unwrap(), 2);
+    }
+
+    #[test]
+    fn enum_variant_index_unknown_variant_error() {
+        let mut enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        enum_defs.insert("View".into(), vec!["v0".into()]);
+        assert!(enum_variant_index("View", "v99", &enum_defs).is_err());
+    }
+
+    #[test]
+    fn eval_local_expr_bool() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        let result = eval_local_expr(
+            "flag",
+            &ast::Expr::BoolLit(true),
+            &LocalVarType::Bool,
+            &locals,
+            &enum_defs,
+        )
+        .unwrap();
+        assert_eq!(result, LocalValue::Bool(true));
+    }
+
+    #[test]
+    fn eval_local_expr_int_out_of_range_error() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        assert!(eval_local_expr(
+            "x",
+            &ast::Expr::IntLit(100),
+            &LocalVarType::Int { min: 0, max: 10 },
+            &locals,
+            &enum_defs,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn eval_local_expr_int_in_range() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
+        let result = eval_local_expr(
+            "x",
+            &ast::Expr::IntLit(5),
+            &LocalVarType::Int { min: 0, max: 10 },
+            &locals,
+            &enum_defs,
+        )
+        .unwrap();
+        assert_eq!(result, LocalValue::Int(5));
+    }
+
+    #[test]
+    fn eval_field_expr_bool_domain() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let result = eval_field_expr(
+            &ast::Expr::BoolLit(true),
+            &FieldDomain::Bool,
+            &locals,
+            &types,
+            &enums,
+        )
+        .unwrap();
+        assert_eq!(result, "true");
+    }
+
+    #[test]
+    fn eval_field_expr_int_domain_in_range() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let result = eval_field_expr(
+            &ast::Expr::IntLit(3),
+            &FieldDomain::Int { min: 0, max: 5 },
+            &locals,
+            &types,
+            &enums,
+        )
+        .unwrap();
+        assert_eq!(result, "3");
+    }
+
+    #[test]
+    fn eval_field_expr_int_domain_out_of_range_error() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        assert!(eval_field_expr(
+            &ast::Expr::IntLit(10),
+            &FieldDomain::Int { min: 0, max: 5 },
+            &locals,
+            &types,
+            &enums,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn eval_field_expr_nat_sign_abstraction() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let domain =
+            FieldDomain::AbstractNatSign(vec!["zero".into(), "pos".into()]);
+        assert_eq!(
+            eval_field_expr(&ast::Expr::IntLit(0), &domain, &locals, &types, &enums)
+                .unwrap(),
+            "zero"
+        );
+        assert_eq!(
+            eval_field_expr(&ast::Expr::IntLit(5), &domain, &locals, &types, &enums)
+                .unwrap(),
+            "pos"
+        );
+    }
+
+    #[test]
+    fn eval_field_expr_int_sign_abstraction() {
+        let locals: IndexMap<String, LocalValue> = IndexMap::new();
+        let types: IndexMap<String, LocalVarType> = IndexMap::new();
+        let enums: IndexMap<String, Vec<String>> = IndexMap::new();
+        let domain = FieldDomain::AbstractIntSign(vec![
+            "neg".into(),
+            "zero".into(),
+            "pos".into(),
+        ]);
+        assert_eq!(
+            eval_field_expr(
+                &ast::Expr::IntLit(-3),
+                &domain,
+                &locals,
+                &types,
+                &enums
+            )
+            .unwrap(),
+            "neg"
+        );
+        assert_eq!(
+            eval_field_expr(&ast::Expr::IntLit(0), &domain, &locals, &types, &enums)
+                .unwrap(),
+            "zero"
+        );
+        assert_eq!(
+            eval_field_expr(&ast::Expr::IntLit(3), &domain, &locals, &types, &enums)
+                .unwrap(),
+            "pos"
+        );
+    }
+
+    #[test]
+    fn lower_expr_to_lc_int_lit() {
+        let params: IndexMap<String, ParamId> = IndexMap::new();
+        let lc = lower_expr_to_lc(&ast::Expr::IntLit(7), &params).unwrap();
+        assert_eq!(lc.constant, 7);
+        assert!(lc.terms.is_empty());
+    }
+
+    #[test]
+    fn lower_expr_to_lc_neg() {
+        let mut params: IndexMap<String, ParamId> = IndexMap::new();
+        params.insert("n".into(), ParamId::from(0));
+        let expr = ast::Expr::Neg(Box::new(ast::Expr::Var("n".into())));
+        let lc = lower_expr_to_lc(&expr, &params).unwrap();
+        assert_eq!(lc.terms[0], (-1, ParamId::from(0)));
+    }
+
+    #[test]
+    fn lower_expr_to_lc_unsupported_bool_error() {
+        let params: IndexMap<String, ParamId> = IndexMap::new();
+        assert!(lower_expr_to_lc(&ast::Expr::BoolLit(true), &params).is_err());
+    }
+
+    #[test]
+    fn expr_enum_type_returns_enum_name() {
+        let mut types: IndexMap<String, LocalVarType> = IndexMap::new();
+        types.insert("view".into(), LocalVarType::Enum("View".into()));
+        assert_eq!(
+            expr_enum_type(&ast::Expr::Var("view".into()), &types),
+            Some(&"View".to_string())
+        );
+    }
+
+    #[test]
+    fn expr_enum_type_returns_none_for_non_enum() {
+        let mut types: IndexMap<String, LocalVarType> = IndexMap::new();
+        types.insert("count".into(), LocalVarType::Int { min: 0, max: 10 });
+        assert_eq!(
+            expr_enum_type(&ast::Expr::Var("count".into()), &types),
+            None
+        );
+        assert_eq!(expr_enum_type(&ast::Expr::IntLit(5), &types), None);
+    }
+}
