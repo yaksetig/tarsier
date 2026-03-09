@@ -101,6 +101,12 @@ fn sha256_hex_file(path: &std::path::Path) -> String {
     out
 }
 
+fn load_example(path: &str) -> String {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../");
+    let file = root.join(path);
+    fs::read_to_string(&file).unwrap_or_else(|err| panic!("read {}: {err}", file.display()))
+}
+
 // ---------------------------------------------------------------------------
 // Safe protocol: .trs source
 // ---------------------------------------------------------------------------
@@ -710,5 +716,36 @@ fn pipeline_stages_chain_correctly_with_explicit_intermediate_inspection() {
     assert!(
         report.metadata.bundle_sha256.is_some(),
         "bundle should have integrity hash"
+    );
+}
+
+#[test]
+fn dag_round_alpha_example_verifies_safe() {
+    let src = load_example("examples/experimental/dag_round_alpha_safe.trs");
+    let opts = default_options();
+
+    let program = pipeline::parse(&src, "dag_round_alpha_safe.trs").expect("parse should succeed");
+    assert_eq!(program.protocol.node.dag_rounds.len(), 3);
+
+    let ta = pipeline::lower(&program).expect("lower should succeed");
+    assert_eq!(ta.dag_rounds.len(), 3);
+
+    let result = pipeline::verify(&src, "dag_round_alpha_safe.trs", &opts)
+        .expect("verify should complete");
+    assert!(
+        matches!(result, VerificationResult::Safe { .. }),
+        "alpha DAG example should be safe"
+    );
+}
+
+#[test]
+fn dag_round_alpha_invalid_cycle_is_rejected_during_lowering() {
+    let src = load_example("examples/experimental/dag_round_alpha_invalid_cycle.trs");
+    let program =
+        pipeline::parse(&src, "dag_round_alpha_invalid_cycle.trs").expect("parse should succeed");
+    let err = pipeline::lower(&program).expect_err("cyclic dag_round definitions must be rejected");
+    assert!(
+        format!("{err}").contains("contains a cycle"),
+        "expected cycle diagnostic, got: {err}"
     );
 }
