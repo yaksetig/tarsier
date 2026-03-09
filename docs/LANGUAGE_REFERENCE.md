@@ -22,10 +22,12 @@ This document is the complete reference for the `.trs` protocol modeling languag
 16. [Cryptographic Objects](#16-cryptographic-objects)
 17. [Committees](#17-committees)
 18. [Pacemaker](#18-pacemaker)
-19. [Expressions](#19-expressions)
-20. [Comments and Whitespace](#20-comments-and-whitespace)
-21. [Verification Workflow](#21-verification-workflow)
-22. [Complete Examples](#22-complete-examples)
+19. [DAG Rounds](#19-dag-rounds)
+20. [Clocks and Timeouts](#20-clocks-and-timeouts)
+21. [Expressions](#21-expressions)
+22. [Comments and Whitespace](#22-comments-and-whitespace)
+23. [Verification Workflow](#23-verification-workflow)
+24. [Complete Examples](#24-complete-examples)
 
 ---
 
@@ -917,7 +919,92 @@ When a pacemaker is active, the engine injects additional transitions that incre
 
 ---
 
-## 19. Expressions
+## 19. DAG Rounds
+
+DAG round declarations model DAG-based consensus protocols (e.g., DAG-Rider, Bullshark) where rounds form a directed acyclic graph with parent references.
+
+```
+dag_round r0;
+dag_round r1 extends r0;
+dag_round r2 extends r0, r1;
+```
+
+- Each `dag_round` declares a named round node in the DAG.
+- `extends` lists parent rounds that must be completed before this round can proceed.
+- Omitting `extends` creates a root round with no parents.
+- The DAG structure is validated during lowering: cycles are rejected, and parent references must refer to previously declared rounds.
+
+### Example
+
+```
+protocol DagRoundAlphaSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    dag_round r0;
+    dag_round r1 extends r0;
+    dag_round r2 extends r0, r1;
+
+    role Node {
+        var decided: bool = false;
+        init propose;
+        phase propose {}
+        phase done {}
+    }
+
+    property inv: invariant {
+        forall p: Node. p.decided == false
+    }
+}
+```
+
+---
+
+## 20. Clocks and Timeouts
+
+Clock declarations model local timers for timeout-based protocol logic (e.g., view-change timeouts, heartbeat timers).
+
+### Declaration
+
+```
+clock timer;
+```
+
+Declares a named clock. Clocks start at zero and can be advanced or reset during transitions.
+
+### Clock actions
+
+**Tick** (advance the clock):
+
+```
+tick timer;
+tick timer by 2;
+```
+
+`tick` increments the clock by 1 (default) or by a specified linear expression.
+
+**Reset** (reset the clock to zero):
+
+```
+reset timer;
+```
+
+### Timeout guard
+
+Fires when a clock reaches or exceeds a threshold:
+
+```
+when timeout timer >= 3 => {
+    goto phase view_change;
+}
+```
+
+The threshold is a linear expression over parameters. Standard comparison operators are supported (`>=`, `>`, `<=`, `<`, `==`, `!=`).
+
+---
+
+## 21. Expressions
 
 ### Arithmetic expressions
 
@@ -967,7 +1054,7 @@ Qualified variable access (in formulas): `p.decided`, `q.round`.
 
 ---
 
-## 20. Comments and Whitespace
+## 22. Comments and Whitespace
 
 **Line comments:**
 
@@ -987,7 +1074,7 @@ Whitespace (spaces, tabs, newlines) is ignored between tokens.
 
 ---
 
-## 21. Verification Workflow
+## 23. Verification Workflow
 
 ### CLI commands
 
@@ -1007,6 +1094,39 @@ Whitespace (spaces, tabs, newlines) is ignored between tokens.
 | `tarsier comm <file>` | Communication complexity analysis |
 | `tarsier visualize <file>` | Trace visualization (timeline, MSC) |
 | `tarsier debug-cex <file>` | Interactive counterexample debugger |
+
+### Refinement checking
+
+`refinement-check` verifies that a concrete protocol simulates an abstract one (directional simulation preservation). The concrete protocol must declare `refines "abstract.trs";` or the abstract file can be provided via `--abstract-file`.
+
+```bash
+tarsier refinement-check concrete.trs
+tarsier refinement-check concrete.trs --abstract-file abstract.trs --depth 15
+```
+
+The checker builds a bounded product automaton and verifies that every concrete transition has a matching abstract transition up to the given depth.
+
+### Equivalence checking
+
+`equivalence-check` performs bidirectional bounded simulation between two protocols. Both directions (A simulates B and B simulates A) are checked independently.
+
+```bash
+tarsier equivalence-check protocol_a.trs --other protocol_b.trs
+tarsier equivalence-check protocol_a.trs --other protocol_b.trs --depth 12 --format json
+```
+
+If both directions pass, the protocols are behaviorally equivalent up to the bounded depth. A failure in either direction reports which protocol cannot simulate the other, along with a distinguishing trace.
+
+### Invariant inference
+
+`infer-invariants` mines candidate invariant predicates from a protocol's structure, tests them for inductiveness (init + consecution), and reports the results ranked by inductiveness score.
+
+```bash
+tarsier infer-invariants protocol.trs
+tarsier infer-invariants protocol.trs --depth 15 --solver z3 --format json
+```
+
+Candidates that pass both initiation and consecution checks are reported as inductive invariants. Those passing only initiation are reported separately. Use discovered invariants to strengthen `prove` runs via `--auto-strengthen`.
 
 ### Common flags
 
@@ -1086,7 +1206,7 @@ summary metadata (`crypto.kind`, `crypto.source`, `crypto.signer_role`,
 
 ---
 
-## 22. Complete Examples
+## 24. Complete Examples
 
 ### Bracha Reliable Broadcast (Byzantine, minimal)
 
@@ -1366,6 +1486,7 @@ protocol_item   = params_decl | resilience_decl | adversary_decl
                 | message_decl | enum_decl | role_decl | property_decl
                 | identity_decl | channel_decl | equivocation_decl
                 | committee_decl | crypto_object_decl | pacemaker_decl
+                | dag_round_decl | clock_decl
 
 params_decl     = "params" param_list ";"
                 | "parameters" "{" param_def* "}"
@@ -1389,18 +1510,26 @@ init_decl       = "init" IDENT ";"
 phase_decl      = "phase" IDENT "{" transition* "}"
 transition      = "when" guard "=>" "{" action* "}"
 
-guard           = threshold_guard | has_guard | cmp_guard | bool_guard
+dag_round_decl  = "dag_round" IDENT ["extends" ident_list] ";"
+clock_decl      = "clock" IDENT ";"
+
+guard           = threshold_guard | has_guard | timeout_guard
+                | cmp_guard | bool_guard
                 | guard "&&" guard | guard "||" guard
 threshold_guard = "received" ["distinct"] cmp_op linear_expr IDENT [msg_args]
 has_guard       = "has" IDENT [msg_args]
+timeout_guard   = "timeout" IDENT cmp_op linear_expr
 msg_args        = "(" IDENT "=" expr ("," IDENT "=" expr)* ")"
 
 action          = send | assign | goto | decide
                 | form | lock | justify
+                | reset_clock | tick_clock
 send            = "send" IDENT [send_args] ["to" IDENT] ";"
 assign          = IDENT "=" expr ";"
 goto            = "goto" "phase" IDENT ";"
 decide          = "decide" expr ";"
+reset_clock     = "reset" IDENT ";"
+tick_clock      = "tick" IDENT ["by" linear_expr] ";"
 
 formula         = quantifier* formula_expr
 quantifier      = ("forall" | "exists") IDENT ":" IDENT "."

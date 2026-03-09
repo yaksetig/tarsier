@@ -1,0 +1,41 @@
+// FIFO channel bug: weak guard allows conflicting decisions.
+// A process can decide true on receiving just 1 Vote (too weak),
+// or decide false on any Reject. The FIFO enqueue is present but
+// the guard threshold is insufficient to prevent disagreement.
+protocol FifoBuggyWeakGuard {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    fifo_channel MsgQueue: int[n];
+
+    message Vote;
+    message Reject;
+
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                enqueue MsgQueue 1;
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received >= 1 Reject => {
+                decision = false;
+                decided = true;
+                decide false;
+                goto phase done_no;
+            }
+        }
+        phase done_yes {}
+        phase done_no {}
+    }
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

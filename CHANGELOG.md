@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Sprint 4-6)
+
+#### DSL Features
+- **DAG Rounds**: `dag_round name extends parent1, parent2;` declarations for DAG-based consensus protocols (e.g., DAG-Rider, Bullshark). Cycle detection and parent validation during lowering.
+- **Clocks and Timeouts**: `clock name;` declarations with `tick`, `reset` actions and `when timeout name >= N` guards for modeling timer-based protocol logic.
+- **Reconfiguration**: `reconfigure { param = expr; }` action syntax for epoch-aware parameter evolution at transition boundaries.
+
+#### Verification Commands
+- **Refinement Checking**: `tarsier refinement-check` command for directional simulation preservation between concrete and abstract protocols. Works with `refines "path.trs"` DSL declaration or `--abstract-file` CLI flag.
+- **Equivalence Checking**: `tarsier equivalence-check` command for bidirectional bounded behavioral equivalence between two protocols via `--other` flag.
+- **Invariant Inference**: `tarsier infer-invariants` command for candidate invariant mining with inductiveness scoring (init + consecution checks).
+
+---
+
 ### Added
 
 #### Core Verification Engine (`tarsier-engine`, `tarsier-smt`)

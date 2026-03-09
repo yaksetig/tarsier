@@ -31,3 +31,7 @@ tempfile = "3"
 [[bench]]
 name = "engine_bench"
 harness = false
+
+[[bench]]
+name = "solver_perf"
+harness = false

@@ -47,6 +47,7 @@ jobs:
           cargo bench --bench lowering_bench  -- --output-format bencher | tee target/criterion-results/lowering.txt
           cargo bench --bench encoder_bench   -- --output-format bencher | tee target/criterion-results/encoder.txt
           cargo bench --bench engine_bench    -- --output-format bencher | tee target/criterion-results/engine.txt
+          cargo bench --bench solver_perf    -- --output-format bencher | tee target/criterion-results/solver_perf.txt
           cat target/criterion-results/*.txt > target/criterion-results/all.txt
 
       # Upload raw benchmark output as an artifact for manual inspection.

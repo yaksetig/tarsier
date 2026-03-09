@@ -906,3 +906,431 @@ fn dag_round_alpha_invalid_cycle_is_rejected_during_lowering() {
         "expected cycle diagnostic, got: {err}"
     );
 }
+
+// ===========================================================================
+// FIFO Channel Tests
+// ===========================================================================
+
+/// A FIFO channel protocol with a single-quantifier invariant property.
+/// The example file (fifo_channel_demo.trs) uses a two-quantifier safety
+/// property which the engine's safety/invariant fragment does not yet support.
+/// This test rewrites the property as a single-quantifier invariant to exercise
+/// the FIFO collection lowering and encoding through the full pipeline.
+const FIFO_CHANNEL_PROTOCOL: &str = r#"
+protocol FifoChannelTest {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    fifo_channel RequestQueue: int[n];
+
+    message Request;
+
+    role Worker {
+        var active: bool = false;
+        init Waiting;
+        phase Waiting {
+            when received >= 1 Request => {
+                enqueue RequestQueue 1;
+                goto phase Waiting;
+            }
+        }
+        phase Processing {
+            when received >= 1 Request => {
+                dequeue RequestQueue;
+                goto phase Processing;
+            }
+        }
+    }
+
+    property inv: invariant {
+        forall p: Worker. p.active == false
+    }
+}
+"#;
+
+#[test]
+fn fifo_channel_safe_agreement_bmc() {
+    let opts = default_options();
+
+    // Parse
+    let program = pipeline::parse(FIFO_CHANNEL_PROTOCOL, "fifo_channel_test.trs")
+        .expect("FIFO channel protocol should parse");
+    assert_eq!(program.protocol.node.name, "FifoChannelTest");
+
+    // Lower
+    let ta = pipeline::lower(&program).expect("FIFO channel protocol should lower");
+    assert!(!ta.locations.is_empty());
+    assert!(
+        !ta.collections.is_empty(),
+        "FIFO protocol should have at least one collection"
+    );
+
+    // BMC verify
+    let result = pipeline::verify(FIFO_CHANNEL_PROTOCOL, "fifo_channel_test.trs", &opts)
+        .expect("BMC should complete for FIFO channel protocol");
+    match &result {
+        VerificationResult::Safe { depth_checked } => {
+            assert!(*depth_checked > 0);
+        }
+        other => panic!("Expected SAFE for FIFO channel protocol BMC, got: {other}"),
+    }
+}
+
+#[test]
+fn fifo_channel_safe_agreement_prove() {
+    let opts = default_options();
+
+    let result = pipeline::prove_safety(FIFO_CHANNEL_PROTOCOL, "fifo_channel_test.trs", &opts)
+        .expect("k-induction should complete for FIFO channel protocol");
+    match &result {
+        UnboundedSafetyResult::Safe { induction_k } => {
+            assert!(*induction_k >= 1);
+        }
+        other => panic!("Expected SAFE for FIFO channel protocol k-induction, got: {other}"),
+    }
+}
+
+// ===========================================================================
+// Clock / Timeout Tests
+// ===========================================================================
+
+/// A minimal protocol exercising the clock/timeout DSL features.
+/// The invariant (`echoed == false`) is trivially safe because no transition
+/// sets it to true. The key purpose is to confirm that clock declarations and
+/// `when timeout` guards flow through the full pipeline (parse -> lower ->
+/// encode -> solve) without error.
+const CLOCK_TIMEOUT_PROTOCOL: &str = r#"
+protocol ClockTimeoutSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    message Echo;
+    clock deadline;
+    role Process {
+        var echoed: bool = false;
+        init waiting;
+        phase waiting {
+            when timeout deadline >= 1 => {
+                send Echo;
+                goto phase sent;
+            }
+        }
+        phase sent {}
+    }
+    property inv: invariant {
+        forall p: Process. p.echoed == false
+    }
+}
+"#;
+
+#[test]
+fn clock_timeout_safe_bmc() {
+    let opts = default_options();
+
+    // Parse
+    let program = pipeline::parse(CLOCK_TIMEOUT_PROTOCOL, "clock_timeout.trs")
+        .expect("clock/timeout protocol should parse");
+    assert_eq!(program.protocol.node.name, "ClockTimeoutSafe");
+    assert!(
+        !program.protocol.node.clocks.is_empty(),
+        "protocol should have at least one clock declaration"
+    );
+
+    // Lower
+    let ta = pipeline::lower(&program).expect("clock/timeout protocol should lower");
+    assert!(!ta.locations.is_empty());
+    assert!(
+        !ta.clocks.is_empty(),
+        "threshold automaton should have clock declarations"
+    );
+
+    // BMC verify — single decision value means agreement is trivially safe
+    let result = pipeline::verify(CLOCK_TIMEOUT_PROTOCOL, "clock_timeout.trs", &opts)
+        .expect("BMC should complete for clock/timeout protocol");
+    match &result {
+        VerificationResult::Safe { depth_checked } => {
+            assert!(*depth_checked > 0);
+        }
+        other => panic!("Expected SAFE for clock/timeout protocol BMC, got: {other}"),
+    }
+}
+
+// ===========================================================================
+// DAG Round Tests — k-induction proof
+// ===========================================================================
+
+#[test]
+fn dag_round_safe_prove() {
+    let src = load_example("examples/experimental/dag_round_alpha_safe.trs");
+    let opts = default_options();
+
+    // The existing test (dag_round_alpha_example_verifies_safe) only does BMC.
+    // This test exercises the full k-induction proof engine.
+    let program = pipeline::parse(&src, "dag_round_alpha_safe.trs")
+        .expect("parse should succeed");
+    assert_eq!(program.protocol.node.dag_rounds.len(), 3);
+
+    let result = pipeline::prove_safety(&src, "dag_round_alpha_safe.trs", &opts)
+        .expect("k-induction proof should complete for DAG round protocol");
+    match &result {
+        UnboundedSafetyResult::Safe { induction_k } => {
+            assert!(*induction_k >= 1);
+        }
+        other => panic!("Expected SAFE for DAG round protocol k-induction, got: {other}"),
+    }
+}
+
+// ===========================================================================
+// Buggy protocol variants — verify the solver CATCHES real bugs
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Reconfiguration: buggy threshold weakening
+// ---------------------------------------------------------------------------
+
+/// After reconfiguring, the threshold is weakened (t lowered) so a different
+/// quorum can reach a conflicting decision. One path decides true with the
+/// original threshold, the other path decides false after reconfiguration
+/// lowers the bar. The solver should find disagreement.
+const RECONFIG_BUGGY_THRESHOLD: &str = r#"
+protocol ReconfigBuggyThreshold {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    message Vote;
+    message Reject;
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= n - t Vote => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received >= 1 Reject => {
+                reconfigure {
+                    t = t - 1;
+                }
+                goto phase reconsidering;
+            }
+        }
+        phase reconsidering {
+            when received >= 1 Reject => {
+                decision = false;
+                decided = true;
+                decide false;
+                goto phase done_no;
+            }
+        }
+        phase done_yes {}
+        phase done_no {}
+    }
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
+"#;
+
+#[test]
+fn reconfig_buggy_threshold_is_unsafe() {
+    let opts = default_options();
+    let result = pipeline::verify(RECONFIG_BUGGY_THRESHOLD, "reconfig_buggy.trs", &opts)
+        .expect("BMC should complete");
+    assert!(
+        matches!(result, VerificationResult::Unsafe { .. }),
+        "Buggy reconfiguration protocol should be UNSAFE, got: {result}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Clock/Timeout: buggy premature decision
+// ---------------------------------------------------------------------------
+
+/// A protocol with clocks where the timeout-guarded path uses a weak
+/// threshold (only 1 Vote), enabling disagreement. One process can reach
+/// done_yes via the strong quorum path, while another reaches done_no
+/// via the weak timeout path. The tick rule makes the timeout satisfiable.
+/// Under counter abstraction, all processes share the clock, so the timeout
+/// path opens for all processes simultaneously — but since processes can
+/// be in different locations, some may take the weak path while others
+/// already decided via the strong path.
+const CLOCK_BUGGY_PREMATURE: &str = r#"
+protocol ClockBuggyPremature {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    message Vote;
+    message Reject;
+    clock timer;
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                tick timer;
+                send Vote;
+                goto phase voting;
+            }
+            when received >= 1 Reject => {
+                tick timer;
+                goto phase aborting;
+            }
+        }
+        phase voting {
+            when received >= n - t Vote => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done_yes;
+            }
+        }
+        phase aborting {
+            when timeout timer >= 1 => {
+                decision = false;
+                decided = true;
+                decide false;
+                goto phase done_no;
+            }
+        }
+        phase done_yes {}
+        phase done_no {}
+    }
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
+"#;
+
+#[test]
+fn clock_buggy_premature_decision_is_unsafe() {
+    let opts = default_options();
+    let result = pipeline::verify(CLOCK_BUGGY_PREMATURE, "clock_buggy.trs", &opts)
+        .expect("BMC should complete");
+    assert!(
+        matches!(result, VerificationResult::Unsafe { .. }),
+        "Buggy clock protocol should be UNSAFE, got: {result}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// FIFO: buggy weak guard allows conflicting decisions
+// ---------------------------------------------------------------------------
+
+/// Two decision paths: decide true if enough Votes arrive, decide false if
+/// any Reject arrives. The guards are intentionally too weak (only 1 Vote
+/// needed), so both paths are reachable, causing disagreement.
+const FIFO_BUGGY_WEAK_GUARD: &str = r#"
+protocol FifoBuggyWeakGuard {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    fifo_channel MsgQueue: int[n];
+
+    message Vote;
+    message Reject;
+
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                enqueue MsgQueue 1;
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received >= 1 Reject => {
+                decision = false;
+                decided = true;
+                decide false;
+                goto phase done_no;
+            }
+        }
+        phase done_yes {}
+        phase done_no {}
+    }
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
+"#;
+
+#[test]
+fn fifo_buggy_weak_guard_is_unsafe() {
+    let opts = default_options();
+    let result = pipeline::verify(FIFO_BUGGY_WEAK_GUARD, "fifo_buggy.trs", &opts)
+        .expect("BMC should complete");
+    assert!(
+        matches!(result, VerificationResult::Unsafe { .. }),
+        "Buggy FIFO protocol should be UNSAFE, got: {result}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// DAG Rounds: buggy protocol with conflicting decisions
+// ---------------------------------------------------------------------------
+
+/// Protocol with DAG rounds where two decision paths exist. A process can
+/// decide true immediately (weak guard), or decide false from a different
+/// phase. The DAG structure doesn't prevent the disagreement.
+const DAG_BUGGY_CONFLICTING: &str = r#"
+protocol DagBuggyConflicting {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    dag_round r0;
+    dag_round r1 extends r0;
+
+    message Vote;
+    message Reject;
+
+    role Node {
+        var decided: bool = false;
+        var decision: bool = false;
+        init propose;
+        phase propose {
+            when received >= 1 Vote => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received >= 1 Reject => {
+                decision = false;
+                decided = true;
+                decide false;
+                goto phase done_no;
+            }
+        }
+        phase done_yes {}
+        phase done_no {}
+    }
+    property agreement: agreement {
+        forall p: Node. forall q: Node.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
+"#;
+
+#[test]
+fn dag_buggy_conflicting_is_unsafe() {
+    let opts = default_options();
+    let result = pipeline::verify(DAG_BUGGY_CONFLICTING, "dag_buggy.trs", &opts)
+        .expect("BMC should complete");
+    assert!(
+        matches!(result, VerificationResult::Unsafe { .. }),
+        "Buggy DAG protocol should be UNSAFE, got: {result}"
+    );
+}

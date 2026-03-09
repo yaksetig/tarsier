@@ -582,6 +582,46 @@
       "cegar_iters": 0,
       "notes": "Reliable broadcast with mid-execution reconfiguration (tightens threshold after delivery). Agreement trivially holds since only one decision value exists in single-value broadcast.",
       "model_sha256": "ca9f19746f7c6eb2d5183e3e7111529a8af85a228575f8fc40f3cb1ec55a2c8b"
+    },
+    {
+      "file": "reconfig_threshold_buggy.trs",
+      "family": "reconfiguration",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "Reconfiguration bug: threshold weakening via reconfigure{t=t-1} breaks quorum overlap. One process decides true via strong quorum, another reconfigures and decides false via weak guard. Exercises epoch-aware SMT encoding.",
+      "model_sha256": "cafe24109b9d1c17734d1837194d594db10837a5cadcfd90e8b526cb85dc18a5"
+    },
+    {
+      "file": "clock_premature_buggy.trs",
+      "family": "clock-timeout",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "Clock/timeout bug: process that receives Reject ticks clock and aborts via timeout guard, while another process collects enough Votes and decides true. Exercises clock variable encoding and timeout guard constraints.",
+      "model_sha256": "0d63c28c07628a5a5ef8c5275b3b3e26c45680cdb627a937c8df4121a61d7fae"
+    },
+    {
+      "file": "fifo_weak_guard_buggy.trs",
+      "family": "fifo-channel",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "FIFO channel bug: weak guard (1 Vote) allows conflicting decisions. Process can decide true on any Vote or false on any Reject. Exercises FIFO queue head/tail encoding alongside standard agreement checking.",
+      "model_sha256": "d77f2434c19bbc53bd8da7709b5eaaee3f9a420eca7cbd54a0ecc435431aa23f"
+    },
+    {
+      "file": "dag_conflicting_buggy.trs",
+      "family": "dag-round",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "DAG round bug: despite dag_round structure with parent dependencies, weak guards (1 message) allow conflicting true/false decisions. Exercises DAG activation variable encoding alongside agreement property checking.",
+      "model_sha256": "17ee51204df1ec2c4110cf424b52270fb09aae1fafab8e833f07c0776b73295f"
     }
   ]
 }
