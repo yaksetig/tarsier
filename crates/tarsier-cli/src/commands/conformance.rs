@@ -851,7 +851,24 @@ pub(crate) fn run_conformance_active_command(
 #[cfg(test)]
 mod active_tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tarsier_conformance::adapters::{AdapterFaultAction, ScheduledAdapterFault};
+
+    fn active_fixture_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/conformance/active")
+            .join(name)
+    }
+
+    fn tmp_path(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should be available")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{prefix}_{}_{}.json", std::process::id(), nanos))
+    }
 
     #[test]
     fn conformance_active_schedule_is_deterministic_for_seed() {
@@ -908,5 +925,64 @@ mod active_tests {
             a.iter().map(|f| &f.action).collect::<Vec<_>>(),
             b.iter().map(|f| &f.action).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn conformance_active_command_corpus_fixture_writes_expected_json_shape() {
+        let trace = active_fixture_path("cometbft_faults_basic.json");
+        let out = tmp_path("tarsier_conformance_active");
+        run_conformance_active_command(&trace, "cometbft", 11, "json", Some(&out))
+            .expect("conformance-active should succeed on corpus fixture");
+
+        let raw = fs::read_to_string(&out).expect("output JSON should be readable");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["adapter"], "cometbft");
+        assert_eq!(value["seed"], 11);
+        assert!(
+            value["faults"]
+                .as_array()
+                .expect("faults should be array")
+                .len()
+                >= 4
+        );
+        fs::remove_file(out).ok();
+    }
+
+    #[test]
+    fn conformance_active_command_seed_changes_same_tick_order_for_corpus_fixture() {
+        let trace = active_fixture_path("cometbft_faults_same_tick.json");
+        let out_a = tmp_path("tarsier_conformance_active_seed_a");
+        let out_b = tmp_path("tarsier_conformance_active_seed_b");
+
+        run_conformance_active_command(&trace, "cometbft", 1, "json", Some(&out_a))
+            .expect("seed 1 run should pass");
+        run_conformance_active_command(&trace, "cometbft", 2, "json", Some(&out_b))
+            .expect("seed 2 run should pass");
+
+        let a: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&out_a).expect("seed a output"))
+                .expect("seed a json");
+        let b: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&out_b).expect("seed b output"))
+                .expect("seed b json");
+
+        let names = |v: &serde_json::Value| -> Vec<String> {
+            v["faults"]
+                .as_array()
+                .expect("faults array")
+                .iter()
+                .map(|f| {
+                    f["action"]["kind"]
+                        .as_str()
+                        .expect("kind string")
+                        .to_string()
+                })
+                .collect()
+        };
+        assert_ne!(names(&a), names(&b));
+
+        fs::remove_file(out_a).ok();
+        fs::remove_file(out_b).ok();
     }
 }

@@ -92,6 +92,29 @@ tarsier conformance-check crates/tarsier-conformance/tests/fixtures/simple_vote.
   --checker-mode strict
 ```
 
+## Step 7: Build deterministic active-fault schedules
+
+Use adapter-backed active fault logs and a seed to produce deterministic
+scenario schedules:
+
+```bash
+tarsier conformance-active \
+  --trace examples/conformance/active/cometbft_faults_basic.json \
+  --adapter cometbft \
+  --seed 11 \
+  --format json
+```
+
+For same-tick perturbations, seed controls ordering:
+
+```bash
+tarsier conformance-active \
+  --trace examples/conformance/active/cometbft_faults_same_tick.json \
+  --adapter cometbft \
+  --seed 1 \
+  --out /tmp/active_seed1.json
+```
+
 ## What conformance checking guarantees
 
 When a trace passes conformance checking, you know:
@@ -118,3 +141,4 @@ behavior matches the verified model's transition structure.
 | `conformance_suite.json` | Suite manifest for batch checking |
 | `conformance_suite_adapters.json` | Adapter replay suite (CometBFT + etcd-raft) |
 | `adapters/*.json` | Adapter input fixtures (pass/fail + corruption cases) |
+| `active/*.json` | Active-fault corpus fixtures for `conformance-active` |
