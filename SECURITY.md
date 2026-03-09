@@ -29,8 +29,14 @@ Please do **not** open a public GitHub issue for security vulnerabilities.
 A bug in any of these components could cause Tarsier to produce incorrect
 verification results.
 
-**Lower priority** -- the LSP server (`tarsier-lsp`) and CLI (`tarsier-cli`).
-Issues here are still welcome but are not treated as security-critical.
+In-scope components include:
+- `tarsier-engine` (verification engine and proof search)
+- `tarsier-certcheck` (certificate and replay validation)
+- `tarsier-cli` (user-facing verification entrypoint)
+- `tarsier-proof-kernel` (proof checking core)
+
+**Lower priority** -- the LSP server (`tarsier-lsp`).
+Issues there are still welcome but are not treated as security-critical.
 
 ### Soundness Bugs
 
@@ -47,3 +53,13 @@ treated as **critical security issues** regardless of which component is affecte
 
 We follow coordinated disclosure. We ask reporters to allow us a reasonable window
 to prepare a fix before publishing details.
+
+## Supply-Chain Integrity
+
+Tarsier treats supply-chain integrity as part of the security boundary.
+Release and governance artifacts include trust report metadata, and trust report
+outputs are expected to be signed and independently verifiable during release
+validation.
+
+Where applicable, verify trust report provenance (including trust report signing)
+before relying on distributed artifacts.
