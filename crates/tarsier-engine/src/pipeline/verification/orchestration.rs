@@ -898,6 +898,29 @@ pub(crate) fn prove_safety_program(
     prove_safety_for_ta(ta, program, options)
 }
 
+/// Run an unbounded safety proof attempt on an already-parsed program.
+///
+/// This is useful for workflows that synthesize/mutate property declarations
+/// (for example, AI-assisted candidate validation) before invoking the solver.
+pub fn prove_safety_program_ast(
+    program: &ast::Program,
+    options: &PipelineOptions,
+) -> Result<UnboundedSafetyResult, PipelineError> {
+    reset_run_diagnostics();
+    with_smt_profile("prove_safety", || {
+        if !has_safety_properties(program) && has_liveness_properties(program) {
+            return Err(PipelineError::Validation(
+                "Unbounded safety proof (`prove`) is safety-only, but this protocol declares only \
+                 liveness properties. Use `prove-fair` / `prove_fair_liveness` for unbounded \
+                 temporal liveness proofs."
+                    .into(),
+            ));
+        }
+        preflight_validate(program, options, PipelineCommand::Verify)?;
+        prove_safety_program(program, options)
+    })
+}
+
 /// Run an unbounded safety proof attempt via k-induction.
 ///
 /// Uses `options.max_depth` as the maximum induction depth `k`.
