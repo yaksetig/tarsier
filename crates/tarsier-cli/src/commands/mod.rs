@@ -10,6 +10,7 @@ pub(crate) mod governance;
 pub(crate) mod helpers;
 pub(crate) mod invariant;
 pub(crate) mod lint;
+pub(crate) mod proof_export;
 pub(crate) mod prove;
 pub(crate) mod refinement;
 pub(crate) mod verify;

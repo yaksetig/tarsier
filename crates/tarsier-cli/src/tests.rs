@@ -3744,3 +3744,35 @@ fn verify_governance_bundle_command_parses() {
         "verify-governance-bundle command should parse"
     );
 }
+
+#[test]
+fn proof_export_command_parses() {
+    let args = Cli::try_parse_from([
+        "tarsier",
+        "proof-export",
+        "cert_bundle",
+        "--to",
+        "lean",
+        "--out",
+        "out/proof_export_lean.json",
+    ]);
+    assert!(args.is_ok(), "proof-export command should parse");
+}
+
+#[test]
+fn proof_export_command_parses_with_certcheck_options() {
+    let args = Cli::try_parse_from([
+        "tarsier",
+        "proof-export",
+        "cert_bundle",
+        "--to",
+        "coq",
+        "--certcheck",
+        "--certcheck-bin",
+        "/usr/local/bin/tarsier-certcheck",
+    ]);
+    assert!(
+        args.is_ok(),
+        "proof-export command with certcheck options should parse"
+    );
+}

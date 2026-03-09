@@ -1048,6 +1048,29 @@ pub(crate) enum Commands {
         format: String,
     },
 
+    /// Export a certificate bundle to Lean/Coq-oriented proof IR
+    #[command(display_order = 26)]
+    ProofExport {
+        /// Path to certificate bundle directory
+        bundle: PathBuf,
+
+        /// Export target backend: lean | coq
+        #[arg(long)]
+        to: String,
+
+        /// Optional output path (prints JSON to stdout when omitted)
+        #[arg(long)]
+        out: Option<PathBuf>,
+
+        /// Run standalone certcheck before exporting and fail fast on certificate issues
+        #[arg(long, default_value_t = false)]
+        certcheck: bool,
+
+        /// Optional certcheck executable path (defaults to tarsier-certcheck in PATH)
+        #[arg(long)]
+        certcheck_bin: Option<PathBuf>,
+    },
+
     /// Generate a machine-readable trust report with trust-boundary sections
     #[cfg(feature = "governance")]
     #[command(display_order = 25)]

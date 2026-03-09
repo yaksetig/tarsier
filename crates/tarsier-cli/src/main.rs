@@ -695,6 +695,21 @@ fn run() -> miette::Result<()> {
                 por_mode: &cli.por_mode,
             })?;
         }
+        Commands::ProofExport {
+            bundle,
+            to,
+            out,
+            certcheck,
+            certcheck_bin,
+        } => {
+            commands::proof_export::run_proof_export_command(
+                bundle,
+                to,
+                out,
+                certcheck,
+                certcheck_bin,
+            )?;
+        }
         #[cfg(feature = "governance")]
         Commands::CertifySafety {
             file,
