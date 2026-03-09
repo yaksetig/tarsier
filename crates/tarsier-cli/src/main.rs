@@ -590,6 +590,21 @@ fn run() -> miette::Result<()> {
                 artifact_dir.as_deref(),
             )?;
         }
+        Commands::ConformanceActive {
+            trace,
+            adapter,
+            seed,
+            format,
+            out,
+        } => {
+            commands::conformance::run_conformance_active_command(
+                &trace,
+                &adapter,
+                seed,
+                &format,
+                out.as_ref(),
+            )?;
+        }
         Commands::Codegen {
             file,
             target,
