@@ -38,6 +38,8 @@ fn make_ta(
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
     }
@@ -358,6 +360,8 @@ fn product_with_guarded_rules() {
         }),
         updates: vec![],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     });
 
@@ -394,6 +398,8 @@ fn product_with_updates() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     });
 

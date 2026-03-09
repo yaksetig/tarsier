@@ -32,6 +32,11 @@ pub(crate) fn gamma_var(step: usize, var: impl std::fmt::Display) -> String {
     format!("g_{step}_{var}")
 }
 
+/// Logical clock `clock` at step `step`.
+pub(crate) fn clock_var(step: usize, clock: impl std::fmt::Display) -> String {
+    format!("clk_{step}_{clock}")
+}
+
 /// Logical timestamp at step `step` (for ordering constraints).
 pub(crate) fn time_var(step: usize) -> String {
     format!("time_{step}")

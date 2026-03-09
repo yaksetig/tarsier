@@ -358,6 +358,13 @@ impl<'a> BmcEncoderBuilder<'a> {
         for v in 0..num_svars {
             enc.assert_term(SmtTerm::var(gamma_var(0, v)).eq(SmtTerm::int(0)));
         }
+        // Clocks start at 0.
+        for c in 0..ta.clocks.len() {
+            let name = clock_var(0, c);
+            enc.declare(name.clone(), SmtSort::Int);
+            enc.assert_term(SmtTerm::var(name.clone()).ge(SmtTerm::int(0)));
+            enc.assert_term(SmtTerm::var(name).eq(SmtTerm::int(0)));
+        }
         enc.assert_term(SmtTerm::var(time_var(0)).eq(SmtTerm::int(0)));
 
         // DAG rounds: inactive at step 0.
@@ -472,6 +479,11 @@ impl<'a> BmcEncoderBuilder<'a> {
                     enc.declare(pending.clone(), SmtSort::Int);
                     enc.assert_term(SmtTerm::var(pending).ge(SmtTerm::int(0)));
                 }
+            }
+            for c in 0..ta.clocks.len() {
+                let name = clock_var(k + 1, c);
+                enc.declare(name.clone(), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(name).ge(SmtTerm::int(0)));
             }
             enc.declare(time_var(k + 1), SmtSort::Int);
             for (v, role) in distinct_vars {
@@ -665,6 +677,19 @@ impl<'a> BmcEncoderBuilder<'a> {
                     };
                     enc.assert_term(dr_pos.clone().implies(guard_term));
                 }
+                for guard in &rule.clock_guards {
+                    let lhs = SmtTerm::var(clock_var(k, guard.clock.as_usize()));
+                    let rhs = encode_lc(&guard.bound);
+                    let guard_term = match guard.op {
+                        CmpOp::Ge => lhs.ge(rhs),
+                        CmpOp::Gt => lhs.gt(rhs),
+                        CmpOp::Le => lhs.le(rhs),
+                        CmpOp::Lt => lhs.lt(rhs),
+                        CmpOp::Eq => lhs.eq(rhs),
+                        CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
+                    };
+                    enc.assert_term(dr_pos.clone().implies(guard_term));
+                }
 
                 // delta_k_r <= kappa_k_{from_loc} (can't fire more than available processes)
                 enc.assert_term(
@@ -693,6 +718,50 @@ impl<'a> BmcEncoderBuilder<'a> {
             enc.assert_term(
                 SmtTerm::var(time_var(k + 1)).eq(SmtTerm::var(time_var(k)).add(SmtTerm::int(1))),
             );
+
+            // Clock updates and frame conditions.
+            for c in 0..ta.clocks.len() {
+                let curr = SmtTerm::var(clock_var(k, c));
+                let next = SmtTerm::var(clock_var(k + 1, c));
+                let mut updating_rules = Vec::new();
+                for &r in active_rule_ids {
+                    if ta.rules[r]
+                        .clock_updates
+                        .iter()
+                        .any(|u| u.clock.as_usize() == c)
+                    {
+                        updating_rules.push(r);
+                        let mut updated = curr.clone();
+                        for upd in ta.rules[r]
+                            .clock_updates
+                            .iter()
+                            .filter(|u| u.clock.as_usize() == c)
+                        {
+                            match &upd.kind {
+                                ClockUpdateKind::Reset => {
+                                    updated = SmtTerm::int(0);
+                                }
+                                ClockUpdateKind::TickBy(delta) => {
+                                    updated = updated.add(encode_lc(delta));
+                                }
+                            }
+                        }
+                        let fired = SmtTerm::var(delta_var(k, r)).gt(SmtTerm::int(0));
+                        enc.assert_term(fired.implies(next.clone().eq(updated)));
+                    }
+                }
+                if updating_rules.is_empty() {
+                    enc.assert_term(next.eq(curr));
+                } else {
+                    let no_updates = SmtTerm::and(
+                        updating_rules
+                            .iter()
+                            .map(|r| SmtTerm::var(delta_var(k, *r)).eq(SmtTerm::int(0)))
+                            .collect(),
+                    );
+                    enc.assert_term(no_updates.implies(next.eq(curr)));
+                }
+            }
 
             // Shared variable updates (including adversary injection and omission drops)
             for v in 0..num_svars {
@@ -1486,6 +1555,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
 
@@ -1558,6 +1629,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
 
@@ -1709,6 +1782,8 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
         let cs = ta;
@@ -1761,6 +1836,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
         ta.add_rule(Rule {
@@ -1777,6 +1854,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
 
@@ -2767,6 +2846,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
         ta.add_rule(Rule {
@@ -2783,6 +2864,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
 
@@ -2838,6 +2921,8 @@ mod tests {
                     kind: UpdateKind::Increment,
                 }],
                 collection_updates: vec![],
+                clock_guards: vec![],
+                clock_updates: vec![],
                 param_updates: vec![],
             });
             ta.add_rule(Rule {
@@ -2849,6 +2934,8 @@ mod tests {
                     kind: UpdateKind::Increment,
                 }],
                 collection_updates: vec![],
+                clock_guards: vec![],
+                clock_updates: vec![],
                 param_updates: vec![],
             });
             ta.security.crypto_objects.insert(
@@ -3296,6 +3383,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
 
@@ -4283,6 +4372,56 @@ protocol BuggyBroadcast {
         assert_eq!(queue_tail_var(0, 0), "qtail_0_0");
         assert_eq!(queue_tail_var(2, 5), "qtail_2_5");
         assert_eq!(dag_round_active_var(1, 2), "dag_active_1_2");
+        assert_eq!(clock_var(1, 2), "clk_1_2");
+    }
+
+    #[test]
+    fn clock_encoding_applies_timeout_guards_and_updates() {
+        let mut ta = make_simple_ta();
+        let clock_id = ta.add_clock(IrClockSpec {
+            name: "deadline".into(),
+        });
+        ta.rules[0].clock_guards.push(ClockGuard {
+            clock: clock_id,
+            op: CmpOp::Ge,
+            bound: LinearCombination::constant(2),
+        });
+        ta.rules[0].clock_updates.push(ClockUpdate {
+            clock: clock_id,
+            kind: ClockUpdateKind::TickBy(LinearCombination::constant(3)),
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
+        let encoding = encode_bmc(&cs, &property, 2);
+        let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
+
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("(= clk_0_0 0)")),
+            "clock must be initialized at step 0"
+        );
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("(=> (> delta_0_0 0) (>= clk_0_0 2))")),
+            "timeout guard should gate rule firing"
+        );
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("(=> (> delta_0_0 0) (= clk_1_0 (+ clk_0_0 3)))")),
+            "tick update should advance clock on rule firing"
+        );
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("(=> (= delta_0_0 0) (= clk_1_0 clk_0_0))")),
+            "clock should frame when no clock-updating rule fires"
+        );
     }
 
     #[test]
@@ -4449,6 +4588,8 @@ protocol BuggyBroadcast {
                 collection: CollectionId::new(0),
                 kind: CollectionUpdateKind::Dequeue,
             }],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         };
         ta.rules.push(dequeue_rule);
