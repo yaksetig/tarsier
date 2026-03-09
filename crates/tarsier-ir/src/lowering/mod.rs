@@ -407,6 +407,14 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
     }
 
     // 2d. Process bounded collection declarations
+    for round in &proto.dag_rounds {
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: round.name.clone(),
+            parent_rounds: round.parents.clone(),
+        });
+    }
+
+    // 2e. Process bounded collection declarations
     for coll in &proto.collections {
         let kind = match coll.kind {
             ast::CollectionKind::Log => IrCollectionKind::Log,

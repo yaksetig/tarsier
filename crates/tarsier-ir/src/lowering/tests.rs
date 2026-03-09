@@ -2253,6 +2253,54 @@ role R {
 }
 
 #[test]
+fn lower_dag_rounds_into_ir_specs() {
+    let src = r#"
+protocol DagRoundIr {
+params n, t;
+resilience: n > 3*t;
+dag_round r0;
+dag_round r1 extends r0;
+dag_round r2 extends r0, r1;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    let prog = parse(src, "dag_round_ir.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+    assert_eq!(ta.dag_rounds.len(), 3);
+    assert_eq!(ta.dag_rounds[0].name, "r0");
+    assert!(ta.dag_rounds[0].parent_rounds.is_empty());
+    assert_eq!(ta.dag_rounds[1].name, "r1");
+    assert_eq!(ta.dag_rounds[1].parent_rounds, vec!["r0"]);
+    assert_eq!(ta.dag_rounds[2].name, "r2");
+    assert_eq!(ta.dag_rounds[2].parent_rounds, vec!["r0", "r1"]);
+}
+
+#[test]
+fn lower_dag_round_without_parents_is_root() {
+    let src = r#"
+protocol DagRoundRoot {
+params n, t;
+resilience: n > 3*t;
+dag_round genesis;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    let prog = parse(src, "dag_round_root.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+    assert_eq!(ta.dag_rounds.len(), 1);
+    assert_eq!(ta.dag_rounds[0].name, "genesis");
+    assert!(ta.dag_rounds[0].parent_rounds.is_empty());
+}
+
+#[test]
 fn lower_byzantine_adversary_model() {
     let src = r#"
 protocol ByzantineCfg {
