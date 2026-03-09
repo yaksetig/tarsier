@@ -734,6 +734,26 @@ impl ThresholdAutomaton {
                 }
             }
 
+            // Check timeout guards
+            for guard in &rule.clock_guards {
+                if guard.clock.as_usize() >= self.clocks.len() {
+                    return Err(ValidationError::InvalidClockGuardClock {
+                        rule_id,
+                        clock_id: guard.clock,
+                        max: self.clocks.len().saturating_sub(1),
+                    });
+                }
+                for &(_, param_id) in &guard.bound.terms {
+                    if param_id.as_usize() >= num_params {
+                        return Err(ValidationError::InvalidGuardParam {
+                            rule_id,
+                            param_id,
+                            max: num_params.saturating_sub(1),
+                        });
+                    }
+                }
+            }
+
             // Check param updates (reconfiguration)
             for pu in &rule.param_updates {
                 if pu.param.as_usize() >= num_params {
@@ -865,6 +885,12 @@ pub enum ValidationError {
     InvalidGuardParam {
         rule_id: RuleId,
         param_id: ParamId,
+        max: usize,
+    },
+    #[error("Rule {rule_id} timeout guard references invalid clock {clock_id} (max: {max})")]
+    InvalidClockGuardClock {
+        rule_id: RuleId,
+        clock_id: ClockId,
         max: usize,
     },
     #[error("Rule {rule_id} update references invalid shared var {var_id} (max: {max})")]
@@ -1138,6 +1164,9 @@ impl fmt::Display for ThresholdAutomaton {
             for upd in &r.collection_updates {
                 writeln!(f, "      collection: {upd}")?;
             }
+            for guard in &r.clock_guards {
+                writeln!(f, "      timeout: {guard}")?;
+            }
             for upd in &r.clock_updates {
                 writeln!(f, "      clock: {upd}")?;
             }
@@ -1235,6 +1264,7 @@ pub struct Rule {
     pub guard: Guard,
     pub updates: Vec<Update>,
     pub collection_updates: Vec<CollectionUpdate>,
+    pub clock_guards: Vec<ClockGuard>,
     pub clock_updates: Vec<ClockUpdate>,
     /// Parameter updates from `reconfigure` actions.
     /// These change time-varying parameters at epoch boundaries.
@@ -1297,6 +1327,20 @@ impl fmt::Display for ClockUpdate {
                 write!(f, "t{} := t{} + {}", self.clock, self.clock, delta)
             }
         }
+    }
+}
+
+/// A timeout/clock comparison guard on a rule.
+#[derive(Debug, Clone)]
+pub struct ClockGuard {
+    pub clock: ClockId,
+    pub op: CmpOp,
+    pub bound: LinearCombination,
+}
+
+impl fmt::Display for ClockGuard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "t{} {} {}", self.clock, self.op, self.bound)
     }
 }
 
@@ -1636,6 +1680,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
             clock_updates: vec![],
             param_updates: vec![],
         });
@@ -1677,6 +1722,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
             clock_updates: vec![],
             param_updates: vec![],
         });
@@ -1699,6 +1745,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
             clock_updates: vec![],
             param_updates: vec![],
         });
@@ -1726,6 +1773,7 @@ mod tests {
             }),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
             clock_updates: vec![],
             param_updates: vec![],
         });
@@ -1753,6 +1801,7 @@ mod tests {
             }),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
             clock_updates: vec![],
             param_updates: vec![],
         });
@@ -1778,6 +1827,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
             clock_updates: vec![],
             param_updates: vec![],
         });
@@ -1897,6 +1947,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
             clock_updates: vec![ClockUpdate {
                 clock: ClockId::from(42),
                 kind: ClockUpdateKind::Reset,
@@ -1906,6 +1957,29 @@ mod tests {
         assert!(matches!(
             err,
             ValidationError::InvalidClockUpdateClock { clock_id, .. } if clock_id == ClockId::from(42)
+        ));
+    }
+
+    #[test]
+    fn validate_invalid_clock_guard_clock() {
+        let mut ta = minimal_ta();
+        ta.rules.push(Rule {
+            from: LocationId::from(0),
+            to: LocationId::from(1),
+            guard: Guard::trivial(),
+            updates: vec![],
+            collection_updates: vec![],
+            clock_guards: vec![ClockGuard {
+                clock: ClockId::from(7),
+                op: CmpOp::Ge,
+                bound: LinearCombination::constant(1),
+            }],
+            clock_updates: vec![],
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidClockGuardClock { clock_id, .. } if clock_id == ClockId::from(7)
         ));
     }
 

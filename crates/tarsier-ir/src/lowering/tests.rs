@@ -2979,6 +2979,55 @@ protocol AppendTest {
 }
 
 #[test]
+fn lower_timeout_guard_to_rule_clock_guards() {
+    let src = r#"
+protocol TimedGuard {
+params n, t;
+resilience: n > 3*t;
+clock deadline;
+message Ping;
+role Node {
+    init wait;
+    phase wait {
+        when timeout deadline >= 2*t+1 && received >= 0 Ping => {
+            goto phase done;
+        }
+    }
+    phase done {}
+}
+}
+"#;
+    let prog = parse(src, "timed_guard.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    assert_eq!(ta.clocks.len(), 1);
+    let deadline = ta
+        .find_clock_by_name("deadline")
+        .expect("clock declaration should be lowered");
+    let timed_rules: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| !r.clock_guards.is_empty())
+        .collect();
+    assert!(
+        !timed_rules.is_empty(),
+        "expected timeout guard to be lowered"
+    );
+
+    for rule in timed_rules {
+        assert_eq!(rule.clock_guards.len(), 1);
+        let cg = &rule.clock_guards[0];
+        assert_eq!(cg.clock, deadline);
+        assert_eq!(cg.op, CmpOp::Ge);
+        assert_eq!(cg.bound.constant, 1);
+        assert!(
+            !cg.bound.terms.is_empty(),
+            "expected timeout bound to reference parameter t"
+        );
+    }
+}
+
+#[test]
 fn lower_collection_pipeline_end_to_end() {
     let src = r#"
 protocol CollPipeline {
@@ -3469,4 +3518,63 @@ protocol Reconfig {
         format!("{err:?}").contains("unknown_param"),
         "error should mention unknown param, got: {err:?}"
     );
+}
+
+#[test]
+fn lower_clock_actions_to_rule_clock_updates() {
+    let src = r#"
+protocol TimedActions {
+params n, t;
+resilience: n > 3*t;
+clock view_deadline;
+message Ping;
+role Node {
+    init wait;
+    phase wait {
+        when received >= 0 Ping => {
+            tick view_deadline by 2*t+1;
+            reset view_deadline;
+            goto phase done;
+        }
+    }
+    phase done {}
+}
+}
+"#;
+    let prog = parse(src, "timed_actions.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    let clock_id = ta
+        .find_clock_by_name("view_deadline")
+        .expect("clock declaration should be lowered");
+    let updated_rules: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| !r.clock_updates.is_empty())
+        .collect();
+    assert!(
+        !updated_rules.is_empty(),
+        "expected timed actions to produce clock updates"
+    );
+
+    for rule in updated_rules {
+        assert_eq!(rule.clock_updates.len(), 2);
+        match &rule.clock_updates[0].kind {
+            ClockUpdateKind::TickBy(delta) => {
+                assert_eq!(rule.clock_updates[0].clock, clock_id);
+                assert_eq!(delta.constant, 1);
+                assert!(
+                    !delta.terms.is_empty(),
+                    "expected tick amount to reference parameter t"
+                );
+            }
+            other => panic!("expected first clock update to be TickBy, got {other:?}"),
+        }
+        match &rule.clock_updates[1].kind {
+            ClockUpdateKind::Reset => {
+                assert_eq!(rule.clock_updates[1].clock, clock_id);
+            }
+            other => panic!("expected second clock update to be Reset, got {other:?}"),
+        }
+    }
 }
