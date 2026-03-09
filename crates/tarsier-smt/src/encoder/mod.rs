@@ -21,7 +21,7 @@ use k_induction::encode_property_violation_at_step;
 use por::*;
 use variables::*;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tarsier_ir::counter_system::CounterSystem;
 use tarsier_ir::properties::SafetyProperty;
 use tarsier_ir::threshold_automaton::*;
@@ -351,6 +351,15 @@ impl<'a> BmcEncoderBuilder<'a> {
         }
         enc.assert_term(SmtTerm::var(time_var(0)).eq(SmtTerm::int(0)));
 
+        // DAG rounds: inactive at step 0.
+        for rid in 0..ta.dag_rounds.len() {
+            let active = dag_round_active_var(0, rid);
+            enc.declare(active.clone(), SmtSort::Int);
+            enc.assert_term(SmtTerm::var(active.clone()).ge(SmtTerm::int(0)));
+            enc.assert_term(SmtTerm::var(active.clone()).le(SmtTerm::int(1)));
+            enc.assert_term(SmtTerm::var(active).eq(SmtTerm::int(0)));
+        }
+
         // Bounded collections: declare and initialize length variables at step 0
         for (cid, spec) in ta.collections.iter().enumerate() {
             enc.declare(coll_len_var(0, cid), SmtSort::Int);
@@ -418,6 +427,23 @@ impl<'a> BmcEncoderBuilder<'a> {
         let recipient_groups = &self.context.recipient_groups;
         let all_message_counter_vars = &self.context.all_message_counter_vars;
         let message_counter_flags = &self.context.message_counter_flags;
+        let dag_parent_indices: Vec<Vec<usize>> = {
+            let index: HashMap<&str, usize> = ta
+                .dag_rounds
+                .iter()
+                .enumerate()
+                .map(|(i, r)| (r.name.as_str(), i))
+                .collect();
+            ta.dag_rounds
+                .iter()
+                .map(|r| {
+                    r.parent_rounds
+                        .iter()
+                        .filter_map(|p| index.get(p.as_str()).copied())
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        };
         let signed_uncompromised_sender_idx_by_var =
             &self.context.signed_uncompromised_sender_idx_by_var;
         let enc = &mut self.enc;
@@ -462,6 +488,24 @@ impl<'a> BmcEncoderBuilder<'a> {
                 enc.assert_term(delta.clone().ge(SmtTerm::int(0)));
                 if por_pruning.is_disabled(r) {
                     enc.assert_term(delta.eq(SmtTerm::int(0)));
+                }
+            }
+
+            // DAG round execution model:
+            // - Activation flags are booleans encoded as Int in {0,1}.
+            // - Activation is monotonic over time.
+            // - Child activation at step k+1 requires each parent active at step k.
+            for (rid, parents) in dag_parent_indices.iter().enumerate() {
+                let curr = dag_round_active_var(k, rid);
+                let next = dag_round_active_var(k + 1, rid);
+                enc.declare(next.clone(), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(next.clone()).ge(SmtTerm::int(0)));
+                enc.assert_term(SmtTerm::var(next.clone()).le(SmtTerm::int(1)));
+                enc.assert_term(SmtTerm::var(next.clone()).ge(SmtTerm::var(curr)));
+                for parent_id in parents {
+                    enc.assert_term(
+                        SmtTerm::var(next.clone()).le(SmtTerm::var(dag_round_active_var(k, *parent_id))),
+                    );
                 }
             }
             if let Some(buckets) = &process_id_buckets {
@@ -4143,6 +4187,56 @@ protocol BuggyBroadcast {
         assert_eq!(queue_head_var(3, 1), "qhead_3_1");
         assert_eq!(queue_tail_var(0, 0), "qtail_0_0");
         assert_eq!(queue_tail_var(2, 5), "qtail_2_5");
+        assert_eq!(dag_round_active_var(1, 2), "dag_active_1_2");
+    }
+
+    #[test]
+    fn dag_round_encoding_declares_activation_and_parent_constraints() {
+        let mut ta = make_simple_ta();
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r0".into(),
+            parent_rounds: vec![],
+        });
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r1".into(),
+            parent_rounds: vec!["r0".into()],
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let encoding = encode_bmc(&cs, &property, 2);
+
+        let declarations: std::collections::HashSet<_> = encoding
+            .declarations
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect();
+        assert!(declarations.contains("dag_active_0_0"));
+        assert!(declarations.contains("dag_active_0_1"));
+        assert!(declarations.contains("dag_active_1_0"));
+        assert!(declarations.contains("dag_active_1_1"));
+        assert!(declarations.contains("dag_active_2_0"));
+        assert!(declarations.contains("dag_active_2_1"));
+
+        let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("(= dag_active_0_0 0)")),
+            "step-0 DAG root should initialize to 0"
+        );
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("(>= dag_active_2_1 dag_active_1_1)")),
+            "DAG round activation should be monotonic"
+        );
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("(<= dag_active_2_1 dag_active_1_0)")),
+            "child DAG round activation must depend on prior parent activation"
+        );
     }
 
     #[test]
