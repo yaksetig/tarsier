@@ -52,6 +52,25 @@ tarsier analyze my_protocol.trs --profile ci-fast --format json
 tarsier analyze my_protocol.trs --profile pro --depth 20 --k 16 --timeout 600
 ```
 
+### Power Features (After Quick Start)
+
+```bash
+# Auto-discover strengthening predicates
+tarsier infer-invariants my_protocol.trs --solver z3 --depth 12
+
+# Run prove with automatic invariant-strengthening pre-pass
+tarsier prove my_protocol.trs --engine kinduction --auto-strengthen
+
+# Check concrete-vs-abstract simulation (uses `refines` if present)
+tarsier refinement-check concrete.trs --abstract-file abstract.trs --depth 12
+
+# Check bidirectional bounded equivalence
+tarsier equivalence-check protocol_a.trs --other protocol_b.trs --depth 12
+
+# Build and replay a concretized trace for implementation conformance workflows
+tarsier conformance-replay my_protocol.trs --check verify --export-trace replay.json
+```
+
 ## DSL at a Glance
 
 ```trs
@@ -78,6 +97,12 @@ property agreement: safety {
 ```
 
 See the [Language Reference](docs/LANGUAGE_REFERENCE.md) for the complete DSL syntax.
+
+Recent DSL additions include:
+- `refines "base_protocol.trs";` for refinement-oriented workflows
+- Bounded collections: `log`, `sequence`, `fifo_channel`
+- Collection actions: `append`, `enqueue`, `dequeue`
+- Dynamic parameter updates via `reconfigure { ... }`
 
 ## What It Can Check
 

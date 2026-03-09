@@ -20,6 +20,18 @@ This guide helps you migrate from legacy Tarsier commands to the unified `analyz
 | `fair-liveness` | `analyze --goal safety+liveness` | Fair-liveness subsumed |
 | `debug-cex` | `visualize --check verify` | Counterexample inspection |
 
+## New Focused Commands (Post-V2 Additions)
+
+These are additive commands for specialized workflows that are not replaced by `analyze`:
+
+| Workflow | Command | Typical use |
+|---|---|---|
+| Invariant candidate mining | `infer-invariants <file> --solver z3 --depth 12` | Seed manual/automatic strengthening predicates |
+| Auto-strengthened unbounded safety proof | `prove <file> --auto-strengthen` | Retry k-induction/PDR when plain proof stalls |
+| Simulation/refinement check | `refinement-check concrete.trs --abstract-file abstract.trs --depth 12` | Validate optimized model against baseline |
+| Behavioral equivalence check | `equivalence-check a.trs --other b.trs --depth 12` | Compare two variants for bounded behavioral parity |
+| Active replay from model trace | `conformance-replay <file> --check verify --export-trace replay.json` | Produce/replay concretized traces in conformance workflows |
+
 ## Detailed Migration Examples
 
 ### Safety Verification
@@ -126,6 +138,39 @@ tarsier visualize my_protocol.trs --check verify --depth 8 --format markdown --o
 
 **Notes:** `visualize` produces richer output formats (timeline, Mermaid, markdown, JSON).
 
+### Manual Strengthening Workflow
+
+**Before:**
+```bash
+# Repeatedly tweak hand-written invariants after prove failures
+tarsier prove my_protocol.trs --k 12 --engine kinduction
+```
+
+**After:**
+```bash
+tarsier infer-invariants my_protocol.trs --solver z3 --depth 12
+tarsier prove my_protocol.trs --k 12 --engine kinduction --auto-strengthen
+```
+
+**Notes:** `infer-invariants` reports inductive and init-only candidates. `prove --auto-strengthen` runs an invariant-inference pre-pass before proof search.
+
+### Refinement and Equivalence Workflow
+
+**Before:**
+```bash
+# Ad-hoc side-by-side runs and manual diffing
+tarsier verify concrete.trs --depth 12
+tarsier verify abstract.trs --depth 12
+```
+
+**After:**
+```bash
+tarsier refinement-check concrete.trs --abstract-file abstract.trs --depth 12
+tarsier equivalence-check concrete.trs --other abstract.trs --depth 12
+```
+
+**Notes:** Use `refinement-check` for directional simulation and `equivalence-check` for bidirectional parity checks.
+
 ## Profile Migration
 
 ### CI Workflows
@@ -180,6 +225,14 @@ tarsier analyze my_protocol.trs --profile governance --goal release --format jso
 | `bounded` | Standard mode without passing proof layers |
 | `proof` | At least one unbounded proof layer passed |
 | `certified` | Audit mode with all certification checks passing |
+
+### Additional JSON Outputs
+
+Focused command outputs now include explicit `schema_version` in JSON mode:
+- `infer-invariants`
+- `refinement-check`
+- `equivalence-check`
+- `conformance-check`
 
 ## Commands That Remain Standalone
 

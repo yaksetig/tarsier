@@ -113,6 +113,27 @@ tarsier analyze my_protocol.trs --profile governance --goal release --format jso
 tarsier certify-safety my_protocol.trs --out certs/my_protocol
 ```
 
+### Extended Verification Path (Recommended After First Successful Run)
+
+Once `analyze` is working on your model, these commands help with harder protocols and regression workflows:
+
+```bash
+# 1) Discover candidate strengthening invariants
+tarsier infer-invariants my_protocol.trs --solver z3 --depth 12
+
+# 2) Retry unbounded proof with automatic strengthening pre-pass
+tarsier prove my_protocol.trs --engine kinduction --auto-strengthen
+
+# 3) Check simulation against a baseline model
+tarsier refinement-check concrete.trs --abstract-file abstract.trs --depth 12
+
+# 4) Check behavioral equivalence between two variants
+tarsier equivalence-check protocol_a.trs --other protocol_b.trs --depth 12
+
+# 5) Replay a concretized trace for conformance workflows
+tarsier conformance-replay my_protocol.trs --check verify --export-trace replay.json
+```
+
 ## Step 2: Your First Verification
 
 Let's start by verifying an existing protocol. Tarsier ships with examples in the `examples/` directory.
@@ -297,6 +318,40 @@ tarsier analyze my_vote.trs --goal bughunt
 ```
 
 Tarsier will find a counterexample — with the weaker threshold, Byzantine processes can push different groups of honest processes to commit different values.
+
+## Step 4.5: New DSL Primitives for Richer Modeling
+
+You can now model refinement links, bounded collections, FIFO channels, and dynamic parameter updates directly in `.trs`:
+
+```trs
+protocol ConcreteVariant {
+    refines "abstract_variant.trs";
+    params n, t, f;
+    resilience: n > 3*t;
+
+    log History: int[n];
+    sequence VoteBuf: int[n];
+    fifo_channel MsgQueue: int[n];
+
+    message Tick;
+    role Replica {
+        init idle;
+        phase idle {
+            when received >= 1 Tick => {
+                append History 1;
+                enqueue MsgQueue 1;
+                dequeue MsgQueue;
+                reconfigure {
+                    t = t + 1;
+                }
+                goto phase idle;
+            }
+        }
+    }
+
+    property safe: safety { true == true }
+}
+```
 
 ## Step 5: Visualize Counterexamples
 
