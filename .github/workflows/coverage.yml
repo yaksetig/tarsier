@@ -7,6 +7,7 @@ on:
 
 jobs:
   coverage:
+    if: vars.ENABLE_COVERAGE == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
