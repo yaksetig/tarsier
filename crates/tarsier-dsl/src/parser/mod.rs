@@ -181,7 +181,9 @@ fn parse_protocol(
     let mut channels = Vec::new();
     let mut equivocation_policies = Vec::new();
     let mut committees = Vec::new();
+    let mut dag_rounds = Vec::new();
     let mut collections = Vec::new();
+    let mut clocks = Vec::new();
     let mut messages = Vec::new();
     let mut crypto_objects = Vec::new();
     let mut roles = Vec::new();
@@ -240,8 +242,14 @@ fn parse_protocol(
             Rule::committee_decl => {
                 committees.push(parse_committee(item)?);
             }
+            Rule::dag_round_decl => {
+                dag_rounds.push(parse_dag_round(item)?);
+            }
             Rule::collection_decl => {
                 collections.push(parse_collection(item)?);
+            }
+            Rule::clock_decl => {
+                clocks.push(parse_clock(item)?);
             }
             Rule::message_decl => {
                 messages.push(parse_message(item)?);
@@ -284,7 +292,9 @@ fn parse_protocol(
             channels,
             equivocation_policies,
             committees,
+            dag_rounds,
             collections,
+            clocks,
             messages,
             crypto_objects,
             roles,
@@ -361,7 +371,9 @@ fn parse_module(pair: Pair<'_>, _source: &str, _filename: &str) -> Result<Module
             | Rule::enum_decl
             | Rule::crypto_object_decl
             | Rule::committee_decl
+            | Rule::dag_round_decl
             | Rule::collection_decl
+            | Rule::clock_decl
             | Rule::channel_decl
             | Rule::equivocation_decl
             | Rule::identity_decl
@@ -709,6 +721,27 @@ fn parse_identity(pair: Pair<'_>) -> Result<IdentityDecl, ParseError> {
     })
 }
 
+fn parse_dag_round(pair: Pair<'_>) -> Result<DagRoundDecl, ParseError> {
+    let span = span_from(&pair);
+    let mut inner = pair.into_inner();
+    let name = next_child(&mut inner, "dag_round name")?
+        .as_str()
+        .to_string();
+    let mut parents = Vec::new();
+    if let Some(maybe_list) = inner.next() {
+        for item in maybe_list.into_inner() {
+            if item.as_rule() == Rule::ident {
+                parents.push(item.as_str().to_string());
+            }
+        }
+    }
+    Ok(DagRoundDecl {
+        name,
+        parents,
+        span,
+    })
+}
+
 fn parse_channel(pair: Pair<'_>) -> Result<ChannelDecl, ParseError> {
     let span = span_from(&pair);
     let mut inner = pair.into_inner();
@@ -840,7 +873,9 @@ fn parse_collection(pair: Pair<'_>) -> Result<CollectionDecl, ParseError> {
             ));
         }
     };
-    let name = next_child(&mut inner, "collection name")?.as_str().to_string();
+    let name = next_child(&mut inner, "collection name")?
+        .as_str()
+        .to_string();
     let element_type_pair = next_child(&mut inner, "collection element type")?;
     let element_type = element_type_pair.as_str().to_string();
     let capacity_pair = next_child(&mut inner, "collection capacity")?;
@@ -852,6 +887,13 @@ fn parse_collection(pair: Pair<'_>) -> Result<CollectionDecl, ParseError> {
         capacity,
         span,
     })
+}
+
+fn parse_clock(pair: Pair<'_>) -> Result<ClockDecl, ParseError> {
+    let span = span_from(&pair);
+    let mut inner = pair.into_inner();
+    let name = next_child(&mut inner, "clock name")?.as_str().to_string();
+    Ok(ClockDecl { name, span })
 }
 
 fn parse_message(pair: Pair<'_>) -> Result<MessageDecl, ParseError> {
@@ -1189,6 +1231,20 @@ fn parse_transition(pair: Pair<'_>) -> Result<Spanned<TransitionRule>, ParseErro
                 let collection = next_child(&mut si, "si")?.as_str().to_string();
                 actions.push(Action::Dequeue { collection });
             }
+            Rule::reset_clock_action => {
+                let clock = next_child(&mut item.into_inner(), "reset_clock_action")?
+                    .as_str()
+                    .to_string();
+                actions.push(Action::ResetClock { clock });
+            }
+            Rule::tick_clock_action => {
+                let mut si = item.into_inner();
+                let clock = next_child(&mut si, "tick_clock_action clock")?
+                    .as_str()
+                    .to_string();
+                let amount = si.next().map(parse_linear_expr).transpose()?;
+                actions.push(Action::TickClock { clock, amount });
+            }
             Rule::assign_action => {
                 let mut si = item.into_inner();
                 let var = next_child(&mut si, "si")?.as_str().to_string();
@@ -1373,6 +1429,19 @@ fn parse_guard_atom(pair: Pair<'_>) -> Result<GuardExpr, ParseError> {
                 object_args,
             })
         }
+        Rule::timeout_guard => {
+            let mut inner = pair.into_inner();
+            let clock = next_child(&mut inner, "timeout_guard clock")?
+                .as_str()
+                .to_string();
+            let op = parse_cmp_op(next_child(&mut inner, "timeout_guard cmp_op")?);
+            let threshold = parse_linear_expr(next_child(&mut inner, "timeout_guard threshold")?)?;
+            Ok(GuardExpr::Timeout {
+                clock,
+                op,
+                threshold,
+            })
+        }
         Rule::comparison_guard => {
             let mut inner = pair.into_inner();
             let lhs = parse_expr(next_child(&mut inner, "inner")?)?;
@@ -1474,7 +1543,9 @@ fn parse_expr(pair: Pair<'_>) -> Result<Expr, ParseError> {
         }
         Rule::index_access => {
             let mut inner = pair.into_inner();
-            let coll = next_child(&mut inner, "index_access collection")?.as_str().to_string();
+            let coll = next_child(&mut inner, "index_access collection")?
+                .as_str()
+                .to_string();
             let idx = parse_expr(next_child(&mut inner, "index_access index")?)?;
             Ok(Expr::Index(coll, Box::new(idx)))
         }

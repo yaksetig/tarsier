@@ -158,6 +158,23 @@ impl<'a> KInductionEncoderBuilder<'a> {
         let selective_network = self.context.selective_network;
         let message_variant_groups = &self.context.message_variant_groups;
         let sent_flag_true_locs = &self.sent_flag_true_locs;
+        let dag_parent_indices: Vec<Vec<usize>> = {
+            let index: HashMap<&str, usize> = ta
+                .dag_rounds
+                .iter()
+                .enumerate()
+                .map(|(i, r)| (r.name.as_str(), i))
+                .collect();
+            ta.dag_rounds
+                .iter()
+                .map(|r| {
+                    r.parent_rounds
+                        .iter()
+                        .filter_map(|p| index.get(p.as_str()).copied())
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        };
         let enc = &mut self.enc;
         // Declare state variables for steps 0..k
         for step in 0..=k {
@@ -179,8 +196,35 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     enc.assert_term(SmtTerm::var(pending).ge(SmtTerm::int(0)));
                 }
             }
+            for c in 0..ta.clocks.len() {
+                enc.declare(clock_var(step, c), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(clock_var(step, c)).ge(SmtTerm::int(0)));
+                if step == 0 {
+                    enc.assert_term(SmtTerm::var(clock_var(step, c)).eq(SmtTerm::int(0)));
+                }
+            }
             enc.declare(time_var(step), SmtSort::Int);
             enc.assert_term(SmtTerm::var(time_var(step)).ge(SmtTerm::int(0)));
+
+            // DAG rounds: boolean activation flags with parent dependency across steps.
+            for (rid, parents) in dag_parent_indices.iter().enumerate() {
+                let active = dag_round_active_var(step, rid);
+                enc.declare(active.clone(), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(active.clone()).ge(SmtTerm::int(0)));
+                enc.assert_term(SmtTerm::var(active.clone()).le(SmtTerm::int(1)));
+                if step == 0 {
+                    enc.assert_term(SmtTerm::var(active).eq(SmtTerm::int(0)));
+                } else {
+                    let prev = dag_round_active_var(step - 1, rid);
+                    enc.assert_term(SmtTerm::var(active.clone()).ge(SmtTerm::var(prev)));
+                    for parent_id in parents {
+                        enc.assert_term(SmtTerm::var(active.clone()).le(SmtTerm::var(
+                            dag_round_active_var(step - 1, *parent_id),
+                        )));
+                    }
+                }
+            }
+
             for (v, role) in distinct_vars {
                 if let Some(role) = role {
                     if let Some(&pid) = role_pop_params.get(role) {
@@ -430,6 +474,19 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     };
                     enc.assert_term(dr_pos.clone().implies(guard_term));
                 }
+                for guard in &rule.clock_guards {
+                    let lhs = SmtTerm::var(clock_var(step, guard.clock.as_usize()));
+                    let rhs = encode_lc(&guard.bound);
+                    let guard_term = match guard.op {
+                        CmpOp::Ge => lhs.ge(rhs),
+                        CmpOp::Gt => lhs.gt(rhs),
+                        CmpOp::Le => lhs.le(rhs),
+                        CmpOp::Lt => lhs.lt(rhs),
+                        CmpOp::Eq => lhs.eq(rhs),
+                        CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
+                    };
+                    enc.assert_term(dr_pos.clone().implies(guard_term));
+                }
                 enc.assert_term(
                     SmtTerm::var(delta_var(step, r)).le(SmtTerm::var(kappa_var(step, rule.from))),
                 );
@@ -454,6 +511,50 @@ impl<'a> KInductionEncoderBuilder<'a> {
                 SmtTerm::var(time_var(step + 1))
                     .eq(SmtTerm::var(time_var(step)).add(SmtTerm::int(1))),
             );
+
+            // Clock updates and frame conditions.
+            for c in 0..ta.clocks.len() {
+                let curr = SmtTerm::var(clock_var(step, c));
+                let next = SmtTerm::var(clock_var(step + 1, c));
+                let mut updating_rules = Vec::new();
+                for &r in active_rule_ids {
+                    if ta.rules[r]
+                        .clock_updates
+                        .iter()
+                        .any(|u| u.clock.as_usize() == c)
+                    {
+                        updating_rules.push(r);
+                        let mut updated = curr.clone();
+                        for upd in ta.rules[r]
+                            .clock_updates
+                            .iter()
+                            .filter(|u| u.clock.as_usize() == c)
+                        {
+                            match &upd.kind {
+                                ClockUpdateKind::Reset => {
+                                    updated = SmtTerm::int(0);
+                                }
+                                ClockUpdateKind::TickBy(delta) => {
+                                    updated = updated.add(encode_lc(delta));
+                                }
+                            }
+                        }
+                        let fired = SmtTerm::var(delta_var(step, r)).gt(SmtTerm::int(0));
+                        enc.assert_term(fired.implies(next.clone().eq(updated)));
+                    }
+                }
+                if updating_rules.is_empty() {
+                    enc.assert_term(next.eq(curr));
+                } else {
+                    let no_updates = SmtTerm::and(
+                        updating_rules
+                            .iter()
+                            .map(|r| SmtTerm::var(delta_var(step, *r)).eq(SmtTerm::int(0)))
+                            .collect(),
+                    );
+                    enc.assert_term(no_updates.implies(next.eq(curr)));
+                }
+            }
 
             // Shared variable updates (with adversary and omission drops)
             for (v, inc_only) in increment_only_var.iter().enumerate() {

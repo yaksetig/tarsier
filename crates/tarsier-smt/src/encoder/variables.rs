@@ -32,6 +32,11 @@ pub(crate) fn gamma_var(step: usize, var: impl std::fmt::Display) -> String {
     format!("g_{step}_{var}")
 }
 
+/// Logical clock `clock` at step `step`.
+pub(crate) fn clock_var(step: usize, clock: impl std::fmt::Display) -> String {
+    format!("clk_{step}_{clock}")
+}
+
 /// Logical timestamp at step `step` (for ordering constraints).
 pub(crate) fn time_var(step: usize) -> String {
     format!("time_{step}")
@@ -100,6 +105,11 @@ pub(super) fn queue_head_var(step: usize, coll: usize) -> String {
 /// Tail index of FIFO queue `coll` at step `step`.
 pub(super) fn queue_tail_var(step: usize, coll: usize) -> String {
     format!("qtail_{step}_{coll}")
+}
+
+/// DAG-round active flag for round `round` at step `step`.
+pub(super) fn dag_round_active_var(step: usize, round: usize) -> String {
+    format!("dag_active_{step}_{round}")
 }
 
 /// Parse `__sent_g<N>` variable names back to their shared-var index.

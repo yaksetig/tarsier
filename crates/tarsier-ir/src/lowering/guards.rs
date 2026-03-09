@@ -104,6 +104,11 @@ pub(super) fn lower_guard(
             // Return trivial guard for the threshold-level encoding.
             Ok(Guard::trivial())
         }
+        ast::GuardExpr::Timeout { .. } => {
+            // Timeout guards are lowered separately into `Rule.clock_guards`
+            // in the timed lowering path.
+            Ok(Guard::trivial())
+        }
         ast::GuardExpr::BoolVar(_) => {
             // Boolean var guards are enforced by filtering source locations
             // in extract_local_guard_requirements().
@@ -114,6 +119,36 @@ pub(super) fn lower_guard(
              before threshold-guard lowering"
                 .into(),
         )),
+    }
+}
+
+pub(super) fn collect_timeout_guards(
+    guard: &ast::GuardExpr,
+    clock_ids: &IndexMap<String, ClockId>,
+    params: &IndexMap<String, ParamId>,
+) -> Result<Vec<ClockGuard>, LoweringError> {
+    match guard {
+        ast::GuardExpr::And(lhs, rhs) => {
+            let mut out = collect_timeout_guards(lhs, clock_ids, params)?;
+            out.extend(collect_timeout_guards(rhs, clock_ids, params)?);
+            Ok(out)
+        }
+        ast::GuardExpr::Timeout {
+            clock,
+            op,
+            threshold,
+        } => {
+            let clock_id = clock_ids.get(clock).copied().ok_or_else(|| {
+                LoweringError::Unsupported(format!("Unknown clock '{clock}' in timeout guard"))
+            })?;
+            let bound = lower_linear_expr_to_lc(threshold, params)?;
+            Ok(vec![ClockGuard {
+                clock: clock_id,
+                op: lower_cmp_op(*op),
+                bound,
+            }])
+        }
+        _ => Ok(vec![]),
     }
 }
 
@@ -289,6 +324,7 @@ pub(super) fn local_guard_satisfied(
         }
         ast::GuardExpr::Threshold(_) => Ok(true),
         ast::GuardExpr::HasCryptoObject { .. } => Ok(true),
+        ast::GuardExpr::Timeout { .. } => Ok(true),
     }
 }
 
