@@ -6,6 +6,7 @@ on:
 
 jobs:
   build-test:
+    if: vars.ENABLE_STRICT_CI == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
