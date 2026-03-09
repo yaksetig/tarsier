@@ -8,6 +8,7 @@
     { "include": "#phase-declaration" },
     { "include": "#role-declaration" },
     { "include": "#message-declaration" },
+    { "include": "#dag-round-declaration" },
     { "include": "#enum-declaration" },
     { "include": "#protocol-declaration" },
     { "include": "#property-keywords" },
@@ -84,6 +85,13 @@
         "2": { "name": "entity.name.type.message.tarsier" }
       }
     },
+    "dag-round-declaration": {
+      "match": "\\b(dag_round)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.other.dag-round.tarsier" },
+        "2": { "name": "entity.name.type.round.tarsier" }
+      }
+    },
     "enum-declaration": {
       "match": "\\b(enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
       "captures": {
@@ -95,7 +103,7 @@
       "patterns": [
         {
           "name": "keyword.control.tarsier",
-          "match": "\\b(goto|on|when|init|received|decide)\\b"
+          "match": "\\b(goto|on|when|init|received|decide|extends)\\b"
         }
       ]
     },
@@ -103,7 +111,7 @@
       "patterns": [
         {
           "name": "keyword.other.tarsier",
-          "match": "\\b(protocol|parameters|params|resilience|adversary|pacemaker|identity|channel|equivocation|committee|message|role|phase|var|enum|module|import|interface|assumes|guarantees|from|to|signer|conflicts|certificate|threshold_signature|network)\\b"
+          "match": "\\b(protocol|parameters|params|refines|resilience|adversary|pacemaker|identity|channel|equivocation|committee|dag_round|log|sequence|fifo_channel|message|role|leader|phase|var|enum|module|import|interface|assumes|guarantees|from|to|signer|conflicts|certificate|threshold_signature|network)\\b"
         }
       ]
     },
@@ -111,7 +119,7 @@
       "patterns": [
         {
           "name": "keyword.control.action.tarsier",
-          "match": "\\b(send|goto|set|form|lock|justify)\\b"
+          "match": "\\b(send|goto|append|enqueue|dequeue|reconfigure|set|form|lock|justify)\\b"
         }
       ]
     },
