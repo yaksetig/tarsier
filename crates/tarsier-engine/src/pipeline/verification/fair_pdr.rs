@@ -231,6 +231,10 @@ pub(crate) fn mon_snap_gamma(step: usize, var: usize) -> String {
     format!("m_snap_g_{step}_{var}")
 }
 
+pub(crate) fn mon_snap_clock(step: usize, clock: usize) -> String {
+    format!("m_snap_clk_{step}_{clock}")
+}
+
 pub(crate) fn mon_ce(step: usize, rule: usize) -> String {
     format!("m_ce_{step}_{rule}")
 }
@@ -318,6 +322,10 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
         state_vars_pre.push((pdr_gamma_var(0, var), SmtSort::Int));
         state_vars_post.push((pdr_gamma_var(1, var), SmtSort::Int));
     }
+    for clock in 0..cs.clocks.len() {
+        state_vars_pre.push((pdr_clock_var(0, clock), SmtSort::Int));
+        state_vars_post.push((pdr_clock_var(1, clock), SmtSort::Int));
+    }
     state_vars_pre.push((pdr_time_var(0), SmtSort::Int));
     state_vars_post.push((pdr_time_var(1), SmtSort::Int));
 
@@ -348,6 +356,9 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
         }
         for var in 0..cs.num_shared_vars() {
             push_decl_unique(&mut declarations, mon_snap_gamma(step, var), SmtSort::Int);
+        }
+        for clock in 0..cs.clocks.len() {
+            push_decl_unique(&mut declarations, mon_snap_clock(step, clock), SmtSort::Int);
         }
         for rule in 0..cs.num_rules() {
             push_decl_unique(&mut declarations, mon_ce(step, rule), SmtSort::Int);
@@ -384,6 +395,10 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
     for var in 0..cs.num_shared_vars() {
         state_vars_pre.push((mon_snap_gamma(0, var), SmtSort::Int));
         state_vars_post.push((mon_snap_gamma(1, var), SmtSort::Int));
+    }
+    for clock in 0..cs.clocks.len() {
+        state_vars_pre.push((mon_snap_clock(0, clock), SmtSort::Int));
+        state_vars_post.push((mon_snap_clock(1, clock), SmtSort::Int));
     }
     for rule in 0..cs.num_rules() {
         state_vars_pre.push((mon_ce(0, rule), SmtSort::Int));
@@ -483,6 +498,10 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
         init_assertions
             .push(SmtTerm::var(mon_snap_gamma(0, var)).eq(SmtTerm::var(pdr_gamma_var(0, var))));
     }
+    for clock in 0..cs.clocks.len() {
+        init_assertions
+            .push(SmtTerm::var(mon_snap_clock(0, clock)).eq(SmtTerm::var(pdr_clock_var(0, clock))));
+    }
     for rule in 0..cs.num_rules() {
         init_assertions.push(bit_is_false(mon_ce(0, rule)));
         init_assertions.push(bit_is_false(mon_fired(0, rule)));
@@ -554,6 +573,14 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
         );
         transition_assertions.push(SmtTerm::var(mon_snap_gamma(1, var)).eq(snap_next));
     }
+    for clock in 0..cs.clocks.len() {
+        let snap_next = SmtTerm::Ite(
+            Box::new(arm_now.clone()),
+            Box::new(SmtTerm::var(pdr_clock_var(0, clock))),
+            Box::new(SmtTerm::var(mon_snap_clock(0, clock))),
+        );
+        transition_assertions.push(SmtTerm::var(mon_snap_clock(1, clock)).eq(snap_next));
+    }
     if let Some(automaton) = temporal_automaton {
         for sid in 0..automaton.states.len() {
             let snap_next = SmtTerm::Ite(
@@ -577,6 +604,17 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
                     .collect(),
             )
         };
+        if !rule.clock_guards.is_empty() {
+            enabled_now = SmtTerm::and(vec![
+                enabled_now,
+                SmtTerm::and(
+                    rule.clock_guards
+                        .iter()
+                        .map(|g| encode_clock_guard_enabled_at_step(g, 0))
+                        .collect(),
+                ),
+            ]);
+        }
         if let Some(post_gst_now) = post_gst_now.clone() {
             enabled_now = SmtTerm::and(vec![enabled_now, post_gst_now]);
         }
@@ -654,6 +692,10 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
     for var in 0..cs.num_shared_vars() {
         closure_terms
             .push(SmtTerm::var(pdr_gamma_var(0, var)).eq(SmtTerm::var(mon_snap_gamma(0, var))));
+    }
+    for clock in 0..cs.clocks.len() {
+        closure_terms
+            .push(SmtTerm::var(pdr_clock_var(0, clock)).eq(SmtTerm::var(mon_snap_clock(0, clock))));
     }
     if let Some(automaton) = temporal_automaton {
         for sid in 0..automaton.states.len() {

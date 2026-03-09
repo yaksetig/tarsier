@@ -49,6 +49,10 @@ pub(crate) fn pdr_time_var(step: usize) -> String {
     format!("time_{step}")
 }
 
+pub(crate) fn pdr_clock_var(step: usize, clock: usize) -> String {
+    format!("clk_{step}_{clock}")
+}
+
 pub(crate) fn pdr_delta_var(step: usize, rule: usize) -> String {
     format!("delta_{step}_{rule}")
 }
@@ -134,6 +138,22 @@ pub(crate) fn encode_guard_atom_enabled_at_step(atom: &GuardAtom, step: usize) -
                 CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
             }
         }
+    }
+}
+
+pub(crate) fn encode_clock_guard_enabled_at_step(
+    guard: &tarsier_ir::threshold_automaton::ClockGuard,
+    step: usize,
+) -> SmtTerm {
+    let lhs = SmtTerm::var(pdr_clock_var(step, guard.clock.as_usize()));
+    let rhs = encode_lc_term(&guard.bound);
+    match guard.op {
+        CmpOp::Ge => lhs.ge(rhs),
+        CmpOp::Gt => lhs.gt(rhs),
+        CmpOp::Le => lhs.le(rhs),
+        CmpOp::Lt => lhs.lt(rhs),
+        CmpOp::Eq => lhs.eq(rhs),
+        CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
     }
 }
 
@@ -287,6 +307,12 @@ pub(crate) fn build_fair_lasso_encoding(
                 .eq(SmtTerm::var(pdr_gamma_var(depth, var))),
         );
     }
+    for clock in 0..cs.clocks.len() {
+        step_encoding.assertions.push(
+            SmtTerm::var(pdr_clock_var(loop_start, clock))
+                .eq(SmtTerm::var(pdr_clock_var(depth, clock))),
+        );
+    }
 
     match target {
         FairLivenessTarget::NonGoalLocs(non_goal_locs) => {
@@ -333,6 +359,11 @@ pub(crate) fn build_fair_lasso_encoding(
                     .iter()
                     .map(|a| encode_guard_atom_enabled_at_step(a, step))
                     .collect::<Vec<_>>();
+                atoms.extend(
+                    rule.clock_guards
+                        .iter()
+                        .map(|g| encode_clock_guard_enabled_at_step(g, step)),
+                );
                 if ta.semantics.timing_model
                     == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
                 {
@@ -404,6 +435,12 @@ mod tests {
     fn pdr_time_var_format() {
         assert_eq!(pdr_time_var(0), "time_0");
         assert_eq!(pdr_time_var(10), "time_10");
+    }
+
+    #[test]
+    fn pdr_clock_var_format() {
+        assert_eq!(pdr_clock_var(0, 0), "clk_0_0");
+        assert_eq!(pdr_clock_var(2, 3), "clk_2_3");
     }
 
     #[test]
@@ -545,6 +582,22 @@ mod tests {
             .add(SmtTerm::var("g_2_0".to_string()))
             .eq(SmtTerm::int(0));
         let expected = SmtTerm::not(inner);
+        assert_eq!(term, expected);
+    }
+
+    #[test]
+    fn encode_clock_guard_atom_ge_operator() {
+        let guard = tarsier_ir::threshold_automaton::ClockGuard {
+            clock: 1.into(),
+            op: CmpOp::Ge,
+            bound: LinearCombination {
+                constant: 1,
+                terms: vec![(2, 0.into())],
+            },
+        };
+        let term = encode_clock_guard_enabled_at_step(&guard, 2);
+        let expected = SmtTerm::var("clk_2_1".to_string())
+            .ge(SmtTerm::int(1).add(SmtTerm::int(2).mul(SmtTerm::var("p_0".to_string()))));
         assert_eq!(term, expected);
     }
 }
