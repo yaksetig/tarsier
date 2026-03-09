@@ -920,6 +920,26 @@ pub(crate) enum Commands {
         artifact_dir: Option<PathBuf>,
     },
 
+    /// Build an active-fault schedule from adapter traces with deterministic seed ordering
+    #[command(display_order = 25)]
+    ConformanceActive {
+        /// Path to active-fault trace JSON
+        #[arg(long)]
+        trace: PathBuf,
+        /// Trace adapter family: cometbft | runtime | etcd-raft
+        #[arg(long, default_value = "cometbft")]
+        adapter: String,
+        /// Deterministic seed for same-tick scheduling order
+        #[arg(long, default_value_t = 0)]
+        seed: u64,
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
+        /// Optional path to write active schedule JSON
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
     /// Check refinement (simulation preservation) between a concrete and abstract protocol
     #[command(display_order = 7)]
     RefinementCheck {

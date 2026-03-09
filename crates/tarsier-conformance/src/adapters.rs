@@ -74,6 +74,62 @@ pub fn adapt_trace(kind: AdapterKind, raw: &str) -> Result<RuntimeTrace, Adapter
     }
 }
 
+/// Scheduled perturbation emitted by adapter-specific active fault logs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScheduledAdapterFault {
+    pub tick: u64,
+    pub action: AdapterFaultAction,
+}
+
+/// Fault action normalized across implementation adapters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AdapterFaultAction {
+    DelayMessage {
+        channel: String,
+        from_process: Option<u64>,
+        to_process: Option<u64>,
+        delay_ticks: u64,
+    },
+    DropMessage {
+        channel: String,
+        from_process: Option<u64>,
+        to_process: Option<u64>,
+    },
+    ReorderChannel {
+        channel: String,
+    },
+    PartitionLink {
+        process_a: u64,
+        process_b: u64,
+    },
+    HealPartition,
+    SpawnTwin {
+        process_id: u64,
+        twin_id: u64,
+    },
+    RetireTwin {
+        twin_id: u64,
+    },
+}
+
+/// Parse adapter-specific active fault schedules into normalized actions.
+///
+/// Currently implemented for `cometbft`; other adapters return a typed error
+/// until TWIN-04 follow-up work extends parity.
+pub fn adapt_active_faults(
+    kind: AdapterKind,
+    raw: &str,
+) -> Result<Vec<ScheduledAdapterFault>, AdapterError> {
+    match kind {
+        AdapterKind::CometBft => adapt_cometbft_active_faults(raw),
+        AdapterKind::Runtime | AdapterKind::EtcdRaft => Err(AdapterError::Invalid {
+            family: kind.as_str(),
+            message: "active-fault adapter not implemented for this family".into(),
+        }),
+    }
+}
+
 struct RuntimeAdapter;
 
 impl TraceAdapter for RuntimeAdapter {
@@ -267,6 +323,149 @@ fn convert_comet_node(node: CometBftNode) -> Result<ProcessTrace, AdapterError> 
         role,
         events,
     })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CometBftActiveInput {
+    schema_version: u32,
+    faults: Vec<CometBftActiveFault>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum CometBftActiveFault {
+    DelayMessage {
+        tick: u64,
+        channel: String,
+        #[serde(default)]
+        from_process: Option<u64>,
+        #[serde(default)]
+        to_process: Option<u64>,
+        delay_ticks: u64,
+    },
+    DropMessage {
+        tick: u64,
+        channel: String,
+        #[serde(default)]
+        from_process: Option<u64>,
+        #[serde(default)]
+        to_process: Option<u64>,
+    },
+    ReorderChannel {
+        tick: u64,
+        channel: String,
+    },
+    PartitionLink {
+        tick: u64,
+        process_a: u64,
+        process_b: u64,
+    },
+    HealPartition {
+        tick: u64,
+    },
+    SpawnTwin {
+        tick: u64,
+        process_id: u64,
+        twin_id: u64,
+    },
+    RetireTwin {
+        tick: u64,
+        twin_id: u64,
+    },
+}
+
+fn adapt_cometbft_active_faults(raw: &str) -> Result<Vec<ScheduledAdapterFault>, AdapterError> {
+    let input: CometBftActiveInput =
+        serde_json::from_str(raw).map_err(|source| AdapterError::Decode {
+            family: ADAPTER_COMETBFT,
+            source,
+        })?;
+    if input.schema_version != 1 {
+        return Err(AdapterError::SchemaVersion {
+            family: ADAPTER_COMETBFT,
+            got: input.schema_version,
+        });
+    }
+
+    let mut normalized = Vec::with_capacity(input.faults.len());
+    let mut last_tick = 0u64;
+    for (idx, fault) in input.faults.into_iter().enumerate() {
+        let scheduled = match fault {
+            CometBftActiveFault::DelayMessage {
+                tick,
+                channel,
+                from_process,
+                to_process,
+                delay_ticks,
+            } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::DelayMessage {
+                    channel,
+                    from_process,
+                    to_process,
+                    delay_ticks,
+                },
+            },
+            CometBftActiveFault::DropMessage {
+                tick,
+                channel,
+                from_process,
+                to_process,
+            } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::DropMessage {
+                    channel,
+                    from_process,
+                    to_process,
+                },
+            },
+            CometBftActiveFault::ReorderChannel { tick, channel } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::ReorderChannel { channel },
+            },
+            CometBftActiveFault::PartitionLink {
+                tick,
+                process_a,
+                process_b,
+            } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::PartitionLink {
+                    process_a,
+                    process_b,
+                },
+            },
+            CometBftActiveFault::HealPartition { tick } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::HealPartition,
+            },
+            CometBftActiveFault::SpawnTwin {
+                tick,
+                process_id,
+                twin_id,
+            } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::SpawnTwin {
+                    process_id,
+                    twin_id,
+                },
+            },
+            CometBftActiveFault::RetireTwin { tick, twin_id } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::RetireTwin { twin_id },
+            },
+        };
+
+        if idx > 0 && scheduled.tick < last_tick {
+            return Err(AdapterError::Invalid {
+                family: ADAPTER_COMETBFT,
+                message: "fault ticks must be nondecreasing".into(),
+            });
+        }
+        last_tick = scheduled.tick;
+        normalized.push(scheduled);
+    }
+    Ok(normalized)
 }
 
 struct EtcdRaftAdapter;
@@ -538,5 +737,55 @@ mod tests {
         let msg = format!("{err}");
         assert!(msg.contains("cometbft"));
         assert!(msg.contains("decode"));
+    }
+
+    #[test]
+    fn cometbft_active_fault_adapter_maps_faults() {
+        let raw = r#"{
+            "schema_version": 1,
+            "faults": [
+                {"kind":"drop_message","tick":1,"channel":"Vote","from_process":1,"to_process":2},
+                {"kind":"spawn_twin","tick":3,"process_id":7,"twin_id":7001}
+            ]
+        }"#;
+        let mapped = adapt_active_faults(AdapterKind::CometBft, raw)
+            .expect("cometbft active faults should parse");
+        assert_eq!(mapped.len(), 2);
+        assert!(matches!(
+            mapped[0].action,
+            AdapterFaultAction::DropMessage {
+                ref channel,
+                from_process: Some(1),
+                to_process: Some(2)
+            } if channel == "Vote"
+        ));
+        assert!(matches!(
+            mapped[1].action,
+            AdapterFaultAction::SpawnTwin {
+                process_id: 7,
+                twin_id: 7001
+            }
+        ));
+    }
+
+    #[test]
+    fn active_fault_adapter_rejects_non_monotonic_ticks() {
+        let raw = r#"{
+            "schema_version": 1,
+            "faults": [
+                {"kind":"heal_partition","tick":4},
+                {"kind":"drop_message","tick":2,"channel":"Vote"}
+            ]
+        }"#;
+        let err = adapt_active_faults(AdapterKind::CometBft, raw)
+            .expect_err("non-monotonic ticks should fail");
+        assert!(format!("{err}").contains("nondecreasing"));
+    }
+
+    #[test]
+    fn active_fault_adapter_reports_unimplemented_families() {
+        let err = adapt_active_faults(AdapterKind::Runtime, r#"{"schema_version":1,"faults":[]}"#)
+            .expect_err("runtime active faults should be unsupported in TWIN-04");
+        assert!(format!("{err}").contains("not implemented"));
     }
 }

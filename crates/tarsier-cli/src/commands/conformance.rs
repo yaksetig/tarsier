@@ -759,3 +759,230 @@ pub(crate) fn run_conformance_suite_command(
 
     Ok(())
 }
+
+#[derive(Debug, Serialize)]
+struct ConformanceActiveReport {
+    schema_version: u32,
+    adapter: String,
+    seed: u64,
+    faults: Vec<tarsier_conformance::adapters::ScheduledAdapterFault>,
+}
+
+fn splitmix64(mut x: u64) -> u64 {
+    x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^ (x >> 31)
+}
+
+fn deterministic_fault_order_key(seed: u64, tick: u64, original_index: usize) -> u64 {
+    splitmix64(seed ^ tick.rotate_left(17) ^ original_index as u64)
+}
+
+fn schedule_faults_deterministically(
+    mut faults: Vec<tarsier_conformance::adapters::ScheduledAdapterFault>,
+    seed: u64,
+) -> Vec<tarsier_conformance::adapters::ScheduledAdapterFault> {
+    let mut indexed = faults
+        .drain(..)
+        .enumerate()
+        .collect::<Vec<(usize, tarsier_conformance::adapters::ScheduledAdapterFault)>>();
+    indexed.sort_by_key(|(idx, fault)| {
+        (
+            fault.tick,
+            deterministic_fault_order_key(seed, fault.tick, *idx),
+            *idx,
+        )
+    });
+    indexed.into_iter().map(|(_, fault)| fault).collect()
+}
+
+pub(crate) fn run_conformance_active_command(
+    trace: &PathBuf,
+    adapter: &str,
+    seed: u64,
+    format: &str,
+    out: Option<&PathBuf>,
+) -> miette::Result<()> {
+    let output_format = parse_output_format(format)?;
+    let adapter_kind = parse_conformance_adapter(adapter)?;
+    let trace_source = fs::read_to_string(trace).into_diagnostic()?;
+    let mapped = tarsier_conformance::adapters::adapt_active_faults(adapter_kind, &trace_source)
+        .map_err(|e| miette::miette!("Active trace adapter error: {e}"))?;
+    let scheduled = schedule_faults_deterministically(mapped, seed);
+
+    let report = ConformanceActiveReport {
+        schema_version: 1,
+        adapter: adapter_kind.as_str().to_string(),
+        seed,
+        faults: scheduled,
+    };
+    let report_json_value = serde_json::to_value(&report).into_diagnostic()?;
+    let report_json = serde_json::to_string_pretty(&report_json_value).into_diagnostic()?;
+
+    if let Some(path) = out {
+        write_json_artifact(path, &report_json_value)?;
+        println!("Conformance active schedule written to {}", path.display());
+    }
+
+    match output_format {
+        OutputFormat::Json => println!("{report_json}"),
+        OutputFormat::Text => {
+            println!(
+                "Conformance Active: adapter={}, seed={}, faults={}",
+                report.adapter,
+                report.seed,
+                report.faults.len()
+            );
+            for (idx, scheduled) in report.faults.iter().enumerate() {
+                let action = serde_json::to_string(&scheduled.action).into_diagnostic()?;
+                println!(
+                    "  [{idx}] tick={} action={}",
+                    scheduled.tick,
+                    action.replace('\n', "")
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod active_tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tarsier_conformance::adapters::{AdapterFaultAction, ScheduledAdapterFault};
+
+    fn active_fixture_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/conformance/active")
+            .join(name)
+    }
+
+    fn tmp_path(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should be available")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{prefix}_{}_{}.json", std::process::id(), nanos))
+    }
+
+    #[test]
+    fn conformance_active_schedule_is_deterministic_for_seed() {
+        let faults = vec![
+            ScheduledAdapterFault {
+                tick: 2,
+                action: AdapterFaultAction::HealPartition,
+            },
+            ScheduledAdapterFault {
+                tick: 2,
+                action: AdapterFaultAction::ReorderChannel {
+                    channel: "vote".into(),
+                },
+            },
+            ScheduledAdapterFault {
+                tick: 1,
+                action: AdapterFaultAction::DropMessage {
+                    channel: "vote".into(),
+                    from_process: Some(1),
+                    to_process: Some(2),
+                },
+            },
+        ];
+
+        let a = schedule_faults_deterministically(faults.clone(), 7);
+        let b = schedule_faults_deterministically(faults, 7);
+        assert_eq!(a, b);
+        assert_eq!(a[0].tick, 1);
+    }
+
+    #[test]
+    fn conformance_active_schedule_seed_changes_same_tick_order() {
+        let faults = vec![
+            ScheduledAdapterFault {
+                tick: 5,
+                action: AdapterFaultAction::HealPartition,
+            },
+            ScheduledAdapterFault {
+                tick: 5,
+                action: AdapterFaultAction::RetireTwin { twin_id: 42 },
+            },
+            ScheduledAdapterFault {
+                tick: 5,
+                action: AdapterFaultAction::SpawnTwin {
+                    process_id: 1,
+                    twin_id: 101,
+                },
+            },
+        ];
+
+        let a = schedule_faults_deterministically(faults.clone(), 1);
+        let b = schedule_faults_deterministically(faults, 2);
+        assert_ne!(
+            a.iter().map(|f| &f.action).collect::<Vec<_>>(),
+            b.iter().map(|f| &f.action).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn conformance_active_command_corpus_fixture_writes_expected_json_shape() {
+        let trace = active_fixture_path("cometbft_faults_basic.json");
+        let out = tmp_path("tarsier_conformance_active");
+        run_conformance_active_command(&trace, "cometbft", 11, "json", Some(&out))
+            .expect("conformance-active should succeed on corpus fixture");
+
+        let raw = fs::read_to_string(&out).expect("output JSON should be readable");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["adapter"], "cometbft");
+        assert_eq!(value["seed"], 11);
+        assert!(
+            value["faults"]
+                .as_array()
+                .expect("faults should be array")
+                .len()
+                >= 4
+        );
+        fs::remove_file(out).ok();
+    }
+
+    #[test]
+    fn conformance_active_command_seed_changes_same_tick_order_for_corpus_fixture() {
+        let trace = active_fixture_path("cometbft_faults_same_tick.json");
+        let out_a = tmp_path("tarsier_conformance_active_seed_a");
+        let out_b = tmp_path("tarsier_conformance_active_seed_b");
+
+        run_conformance_active_command(&trace, "cometbft", 1, "json", Some(&out_a))
+            .expect("seed 1 run should pass");
+        run_conformance_active_command(&trace, "cometbft", 2, "json", Some(&out_b))
+            .expect("seed 2 run should pass");
+
+        let a: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&out_a).expect("seed a output"))
+                .expect("seed a json");
+        let b: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&out_b).expect("seed b output"))
+                .expect("seed b json");
+
+        let names = |v: &serde_json::Value| -> Vec<String> {
+            v["faults"]
+                .as_array()
+                .expect("faults array")
+                .iter()
+                .map(|f| {
+                    f["action"]["kind"]
+                        .as_str()
+                        .expect("kind string")
+                        .to_string()
+                })
+                .collect()
+        };
+        assert_ne!(names(&a), names(&b));
+
+        fs::remove_file(out_a).ok();
+        fs::remove_file(out_b).ok();
+    }
+}
