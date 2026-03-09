@@ -203,6 +203,8 @@ fn encoding_with_guarded_rules_has_more_assertions() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     });
 

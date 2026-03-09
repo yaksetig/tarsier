@@ -248,6 +248,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
 
@@ -291,6 +293,8 @@ mod tests {
                 }),
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
 

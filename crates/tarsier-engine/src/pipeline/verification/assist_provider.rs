@@ -105,7 +105,7 @@ pub fn assist_provider_from_kind(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pipeline::verification::{
+    use crate::pipeline::verification::assist::{
         PromptAutomatonSummary, PromptCtiSummary, PromptFailureSummary, ProofAttemptSummary,
     };
 

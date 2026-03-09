@@ -775,7 +775,9 @@ mod tests {
             channels: vec![],
             equivocation_policies: vec![],
             committees: vec![],
+            dag_rounds: vec![],
             collections: vec![],
+            clocks: vec![],
             messages: vec![],
             crypto_objects: vec![],
             roles: vec![],
@@ -1092,6 +1094,8 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         };
         assert!(is_pure_stutter_rule(&rule));
@@ -1105,6 +1109,8 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         };
         assert!(!is_pure_stutter_rule(&rule));
@@ -1121,6 +1127,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         };
         assert!(!is_pure_stutter_rule(&rule));

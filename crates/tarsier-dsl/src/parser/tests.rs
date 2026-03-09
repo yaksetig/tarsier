@@ -1141,6 +1141,7 @@ module M {
     message M;
     role R { var v: nat = 0; init s; phase s {} }
 }
+}
 "#;
     let err = parse(src, "test.trs").unwrap_err();
     assert!(

@@ -690,6 +690,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
         ta.security.role_identities.insert(
@@ -996,6 +998,8 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![],
         });
         let cs = ta;

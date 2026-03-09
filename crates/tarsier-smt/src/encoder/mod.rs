@@ -4695,6 +4695,8 @@ protocol BuggyBroadcast {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
             param_updates: vec![ParamUpdate {
                 param: t_id,
                 value: LinearCombination::constant(5),

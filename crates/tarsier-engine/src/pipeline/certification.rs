@@ -575,6 +575,8 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
                     collection_updates: vec![],
+                    clock_guards: vec![],
+                    clock_updates: vec![],
                     param_updates: vec![],
         });
         ta

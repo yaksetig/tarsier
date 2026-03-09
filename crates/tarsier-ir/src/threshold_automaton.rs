@@ -1952,6 +1952,7 @@ mod tests {
                 clock: ClockId::from(42),
                 kind: ClockUpdateKind::Reset,
             }],
+            param_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1975,6 +1976,7 @@ mod tests {
                 bound: LinearCombination::constant(1),
             }],
             clock_updates: vec![],
+            param_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(

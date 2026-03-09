@@ -501,7 +501,9 @@ fn make_default_program() -> ast::Program {
                 channels: vec![],
                 equivocation_policies: vec![],
                 committees: vec![],
+                dag_rounds: vec![],
                 collections: vec![],
+                clocks: vec![],
                 messages: vec![],
                 crypto_objects: vec![],
                 roles: vec![],
@@ -761,6 +763,8 @@ fn is_pure_stutter_rule_detection() {
         guard: make_guard(vec![]),
         updates: vec![],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     };
     assert!(is_pure_stutter_rule(&stutter));
@@ -771,6 +775,8 @@ fn is_pure_stutter_rule_detection() {
         guard: make_guard(vec![]),
         updates: vec![],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     };
     assert!(!is_pure_stutter_rule(&non_stutter_move));
@@ -784,6 +790,8 @@ fn is_pure_stutter_rule_detection() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     };
     assert!(!is_pure_stutter_rule(&non_stutter_update));
@@ -850,6 +858,8 @@ fn rules_independent_disjoint_locations_and_vars() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     };
     // Rule B: 2 -> 3 (role B), writes var 1
@@ -862,6 +872,8 @@ fn rules_independent_disjoint_locations_and_vars() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     };
     assert!(rules_independent(&ta, &rule_a, &rule_b));
@@ -877,6 +889,8 @@ fn rules_not_independent_shared_location() {
         guard: make_guard(vec![]),
         updates: vec![],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     };
     let rule_b = Rule {
@@ -885,6 +899,8 @@ fn rules_not_independent_shared_location() {
         guard: make_guard(vec![]),
         updates: vec![],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     };
     assert!(!rules_independent(&ta, &rule_a, &rule_b));
@@ -903,6 +919,8 @@ fn rules_not_independent_write_read_conflict() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     };
     // Rule B: 2 -> 3, reads var 0 (in guard)
@@ -912,6 +930,8 @@ fn rules_not_independent_write_read_conflict() {
         guard: make_guard(vec![make_guard_atom(vec![0], CmpOp::Ge, 1, vec![], false)]),
         updates: vec![],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
         param_updates: vec![],
     };
     assert!(!rules_independent(&ta, &rule_a, &rule_b));
