@@ -2240,6 +2240,8 @@ const DSL_KEYWORDS: &[&str] = &[
     "always",
     "eventually",
     "committee",
+    "dag_round",
+    "extends",
     "and",
     "or",
     "not",
@@ -2899,4 +2901,57 @@ protocol Reconfig {
     let role = &program.protocol.node.roles[0].node;
     let transition = &role.phases[0].node.transitions[0].node;
     assert!(matches!(&transition.actions[0], Action::Reconfigure { updates } if updates.is_empty()));
+}
+
+#[test]
+fn parse_dag_round_declaration_without_parents() {
+    let src = r#"
+protocol DagProto {
+    params n, t;
+    resilience: n > 3*t;
+    dag_round r0;
+    message Vote;
+    role Replica {
+        init idle;
+        phase idle {}
+    }
+    property safe: safety {
+        forall p: Replica. p.idle == 0
+    }
+}
+"#;
+    let program = parse(src, "dag_round_basic.trs").expect("should parse dag_round");
+    let proto = &program.protocol.node;
+    assert_eq!(proto.dag_rounds.len(), 1);
+    let round = &proto.dag_rounds[0];
+    assert_eq!(round.name, "r0");
+    assert!(round.parents.is_empty());
+}
+
+#[test]
+fn parse_dag_round_declaration_with_parents() {
+    let src = r#"
+protocol DagProto {
+    params n, t;
+    resilience: n > 3*t;
+    dag_round r0;
+    dag_round r1 extends r0;
+    dag_round r2 extends r0, r1;
+    message Vote;
+    role Replica {
+        init idle;
+        phase idle {}
+    }
+    property safe: safety {
+        forall p: Replica. p.idle == 0
+    }
+}
+"#;
+    let program = parse(src, "dag_round_parents.trs").expect("should parse dag_round");
+    let proto = &program.protocol.node;
+    assert_eq!(proto.dag_rounds.len(), 3);
+    assert_eq!(proto.dag_rounds[1].name, "r1");
+    assert_eq!(proto.dag_rounds[1].parents, vec!["r0"]);
+    assert_eq!(proto.dag_rounds[2].name, "r2");
+    assert_eq!(proto.dag_rounds[2].parents, vec!["r0", "r1"]);
 }

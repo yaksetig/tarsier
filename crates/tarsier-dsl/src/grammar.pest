@@ -21,6 +21,7 @@ protocol_item = _{
     | channel_decl
     | equivocation_decl
     | committee_decl
+    | dag_round_decl
     | collection_decl
     | message_decl
     | crypto_object_decl
@@ -145,6 +146,11 @@ committee_decl = {
 
 committee_item = { ident ~ ":" ~ committee_value ~ ";" }
 committee_value = _{ float_literal | int_literal | ident }
+
+// --- DAG rounds ---
+dag_round_decl = {
+    "dag_round" ~ ident ~ ("extends" ~ ident_list)? ~ ";"
+}
 
 // --- Bounded log/sequence types ---
 collection_decl = {
