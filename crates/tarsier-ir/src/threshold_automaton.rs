@@ -368,6 +368,8 @@ pub struct ThresholdAutomaton {
     pub security: ThresholdAutomatonSecurity,
     /// Roles marked as `leader` (exactly one process occupies leader locations at all times).
     pub leader_roles: Vec<String>,
+    /// DAG-round declarations (name + parent edges).
+    pub dag_rounds: Vec<IrDagRoundSpec>,
     /// Bounded log/sequence collection declarations.
     pub collections: Vec<IrCollectionSpec>,
     /// Reconfiguration specification (None if protocol has no dynamic membership).
@@ -396,6 +398,15 @@ pub struct IrCommitteeSpec {
     pub epsilon: Option<f64>,
     /// Which protocol parameter receives the derived adversary bound.
     pub bound_param: Option<ParamId>,
+}
+
+/// DAG round specification in the IR.
+#[derive(Debug, Clone)]
+pub struct IrDagRoundSpec {
+    /// Round name.
+    pub name: String,
+    /// Names of parent rounds referenced by this round.
+    pub parent_rounds: Vec<String>,
 }
 
 /// Kind of bounded collection in the IR.
@@ -466,6 +477,7 @@ impl ThresholdAutomaton {
             semantics: ThresholdAutomatonSemantics::default(),
             security: ThresholdAutomatonSecurity::default(),
             leader_roles: Vec::new(),
+            dag_rounds: Vec::new(),
             collections: Vec::new(),
             reconfiguration: None,
         }
@@ -1011,6 +1023,21 @@ impl fmt::Display for ThresholdAutomaton {
             writeln!(f, "  Leader roles:")?;
             for role in &self.leader_roles {
                 writeln!(f, "    {role}")?;
+            }
+        }
+        if !self.dag_rounds.is_empty() {
+            writeln!(f, "  DAG rounds:")?;
+            for round in &self.dag_rounds {
+                if round.parent_rounds.is_empty() {
+                    writeln!(f, "    {}: (root)", round.name)?;
+                } else {
+                    writeln!(
+                        f,
+                        "    {}: {}",
+                        round.name,
+                        round.parent_rounds.join(", ")
+                    )?;
+                }
             }
         }
         if !self.collections.is_empty() {
@@ -1796,6 +1823,24 @@ mod tests {
         assert_eq!(ta.key_owner("missing_key"), None);
         assert!(ta.key_is_compromised("r_key"));
         assert!(!ta.key_is_compromised("other_key"));
+    }
+
+    #[test]
+    fn display_renders_dag_rounds_when_present() {
+        let mut ta = minimal_ta();
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r0".into(),
+            parent_rounds: vec![],
+        });
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r1".into(),
+            parent_rounds: vec!["r0".into()],
+        });
+
+        let rendered = format!("{ta}");
+        assert!(rendered.contains("DAG rounds:"));
+        assert!(rendered.contains("r0: (root)"));
+        assert!(rendered.contains("r1: r0"));
     }
 
     #[test]
