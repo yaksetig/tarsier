@@ -1059,6 +1059,10 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                 "reconfigure actions require the dynamic membership extension (RECONF-02+)".into(),
                             ));
                         }
+                        ast::Action::ResetClock { .. } | ast::Action::TickClock { .. } => {
+                            // Timed actions are introduced by TIME-* tasks and are handled by
+                            // dedicated timed lowering/encoding stages.
+                        }
                     }
                 }
 
@@ -1530,7 +1534,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     to: to_lid,
                                     guard: Guard::trivial(),
                                     updates: Vec::new(),
-                    collection_updates: vec![],
+                                    collection_updates: vec![],
                                 });
                                 break;
                             }
@@ -1624,7 +1628,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     to: to_lid,
                                     guard: Guard::trivial(),
                                     updates: vec![],
-                    collection_updates: vec![],
+                                    collection_updates: vec![],
                                 });
                                 break;
                             }
@@ -1636,7 +1640,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             to: init_lid,
                             guard: Guard::trivial(),
                             updates: vec![],
-                    collection_updates: vec![],
+                            collection_updates: vec![],
                         });
                     }
                 }
