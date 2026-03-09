@@ -102,6 +102,11 @@ pub(super) fn queue_tail_var(step: usize, coll: usize) -> String {
     format!("qtail_{step}_{coll}")
 }
 
+/// DAG-round active flag for round `round` at step `step`.
+pub(super) fn dag_round_active_var(step: usize, round: usize) -> String {
+    format!("dag_active_{step}_{round}")
+}
+
 /// Parse `__sent_g<N>` variable names back to their shared-var index.
 pub(super) fn parse_internal_sent_flag_var(name: &str) -> Option<usize> {
     name.strip_prefix("__sent_g")?.parse::<usize>().ok()

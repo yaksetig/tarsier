@@ -158,6 +158,23 @@ impl<'a> KInductionEncoderBuilder<'a> {
         let selective_network = self.context.selective_network;
         let message_variant_groups = &self.context.message_variant_groups;
         let sent_flag_true_locs = &self.sent_flag_true_locs;
+        let dag_parent_indices: Vec<Vec<usize>> = {
+            let index: HashMap<&str, usize> = ta
+                .dag_rounds
+                .iter()
+                .enumerate()
+                .map(|(i, r)| (r.name.as_str(), i))
+                .collect();
+            ta.dag_rounds
+                .iter()
+                .map(|r| {
+                    r.parent_rounds
+                        .iter()
+                        .filter_map(|p| index.get(p.as_str()).copied())
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        };
         let enc = &mut self.enc;
         // Declare state variables for steps 0..k
         for step in 0..=k {
@@ -181,6 +198,26 @@ impl<'a> KInductionEncoderBuilder<'a> {
             }
             enc.declare(time_var(step), SmtSort::Int);
             enc.assert_term(SmtTerm::var(time_var(step)).ge(SmtTerm::int(0)));
+
+            // DAG rounds: boolean activation flags with parent dependency across steps.
+            for (rid, parents) in dag_parent_indices.iter().enumerate() {
+                let active = dag_round_active_var(step, rid);
+                enc.declare(active.clone(), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(active.clone()).ge(SmtTerm::int(0)));
+                enc.assert_term(SmtTerm::var(active.clone()).le(SmtTerm::int(1)));
+                if step == 0 {
+                    enc.assert_term(SmtTerm::var(active).eq(SmtTerm::int(0)));
+                } else {
+                    let prev = dag_round_active_var(step - 1, rid);
+                    enc.assert_term(SmtTerm::var(active.clone()).ge(SmtTerm::var(prev)));
+                    for parent_id in parents {
+                        enc.assert_term(SmtTerm::var(active.clone()).le(SmtTerm::var(
+                            dag_round_active_var(step - 1, *parent_id),
+                        )));
+                    }
+                }
+            }
+
             for (v, role) in distinct_vars {
                 if let Some(role) = role {
                     if let Some(&pid) = role_pop_params.get(role) {
