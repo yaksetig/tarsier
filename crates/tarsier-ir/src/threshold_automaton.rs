@@ -73,6 +73,7 @@ define_id!(
     CollectionId,
     "A unique identifier for a bounded log/sequence collection."
 );
+define_id!(ClockId, "A unique identifier for a logical clock.");
 define_id!(RuleId, "A unique identifier for a rule.");
 define_id!(ParamId, "A unique identifier for a parameter.");
 
@@ -372,6 +373,8 @@ pub struct ThresholdAutomaton {
     pub dag_rounds: Vec<IrDagRoundSpec>,
     /// Bounded log/sequence collection declarations.
     pub collections: Vec<IrCollectionSpec>,
+    /// Logical clock declarations.
+    pub clocks: Vec<IrClockSpec>,
 }
 
 /// A value that is either a reference to a protocol parameter or a concrete constant.
@@ -463,6 +466,13 @@ pub struct IrCollectionSpec {
     pub queue_model: QueueModel,
 }
 
+/// Logical clock specification in the IR.
+#[derive(Debug, Clone)]
+pub struct IrClockSpec {
+    /// Name of this clock.
+    pub name: String,
+}
+
 impl ThresholdAutomaton {
     pub fn new() -> Self {
         Self {
@@ -477,6 +487,7 @@ impl ThresholdAutomaton {
             leader_roles: Vec::new(),
             dag_rounds: Vec::new(),
             collections: Vec::new(),
+            clocks: Vec::new(),
         }
     }
 
@@ -556,6 +567,19 @@ impl ThresholdAutomaton {
             .iter()
             .position(|c| c.name == name)
             .map(CollectionId::from)
+    }
+
+    pub fn add_clock(&mut self, spec: IrClockSpec) -> ClockId {
+        let id = ClockId::from(self.clocks.len());
+        self.clocks.push(spec);
+        id
+    }
+
+    pub fn find_clock_by_name(&self, name: &str) -> Option<ClockId> {
+        self.clocks
+            .iter()
+            .position(|c| c.name == name)
+            .map(ClockId::from)
     }
 
     pub fn role_locations(&self, role: &str) -> Vec<LocationId> {
@@ -691,6 +715,28 @@ impl ThresholdAutomaton {
                     }
                 }
             }
+
+            // Check clock updates
+            for upd in &rule.clock_updates {
+                if upd.clock.as_usize() >= self.clocks.len() {
+                    return Err(ValidationError::InvalidClockUpdateClock {
+                        rule_id,
+                        clock_id: upd.clock,
+                        max: self.clocks.len().saturating_sub(1),
+                    });
+                }
+                if let ClockUpdateKind::TickBy(ref lc) = upd.kind {
+                    for &(_, param_id) in &lc.terms {
+                        if param_id.as_usize() >= num_params {
+                            return Err(ValidationError::InvalidGuardParam {
+                                rule_id,
+                                param_id,
+                                max: num_params.saturating_sub(1),
+                            });
+                        }
+                    }
+                }
+            }
         }
 
         // Check adversary bound param
@@ -781,6 +827,12 @@ pub enum ValidationError {
     InvalidUpdateVar {
         rule_id: RuleId,
         var_id: SharedVarId,
+        max: usize,
+    },
+    #[error("Rule {rule_id} clock update references invalid clock {clock_id} (max: {max})")]
+    InvalidClockUpdateClock {
+        rule_id: RuleId,
+        clock_id: ClockId,
         max: usize,
     },
     #[error("Initial location {location_id} is out of bounds (max: {max})")]
@@ -989,6 +1041,12 @@ impl fmt::Display for ThresholdAutomaton {
                 )?;
             }
         }
+        if !self.clocks.is_empty() {
+            writeln!(f, "  Clocks:")?;
+            for (i, clock) in self.clocks.iter().enumerate() {
+                writeln!(f, "    t{i}: {}", clock.name)?;
+            }
+        }
         writeln!(f, "  Locations:")?;
         for (i, loc) in self.locations.iter().enumerate() {
             let initial = if self.initial_locations.contains(&LocationId::from(i)) {
@@ -1015,6 +1073,12 @@ impl fmt::Display for ThresholdAutomaton {
             writeln!(f, "    r{i}: L{} -> L{} when {}", r.from, r.to, r.guard)?;
             for upd in &r.updates {
                 writeln!(f, "      update: {upd}")?;
+            }
+            for upd in &r.collection_updates {
+                writeln!(f, "      collection: {upd}")?;
+            }
+            for upd in &r.clock_updates {
+                writeln!(f, "      clock: {upd}")?;
             }
         }
         Ok(())
@@ -1089,6 +1153,7 @@ pub struct Rule {
     pub guard: Guard,
     pub updates: Vec<Update>,
     pub collection_updates: Vec<CollectionUpdate>,
+    pub clock_updates: Vec<ClockUpdate>,
 }
 
 /// An update to a bounded collection (log append or sequence set).
@@ -1122,6 +1187,30 @@ impl fmt::Display for CollectionUpdate {
                 write!(f, "c{}.enqueue({})", self.collection, val)
             }
             CollectionUpdateKind::Dequeue => write!(f, "c{}.dequeue()", self.collection),
+        }
+    }
+}
+
+/// An update to a logical clock.
+#[derive(Debug, Clone)]
+pub struct ClockUpdate {
+    pub clock: ClockId,
+    pub kind: ClockUpdateKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum ClockUpdateKind {
+    Reset,
+    TickBy(LinearCombination),
+}
+
+impl fmt::Display for ClockUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            ClockUpdateKind::Reset => write!(f, "t{} := 0", self.clock),
+            ClockUpdateKind::TickBy(delta) => {
+                write!(f, "t{} := t{} + {}", self.clock, self.clock, delta)
+            }
         }
     }
 }
@@ -1412,6 +1501,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_updates: vec![],
         });
         ta.constraints.adversary_bound_param = Some(ParamId::from(2)); // f
         ta.constraints.resilience_condition = Some(LinearConstraint {
@@ -1451,6 +1541,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1471,6 +1562,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1496,6 +1588,7 @@ mod tests {
             }),
             updates: vec![],
             collection_updates: vec![],
+            clock_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1521,6 +1614,7 @@ mod tests {
             }),
             updates: vec![],
             collection_updates: vec![],
+            clock_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1544,6 +1638,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            clock_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1639,6 +1734,38 @@ mod tests {
             vec![LocationId::from(0), LocationId::from(1)]
         );
         assert!(ta.role_locations("Other").is_empty());
+    }
+
+    #[test]
+    fn clock_helpers_find_existing_and_missing_symbols() {
+        let mut ta = minimal_ta();
+        let clock_id = ta.add_clock(IrClockSpec {
+            name: "round_clock".into(),
+        });
+        assert_eq!(clock_id, ClockId::from(0));
+        assert_eq!(ta.find_clock_by_name("round_clock"), Some(clock_id));
+        assert_eq!(ta.find_clock_by_name("missing_clock"), None);
+    }
+
+    #[test]
+    fn validate_invalid_clock_update_clock() {
+        let mut ta = minimal_ta();
+        ta.rules.push(Rule {
+            from: LocationId::from(0),
+            to: LocationId::from(1),
+            guard: Guard::trivial(),
+            updates: vec![],
+            collection_updates: vec![],
+            clock_updates: vec![ClockUpdate {
+                clock: ClockId::from(42),
+                kind: ClockUpdateKind::Reset,
+            }],
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidClockUpdateClock { clock_id, .. } if clock_id == ClockId::from(42)
+        ));
     }
 
     #[test]

@@ -115,6 +115,7 @@ pub fn arb_threshold_automaton() -> impl Strategy<Value = ThresholdAutomaton> {
                     guard,
                     updates,
                     collection_updates: vec![],
+                    clock_updates: vec![],
                 });
             }
 
