@@ -58,10 +58,20 @@ jobs:
           path: target/criterion-results/
           retention-days: 90
 
+      - name: Detect gh-pages baseline branch
+        id: bench_baseline
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/${GITHUB_REPOSITORY}.git" gh-pages >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Use github-action-benchmark to track results over time.
       # On pushes to main: commit the results to gh-pages (establishing baselines).
       # On PRs: compare against the baseline and comment if regressions exceed 10%.
       - name: Store and compare benchmark results
+        if: steps.bench_baseline.outputs.exists == 'true'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: Tarsier Criterion Benchmarks
@@ -80,3 +90,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
+
+      - name: Skip compare when gh-pages baseline is absent
+        if: steps.bench_baseline.outputs.exists != 'true'
+        run: echo "Skipping benchmark compare: gh-pages baseline branch does not exist yet."

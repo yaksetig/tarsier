@@ -25,6 +25,9 @@ ignore = [
     # paste is unmaintained (RUSTSEC-2024-0436) but is a transitive dep of ratatui
     # with no security impact. Will be resolved when ratatui migrates to pastey.
     { id = "RUSTSEC-2024-0436", reason = "transitive dep from ratatui, no security impact" },
+    # instant is unmaintained (RUSTSEC-2024-0384) but only arrives transitively via notify-types.
+    # Keep this allowlisted until notify/notify-types fully migrates away from instant.
+    { id = "RUSTSEC-2024-0384", reason = "transitive dep via notify-types; no direct usage in security boundary" },
 ]
 
 # --- Licenses ---

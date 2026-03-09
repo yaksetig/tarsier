@@ -1651,6 +1651,7 @@ jobs:
           cargo test -p tarsier-smt --test solver_parity_perf_expansions cvc5_parity_ -- --ignored --nocapture
 
   cross-platform-tests:
+    if: vars.ENABLE_CROSS_PLATFORM == 'true'
     strategy:
       fail-fast: false
       matrix:

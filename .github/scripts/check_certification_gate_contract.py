@@ -80,8 +80,14 @@ def main() -> int:
     release = load(RELEASE_WORKFLOW)
     cert_script = load(CERT_SCRIPT)
 
-    if "cargo run -p tarsier-cli -- cert-suite" not in cert_script:
-        errors.append("scripts/certify-corpus.sh no longer invokes `cargo run -p tarsier-cli -- cert-suite`.")
+    if not re.search(
+        r"cargo run -p tarsier-cli(?:\s+--features\s+[^\s]+)?\s+--\s+cert-suite",
+        cert_script,
+    ):
+        errors.append(
+            "scripts/certify-corpus.sh no longer invokes `cargo run -p tarsier-cli -- cert-suite` "
+            "(optional `--features ...` allowed)."
+        )
 
     # CI gate contract
     ci_gate = job_block(ci, "corpus-certification-gate")
@@ -300,19 +306,22 @@ def main() -> int:
             "ci.yml build-test",
         )
 
-    # V2-09: Verify schema version consistency between schema doc and main.rs.
+    # V2-09: Verify schema version consistency between schema doc and CLI report emission path.
     schema_path = ROOT / "docs" / "analysis-report-schema-v1.json"
     main_rs_path = ROOT / "crates" / "tarsier-cli" / "src" / "main.rs"
-    if schema_path.exists() and main_rs_path.exists():
+    analyze_rs_path = ROOT / "crates" / "tarsier-cli" / "src" / "commands" / "analyze.rs"
+    if schema_path.exists() and main_rs_path.exists() and analyze_rs_path.exists():
         schema_text = schema_path.read_text(encoding="utf-8")
         main_text = main_rs_path.read_text(encoding="utf-8")
+        analyze_text = analyze_rs_path.read_text(encoding="utf-8")
         if '"const": "v1"' not in schema_text:
             errors.append(
                 "docs/analysis-report-schema-v1.json: schema_version const should be 'v1'."
             )
-        if 'schema_version: "v1".to_string()' not in main_text:
+        schema_literal = 'schema_version: "v1".to_string()'
+        if schema_literal not in main_text and schema_literal not in analyze_text:
             errors.append(
-                "main.rs: schema_version should be set to 'v1'."
+                "analysis report schema_version should be set to 'v1' in CLI source."
             )
     elif not schema_path.exists():
         errors.append("docs/analysis-report-schema-v1.json: missing schema file.")

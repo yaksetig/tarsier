@@ -11,7 +11,8 @@ on:
 
 # Cancel in-progress runs for PRs (scheduled/push runs complete)
 concurrency:
-  group: codeql-${{ github.ref }}-${{ matrix.language }}
+  # Matrix context is not available at workflow scope.
+  group: codeql-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
