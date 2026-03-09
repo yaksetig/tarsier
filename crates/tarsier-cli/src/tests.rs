@@ -407,8 +407,6 @@ fn parse_prove_accepts_assist_flags() {
         "prove",
         "examples/pbft_simple.trs",
         "--assist",
-        "--assist-provider",
-        "mock",
         "--assist-max-suggestions",
         "7",
         "--assist-payload-out",
@@ -419,13 +417,11 @@ fn parse_prove_accepts_assist_flags() {
     match cli.command {
         Commands::Prove {
             assist,
-            assist_provider,
             assist_max_suggestions,
             assist_payload_out,
             ..
         } => {
             assert!(assist);
-            assert_eq!(assist_provider, "mock");
             assert_eq!(assist_max_suggestions, 7);
             assert_eq!(
                 assist_payload_out,

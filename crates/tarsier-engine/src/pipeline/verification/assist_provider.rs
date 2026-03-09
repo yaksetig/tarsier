@@ -6,16 +6,14 @@ use super::assist::ProveFailurePromptPayload;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssistProviderKind {
     Mock,
-    OpenAi,
 }
 
 impl AssistProviderKind {
     pub fn parse(raw: &str) -> Result<Self, String> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "mock" => Ok(Self::Mock),
-            "openai" => Ok(Self::OpenAi),
             other => Err(format!(
-                "Unknown assist provider '{other}'. Use one of: mock, openai."
+                "Unknown assist provider '{other}'. Use: mock."
             )),
         }
     }
@@ -23,7 +21,6 @@ impl AssistProviderKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Mock => "mock",
-            Self::OpenAi => "openai",
         }
     }
 }
@@ -76,29 +73,11 @@ impl AssistSuggestionProvider for MockAssistProvider {
     }
 }
 
-#[derive(Debug, Default)]
-struct OpenAiAssistProvider;
-
-impl AssistSuggestionProvider for OpenAiAssistProvider {
-    fn kind(&self) -> AssistProviderKind {
-        AssistProviderKind::OpenAi
-    }
-
-    fn suggest_invariants(
-        &self,
-        _payload: &ProveFailurePromptPayload,
-        _max_suggestions: usize,
-    ) -> Result<Vec<String>, String> {
-        Err("openai provider integration is not implemented yet".to_string())
-    }
-}
-
 pub fn assist_provider_from_kind(
     kind: AssistProviderKind,
 ) -> Box<dyn AssistSuggestionProvider + Send + Sync> {
     match kind {
         AssistProviderKind::Mock => Box::new(MockAssistProvider),
-        AssistProviderKind::OpenAi => Box::new(OpenAiAssistProvider),
     }
 }
 
@@ -150,15 +129,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_provider_kind_accepts_mock_and_openai() {
+    fn parse_provider_kind_accepts_only_mock() {
         assert_eq!(
             AssistProviderKind::parse("mock").unwrap(),
             AssistProviderKind::Mock
         );
-        assert_eq!(
-            AssistProviderKind::parse("openai").unwrap(),
-            AssistProviderKind::OpenAi
-        );
+        assert!(AssistProviderKind::parse("openai").is_err());
         assert!(AssistProviderKind::parse("unknown").is_err());
     }
 
@@ -169,13 +145,5 @@ mod tests {
         let suggestions = provider.suggest_invariants(&payload, 1).unwrap();
         assert_eq!(suggestions.len(), 1);
         assert!(suggestions[0].contains("kappa["));
-    }
-
-    #[test]
-    fn openai_provider_reports_unimplemented() {
-        let payload = sample_payload();
-        let provider = assist_provider_from_kind(AssistProviderKind::OpenAi);
-        let err = provider.suggest_invariants(&payload, 2).unwrap_err();
-        assert!(err.contains("not implemented"));
     }
 }

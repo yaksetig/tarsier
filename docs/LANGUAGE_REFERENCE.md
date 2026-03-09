@@ -1076,73 +1076,97 @@ Whitespace (spaces, tabs, newlines) is ignored between tokens.
 
 ## 23. Verification Workflow
 
-### CLI commands
+### CLI Command Reference
 
-| Command | Description |
-|---|---|
-| `tarsier analyze <file>` | Primary unified workflow (bughunt/safety/safety+liveness/release) |
-| `tarsier verify <file>` | Bounded model checking (safety) |
-| `tarsier prove <file>` | Unbounded safety proof (k-induction/PDR) |
-| `tarsier liveness <file>` | Bounded liveness check |
-| `tarsier fair-liveness <file>` | Bounded fair liveness (cycle detection) |
-| `tarsier prove-fair <file>` | Unbounded fair liveness proof |
-| `tarsier infer-invariants <file>` | Candidate invariant mining with inductiveness scoring |
-| `tarsier refinement-check <file>` | Directional simulation/refinement check (concrete vs abstract) |
-| `tarsier equivalence-check <file> --other <file>` | Bidirectional bounded equivalence diagnostics |
-| `tarsier conformance-replay <file>` | Counterexample concretization + replay self-validation |
-| `tarsier lint <file>` | Semantic linting and warnings |
-| `tarsier comm <file>` | Communication complexity analysis |
-| `tarsier visualize <file>` | Trace visualization (timeline, MSC) |
-| `tarsier debug-cex <file>` | Interactive counterexample debugger |
+All commands are invoked as `tarsier <command> [args] [flags]`. The 40 commands are organized into logical groups below.
 
-### Refinement checking
+#### Primary Workflow
 
-`refinement-check` verifies that a concrete protocol simulates an abstract one (directional simulation preservation). The concrete protocol must declare `refines "abstract.trs";` or the abstract file can be provided via `--abstract-file`.
+- `analyze <file>` — Goal-directed multi-layer analysis. `--goal bughunt|safety|safety+liveness|release`, `--profile beginner|pro|governance|ci-fast|ci-proof|release-gate`, `--format text|json`
+- `assist` — Scaffold a protocol from a template. `--kind pbft|hotstuff|raft|tendermint|streamlet|casper`, `--out <file>`
+- `watch <file>` — Watch a `.trs` file and re-verify on changes. `--solver`, `--k`, `--engine`
 
-```bash
-tarsier refinement-check concrete.trs
-tarsier refinement-check concrete.trs --abstract-file abstract.trs --depth 15
-```
+#### Bounded Checking
 
-The checker builds a bounded product automaton and verifies that every concrete transition has a matching abstract transition up to the given depth.
+- `verify <file>` — Bounded model checking (BMC). `--depth 10`, `--solver z3|cvc5`, `--cegar-iters N`, `--portfolio`
+- `liveness <file>` — Bounded liveness check. `--depth 10`
+- `fair-liveness <file>` — Bounded fair non-termination lasso search. `--fairness weak|strong`, `--portfolio`
 
-### Equivalence checking
+#### Unbounded Proofs
 
-`equivalence-check` performs bidirectional bounded simulation between two protocols. Both directions (A simulates B and B simulates A) are checked independently.
+- `prove <file>` — Unbounded safety via k-induction or PDR. `--engine kinduction|pdr`, `--k 10`, `--auto-strengthen`, `--assist`
+- `prove-fair <file>` — Unbounded liveness under fairness. `--fairness weak|strong`, `--k 0`
+- `prove-round <file>` — Safety via round-erasure over-approximation. `--round-vars view,round,epoch,height`, `--engine pdr`
+- `prove-fair-round <file>` — Fair-liveness via round-erasure. `--round-vars`, `--fairness`
+- `round-sweep <file>` — Sweep round/view upper bounds for verdict convergence. `--vars view`, `--min-bound 2`, `--max-bound 16`
 
-```bash
-tarsier equivalence-check protocol_a.trs --other protocol_b.trs
-tarsier equivalence-check protocol_a.trs --other protocol_b.trs --depth 12 --format json
-```
+#### Invariant Inference
 
-If both directions pass, the protocols are behaviorally equivalent up to the bounded depth. A failure in either direction reports which protocol cannot simulate the other, along with a distinguishing trace.
+- `infer-invariants <file>` — Mine candidate invariant predicates and score inductiveness. `--solver z3|cvc5`, `--depth 10`, `--format text|json`
 
-### Invariant inference
+#### Relational Checking
 
-`infer-invariants` mines candidate invariant predicates from a protocol's structure, tests them for inductiveness (init + consecution), and reports the results ranked by inductiveness score.
+- `refinement-check <file>` — Simulation preservation between concrete and abstract. `--abstract-file <file>`, `--depth 10`
+- `equivalence-check <file>` — Bidirectional bounded equivalence. `--other <file>`, `--depth 10`
+- `compose-check <file>` — Compositional module contract checking (assume-guarantee).
 
-```bash
-tarsier infer-invariants protocol.trs
-tarsier infer-invariants protocol.trs --depth 15 --solver z3 --format json
-```
+#### Counterexample Analysis
 
-Candidates that pass both initiation and consecution checks are reported as inductive invariants. Those passing only initiation are reported separately. Use discovered invariants to strengthen `prove` runs via `--auto-strengthen`.
+- `visualize <file>` — Render counterexample traces. `--check verify|liveness|fair-liveness|prove|prove-fair`, `--format timeline|mermaid|markdown|json`
+- `debug-cex <file>` — Interactive counterexample debugger/replayer with delivery filters. `--filter-sender`, `--filter-message`
+- `explore <file>` — TUI trace explorer. `--trace-json <file>`
 
-### Common flags
+#### Conformance Checking
+
+- `conformance-check <file> <trace>` — Validate a runtime trace against a model. `--adapter runtime|cometbft|etcd-raft`, `--checker-mode permissive|strict`
+- `conformance-replay <file>` — Concretize counter-level counterexample to process-level trace. `--check verify|liveness|fair-liveness`, `--export-trace <file>`
+- `conformance-obligations <file>` — Generate obligation map JSON from a protocol. `--out <file>`
+- `conformance-suite` — Run conformance test suite from manifest. `--manifest <file>`, `--format text|json`
+- `conformance-active` — Build active-fault schedule from adapter traces. `--trace <file>`, `--adapter cometbft|runtime|etcd-raft`, `--seed N`
+
+#### Code Generation & Export
+
+- `codegen <file>` — Generate Rust or Go implementation code. `--target rust|go`, `--output <dir>`, `--require-cert <bundle>`
+- `export-dot <file>` — Export threshold automaton as Graphviz DOT. `--svg`, `--cluster`
+- `export-ta <file>` — Export threshold automaton in ByMC `.ta` format. `--out <file>`
+- `proof-export <bundle>` — Export certificate bundle to Lean/Coq proof IR. `--to lean|coq`, `--certcheck`
+
+#### Certification & Governance
+
+- `certify-safety <file>` — Generate safety proof certificate bundle. `--engine kinduction|pdr`, `--out <dir>`, `--capture-proofs`
+- `certify-fair-liveness <file>` — Generate fair-liveness certificate bundle. `--fairness weak|strong`, `--out <dir>`
+- `check-certificate <bundle>` — Check certificate bundle with external solvers. `--solvers z3,cvc5`, `--rederive`, `--trusted-check`
+- `cert-suite` — Run protocol corpus certification suite. `--manifest <file>`
+- `generate-trust-report` — Generate machine-readable trust report. `--profile standard|reinforced|high-assurance`
+- `governance-pipeline <file>` — Run all governance gates in one command. `--cert-manifest`, `--conformance-manifest`
+- `verify-governance-bundle <bundle>` — Verify governance bundle signature and schema.
+
+#### Static Analysis
+
+- `lint <file>` — Lint a protocol for common issues. `--soundness strict|permissive`, `--format text|json`
+- `comm <file>` — Analyze communication complexity bounds. `--depth 10`, `--format text|json`
+- `committee` — Analyze committee selection (standalone). `--population N`, `--byzantine K`, `--size S`, `--epsilon 1e-9`
+
+#### Developer Tools
+
+- `parse <file>` — Parse and print AST.
+- `show-ta <file>` — Show threshold automaton.
+- `completions <shell>` — Generate shell completions (bash, zsh, fish, elvish, powershell).
+
+### Common Flags
+
+Available to most commands:
 
 | Flag | Description |
 |---|---|
-| `--depth <N>` | Maximum exploration depth (default: 10 for most commands) |
-| `--k <N>` | Induction/frame parameter for unbounded proof commands (default: 10) |
-| `--solver z3\|cvc5` | SMT solver backend |
-| `--soundness strict\|permissive` | Soundness profile |
-| `--timeout <secs>` | Per-protocol timeout |
-| `--auto-strengthen` | `prove` pre-pass for automatic invariant strengthening |
-| `--liveness-memory-budget-mb <MiB>` | RSS guardrail for unbounded fair-liveness proving (`0` disables) |
-| `--format text\|json` | Output format |
-| `--network-semantics dsl\|faithful` | Network semantics mode |
+| `--solver z3\|cvc5` | SMT solver backend (default: z3) |
+| `--timeout <secs>` | Timeout in seconds (default: 300) |
+| `--soundness strict\|permissive` | Soundness profile (default: strict) |
+| `--format text\|json` | Output format (default: text) |
+| `--network-semantics dsl\|faithful` | Network semantics mode (default: dsl) |
+| `--por-mode full\|static\|off` | Partial-order reduction (default: full) |
 
-### Verification results
+### Verification Results
 
 | Result | Meaning |
 |---|---|
@@ -1151,7 +1175,7 @@ Candidates that pass both initiation and consecution checks are reported as indu
 | `ProbabilisticallySafe` | Safe with committee probability bound |
 | `Unknown` | Solver timeout or inconclusive |
 
-### Proof results
+### Proof Results
 
 | Result | Meaning |
 |---|---|

@@ -228,10 +228,6 @@ pub(crate) enum Commands {
         #[arg(long, default_value_t = false)]
         assist: bool,
 
-        /// Assist provider: mock | openai
-        #[arg(long, default_value = "mock")]
-        assist_provider: String,
-
         /// Maximum number of raw suggestions requested from the assist provider
         #[arg(long, default_value_t = 5)]
         assist_max_suggestions: usize,

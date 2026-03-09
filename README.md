@@ -54,21 +54,34 @@ tarsier analyze my_protocol.trs --profile pro --depth 20 --k 16 --timeout 600
 
 ### Power Features (After Quick Start)
 
+**Unbounded proofs and invariants:**
 ```bash
-# Auto-discover strengthening predicates
-tarsier infer-invariants my_protocol.trs --solver z3 --depth 12
-
-# Run prove with automatic invariant-strengthening pre-pass
 tarsier prove my_protocol.trs --engine kinduction --auto-strengthen
+tarsier infer-invariants my_protocol.trs --solver z3 --depth 12
+tarsier prove-round my_protocol.trs --k 12             # round-erasure over-approximation
+tarsier round-sweep my_protocol.trs --depth 20         # sweep round bounds for convergence
+```
 
-# Check concrete-vs-abstract simulation (uses `refines` if present)
+**Protocol comparison and composition:**
+```bash
 tarsier refinement-check concrete.trs --abstract-file abstract.trs --depth 12
-
-# Check bidirectional bounded equivalence
 tarsier equivalence-check protocol_a.trs --other protocol_b.trs --depth 12
+tarsier compose-check modules.trs                       # assume-guarantee
+```
 
-# Build and replay a concretized trace for implementation conformance workflows
+**Conformance and implementation:**
+```bash
+tarsier conformance-check my_protocol.trs --trace runtime.json
 tarsier conformance-replay my_protocol.trs --check verify --export-trace replay.json
+tarsier conformance-suite --manifest suite.json          # run full test suite
+tarsier codegen my_protocol.trs --target rust -o src/
+```
+
+**Analysis utilities:**
+```bash
+tarsier comm my_protocol.trs                            # communication complexity bounds
+tarsier committee --population 1000 --byzantine 333 --size 100 --epsilon 1e-9
+tarsier watch my_protocol.trs                           # re-verify on file save
 ```
 
 ## DSL at a Glance
@@ -100,6 +113,8 @@ See the [Language Reference](docs/LANGUAGE_REFERENCE.md) for the complete DSL sy
 
 Recent DSL additions include:
 - `refines "base_protocol.trs";` for refinement-oriented workflows
+- Clocks and timeouts: `clock timer;`, `when timeout timer >= N`, `tick timer;`, `reset timer;`
+- DAG rounds: `dag_round r0;`, `dag_round r1 extends r0;`
 - Bounded collections: `log`, `sequence`, `fifo_channel`
 - Collection actions: `append`, `enqueue`, `dequeue`
 - Dynamic parameter updates via `reconfigure { ... }`

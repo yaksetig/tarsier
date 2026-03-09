@@ -49,7 +49,6 @@ fn run_once(args: &WatchCommandArgs) {
         portfolio: args.portfolio,
         auto_strengthen: false,
         assist: false,
-        assist_provider: "mock".to_string(),
         assist_max_suggestions: 5,
         assist_payload_out: None,
         format: args.format.clone(),

@@ -56,7 +56,6 @@ pub(crate) struct ProveCommandArgs {
     pub(crate) portfolio: bool,
     pub(crate) auto_strengthen: bool,
     pub(crate) assist: bool,
-    pub(crate) assist_provider: String,
     pub(crate) assist_max_suggestions: usize,
     pub(crate) assist_payload_out: Option<PathBuf>,
     pub(crate) format: String,
@@ -335,10 +334,8 @@ pub(crate) fn run_prove_command(args: ProveCommandArgs) -> miette::Result<()> {
         output_format,
     };
     let assist = if args.assist {
-        let provider =
-            AssistProviderKind::parse(&args.assist_provider).map_err(|e| miette::miette!("{e}"))?;
         Some(ProveAssistConfig {
-            provider,
+            provider: AssistProviderKind::Mock,
             max_suggestions: args.assist_max_suggestions.max(1),
             payload_out: args.assist_payload_out,
         })
@@ -1804,28 +1801,4 @@ property agreement: agreement {
         assert!(report.rerun_results.is_empty());
     }
 
-    #[test]
-    fn collect_assist_report_with_openai_provider_surfaces_failure() {
-        let options = PipelineOptions::default();
-        let assist = ProveAssistConfig {
-            provider: AssistProviderKind::OpenAi,
-            max_suggestions: 2,
-            payload_out: None,
-        };
-
-        let report = collect_assist_suggestions_report(
-            sample_assist_source(),
-            "assist_openai.trs",
-            &options,
-            &sample_not_proved_result(),
-            Some(&assist),
-        )
-        .expect("assist report should be collected")
-        .expect("report should be present");
-
-        assert_eq!(report.provider, AssistProviderKind::OpenAi);
-        assert_eq!(report.raw_count, 0);
-        assert!(!report.rejected.is_empty());
-        assert!(report.rejected[0].1.contains("provider failed"));
-    }
 }
