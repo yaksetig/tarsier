@@ -1464,6 +1464,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     guard: guard.clone(),
                                     updates: updates.clone(),
                                     collection_updates: pending_collection_updates.clone(),
+                                    clock_updates: vec![],
                                     param_updates: pending_param_updates.clone(),
                                 });
                                 break;
@@ -1556,6 +1557,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     guard: Guard::trivial(),
                                     updates: Vec::new(),
                                     collection_updates: vec![],
+                                    clock_updates: vec![],
                                     param_updates: vec![],
                                 });
                                 break;
@@ -1604,6 +1606,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     kind: UpdateKind::Increment,
                                 }],
                                 collection_updates: vec![],
+                                clock_updates: vec![],
                                 param_updates: vec![],
                             });
                             break;
@@ -1652,6 +1655,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     guard: Guard::trivial(),
                                     updates: vec![],
                                     collection_updates: vec![],
+                                    clock_updates: vec![],
                                     param_updates: vec![],
                                 });
                                 break;
@@ -1665,6 +1669,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             guard: Guard::trivial(),
                             updates: vec![],
                             collection_updates: vec![],
+                            clock_updates: vec![],
                             param_updates: vec![],
                         });
                     }
