@@ -15,9 +15,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SEMANTICS_DOC = ROOT / "docs" / "SEMANTICS.md"
-LOWERING_SRC = ROOT / "crates" / "tarsier-ir" / "src" / "lowering.rs"
-ENCODER_SRC = ROOT / "crates" / "tarsier-smt" / "src" / "encoder.rs"
-ENGINE_INTEGRATION = ROOT / "crates" / "tarsier-engine" / "tests" / "integration_tests.rs"
+LOWERING_SRC = ROOT / "crates" / "tarsier-ir" / "src" / "lowering" / "tests.rs"
+ENCODER_SRC = ROOT / "crates" / "tarsier-smt" / "src" / "encoder" / "mod.rs"
+ENGINE_INTEGRATION = ROOT / "crates" / "tarsier-engine" / "tests" / "faithful_tests.rs"
 
 
 def read(path: Path) -> str:
@@ -94,7 +94,12 @@ def main() -> int:
         "lower_crypto_object_conflicts_exclusive_adds_admissibility_guard",
     ]
     for test_name in lowering_tests:
-        require_test_exists(lowering_src, test_name, errors, "crates/tarsier-ir/src/lowering.rs")
+        require_test_exists(
+            lowering_src,
+            test_name,
+            errors,
+            "crates/tarsier-ir/src/lowering/tests.rs",
+        )
 
     encoder_tests = [
         "forging_crypto_object_family_is_unsat_even_with_byzantine_budget",
@@ -102,7 +107,12 @@ def main() -> int:
         "exclusive_crypto_policy_blocks_conflicting_variants_in_same_state",
     ]
     for test_name in encoder_tests:
-        require_test_exists(encoder_src, test_name, errors, "crates/tarsier-smt/src/encoder.rs")
+        require_test_exists(
+            encoder_src,
+            test_name,
+            errors,
+            "crates/tarsier-smt/src/encoder/mod.rs",
+        )
 
     integration_tests = [
         "crypto_justify_independent_of_lock",
@@ -112,7 +122,7 @@ def main() -> int:
             integration_src,
             test_name,
             errors,
-            "crates/tarsier-engine/tests/integration_tests.rs",
+            "crates/tarsier-engine/tests/faithful_tests.rs",
         )
 
     if errors:
