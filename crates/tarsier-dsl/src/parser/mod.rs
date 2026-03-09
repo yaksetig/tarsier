@@ -270,7 +270,12 @@ fn parse_protocol(
     if !semantic_errors.is_empty() {
         // If there's only one error, return it directly for backward compatibility.
         if semantic_errors.len() == 1 {
-            return Err(semantic_errors.into_iter().next().expect("len checked"));
+            // SAFETY: len() == 1 verified by enclosing `if`; unwrap is unreachable.
+            return Err(semantic_errors.into_iter().next().unwrap_or_else(|| {
+                ParseError::MissingSection {
+                    section: "internal: expected single semantic error".into(),
+                }
+            }));
         }
         return Err(ParseError::MultipleErrors(crate::errors::ParseErrors {
             errors: semantic_errors,
@@ -1461,8 +1466,11 @@ fn parse_guard_atom(pair: Pair<'_>) -> Result<GuardExpr, ParseError> {
             let span = span_from(&pair);
             let inner: Vec<_> = pair.into_inner().collect();
             if inner.len() == 1 {
-                // SAFETY: inner.len() == 1 checked above
-                parse_guard_atom(inner.into_iter().next().expect("len checked"))
+                // inner.len() == 1 checked above; fallback to syntax error if somehow empty
+                match inner.into_iter().next() {
+                    Some(child) => parse_guard_atom(child),
+                    None => Err(ParseError::syntax("Empty guard atom", span, "", "")),
+                }
             } else {
                 Err(ParseError::syntax(
                     format!("Unexpected guard atom shape ({} children)", inner.len()),
@@ -1516,8 +1524,16 @@ fn parse_expr(pair: Pair<'_>) -> Result<Expr, ParseError> {
                     _ => Ok(operand),
                 }
             } else if inner.len() == 1 {
-                // SAFETY: inner.len() == 1 checked above
-                parse_expr(inner.into_iter().next().expect("len checked"))
+                // inner.len() == 1 checked above; fallback to syntax error if somehow empty
+                match inner.into_iter().next() {
+                    Some(child) => parse_expr(child),
+                    None => Err(ParseError::syntax(
+                        "Empty unary expression",
+                        span,
+                        "",
+                        "",
+                    )),
+                }
             } else {
                 Err(ParseError::syntax(
                     format!(
@@ -1602,8 +1618,16 @@ fn parse_linear_expr(pair: Pair<'_>) -> Result<LinearExpr, ParseError> {
                 let atom = parse_linear_expr(inner[1].clone())?;
                 Ok(LinearExpr::Mul(coeff, Box::new(atom)))
             } else if inner.len() == 1 {
-                // SAFETY: inner.len() == 1 checked above
-                parse_linear_expr(inner.into_iter().next().expect("len checked"))
+                // inner.len() == 1 checked above; fallback to syntax error if somehow empty
+                match inner.into_iter().next() {
+                    Some(child) => parse_linear_expr(child),
+                    None => Err(ParseError::syntax(
+                        "Empty linear term",
+                        span,
+                        "",
+                        "",
+                    )),
+                }
             } else {
                 Err(ParseError::syntax(
                     format!("Unexpected linear term shape ({} children)", inner.len()),

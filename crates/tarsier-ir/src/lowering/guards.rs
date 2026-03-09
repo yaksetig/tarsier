@@ -192,6 +192,9 @@ pub(super) fn normalize_guard_clause(guard: &ast::GuardExpr) -> Vec<(String, ast
 
 pub(super) fn rebuild_guard_clause(conjuncts: Vec<(String, ast::GuardExpr)>) -> ast::GuardExpr {
     let mut iter = conjuncts.into_iter().map(|(_, expr)| expr);
+    // Safety: callers only pass conjunct lists produced by normalize_guard_clause(),
+    // which always yields at least one element since guard_to_dnf_raw_clauses()
+    // never produces empty clauses.
     let mut clause = iter
         .next()
         .expect("normalized DNF guard clause should contain at least one conjunct");

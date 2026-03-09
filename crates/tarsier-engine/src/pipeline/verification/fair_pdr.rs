@@ -427,9 +427,11 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
     }
     transition_assertions.extend(bit_domain(mon_choose(0)));
     if let Some(automaton) = temporal_automaton {
-        let atom_terms = temporal_atom_terms_step0
-            .as_ref()
-            .expect("temporal atom terms must exist when temporal automaton is active");
+        let atom_terms = temporal_atom_terms_step0.as_ref().ok_or_else(|| {
+            PipelineError::Solver(
+                "temporal atom terms must exist when temporal automaton is active".into(),
+            )
+        })?;
 
         let step0_vars: Vec<String> = (0..automaton.states.len())
             .map(|sid| temporal_state_var(0, sid))

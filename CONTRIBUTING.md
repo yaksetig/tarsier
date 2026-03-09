@@ -2,130 +2,69 @@
 
 Tarsier is a threshold automata verification framework for Byzantine fault-tolerant protocols.
 
-## Development Setup
+## Prerequisites
 
-### Option A: Devcontainer (recommended)
+- **Rust 1.92+** via [rustup](https://rustup.rs) (see `rust-toolchain.toml`)
+- **cmake** and **build-essential** for Z3 static compilation
+- **Python 3** for CI contract scripts
 
-Open the repo in VS Code with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension, or launch a GitHub Codespace. The container installs all dependencies (cmake, build-essential, Z3) and runs `cargo check --workspace` on creation.
-
-### Option B: Manual setup
-
-- **Rust** stable (MSRV 1.92.0) via [rustup](https://rustup.rs)
-- **cmake** and **build-essential** -- Z3 is compiled from source by the `z3` crate's `static-link-z3` feature
-- **Python 3** -- used by CI contract scripts and cross-tool benchmarks
-
-Set this environment variable before building (required for cmake compatibility):
+Set this before building:
 
 ```sh
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 ```
 
-Then build:
+## Building
 
 ```sh
 cargo build --workspace
 ```
 
-## Project Architecture
-
-| Crate | Role |
-|---|---|
-| `tarsier-dsl` | PEG parser (pest) for `.trs` threshold automata specs |
-| `tarsier-ir` | Intermediate representation and lowering |
-| `tarsier-smt` | SMT encoding (Z3 via `static-link-z3`) |
-| `tarsier-prob` | Probabilistic verification (hypergeometric committee bounds) |
-| `tarsier-proof-kernel` | Minimal trusted kernel for certificate checking |
-| `tarsier-certcheck` | Standalone certificate replay checker (no Z3 dependency) |
-| `tarsier-engine` | Verification orchestration: BMC, PDR, CEGAR, POR |
-| `tarsier-codegen` | Code generation from verified specs |
-| `tarsier-conformance` | Runtime trace conformance checking |
-| `tarsier-cli` | User-facing CLI (`tarsier prove`, `tarsier verify`) |
-| `tarsier-lsp` | Language server for editor support |
-
-Data flows **DSL** -> **IR** -> **SMT** -> solver -> result. The engine crate orchestrates this pipeline and implements bounded model checking, IC3/PDR, CEGAR refinement, and partial order reduction.
-
-## Running Tests
+## Testing
 
 ```sh
-# Full local CI-style gate
-just ci
-
-# Full test suite
-just test
+cargo test --workspace
 
 # Single crate
-CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test -p tarsier-engine
+cargo test -p tarsier-engine
 
-# Benchmarks
-CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo bench -p tarsier-engine
+# Full local CI gate (requires just)
+just ci
 ```
 
-Additional common tasks:
+## Running
 
 ```sh
-just fmt-check
-just clippy
-just check
-just proptest
-just validate
-```
-
-## CI Checks
-
-Every PR runs the following (see `.github/workflows/ci.yml`):
-
-- **Build + test** -- `cargo test --all-targets`
-- **Clippy** -- `-D warnings`, no warnings allowed
-- **Contract checks** -- workspace metadata, documentation consistency, certification gates
-- **Property testing** -- proptest with deterministic seeds (minimum 24 cases)
-- **Liveness proof gate** -- fair cycle detection tests
-- **CEGAR / POR / crypto regression gates** -- verification correctness tests
-- **Benchmark smoke tests** -- parser, lowering, encoder benchmarks with `--quick`
-- **Cross-tool parity** -- verdict agreement with external model checkers
-
-Nightly/weekly schedules run extended property tests, fuzzing (`cargo-fuzz`), and mutation testing.
-
-### Deterministic drift checks
-
-Run these locally before opening a PR:
-
-```sh
-python3 .github/scripts/check_workspace_package_metadata.py
-python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json --check
-./scripts/check-clean-worktree.sh
+cargo run -- <command>
+# e.g. cargo run -- prove examples/library/ben_or_safe.trs
 ```
 
 ## Code Style
 
 - Run `cargo fmt` before committing.
-- `cargo clippy --all-targets -- -D warnings` must pass.
+- Run `cargo clippy --all-targets -- -D warnings` (must pass with zero warnings).
 - Follow existing patterns in the crate you are modifying.
-- Prefer `Result` propagation over panics in library/production code.
-- Add tests for new functionality. Integration tests go in `tests/` directories; unit tests go in `#[cfg(test)]` modules.
+- Prefer `Result` propagation over panics in library code.
+- Add tests for new functionality.
 
-## Submitting Changes
+## PR Process
 
-1. Fork the repository and create a feature branch from `main`.
+1. Create a feature branch from `main`.
 2. Keep PRs focused on a single change.
-3. Write a clear PR description covering **what** changed and **why**.
-4. Run `cargo fmt` and `cargo clippy --all-targets -- -D warnings`.
-5. Ensure all CI checks pass before requesting review.
-6. If your change affects verification semantics, add or update tests in `tarsier-engine` and reference the relevant property in `docs/SEMANTICS.md`.
+3. Run `cargo fmt` and `cargo clippy --all-targets -- -D warnings`.
+4. Run `cargo test --workspace` and ensure all checks pass.
+5. Write a clear PR description covering what changed and why.
+6. If your change affects verification semantics, add or update tests and reference `docs/SEMANTICS.md`.
 
-## Adding a New Protocol Model
+## Adding Protocol Models
 
 1. Create a `.trs` file in `examples/library/`.
-2. Follow the naming convention: `protocol_name.trs` (safe), `protocol_name_buggy.trs` (buggy), `protocol_name_faithful.trs` (faithful network mode).
-3. Add an entry to `examples/library/cert_suite.json` with expected outcomes, `family`, `class`, `notes`, and `model_sha256`.
-4. Refresh hashes: `python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json`
-5. Run `./scripts/certify-corpus.sh` and the manifest regression tests.
+2. Add an entry to `examples/library/cert_suite.json`.
+3. Refresh hashes: `python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json`
 
 ## Reporting Issues
 
-File issues at [GitHub Issues](https://github.com/yaksetig/tarsier/issues) with:
-- A minimal `.trs` file reproducing the problem (if applicable).
-- The command you ran and the full output.
-- Your Rust version (`rustc --version`) and OS.
+File issues with a minimal `.trs` reproducer, the command and output, and your Rust/OS version.
 
 ## Code of Conduct
 

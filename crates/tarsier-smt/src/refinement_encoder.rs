@@ -210,7 +210,10 @@ fn encode_step_transition(
 
     // Guard constraints: firing delta > 0 implies guard must hold.
     for (r, rule) in product.rules.iter().enumerate() {
-        let from_idx = product.location_idx(&rule.from).unwrap();
+        // Safety: rule.from must exist in product.locations by construction.
+        let from_idx = product
+            .location_idx(&rule.from)
+            .expect("product rule references a location not in the product (invariant violation)");
         let delta = SmtTerm::var(prod_delta(k, r));
 
         // delta <= kappa[k][from] (can't fire more than available processes)
