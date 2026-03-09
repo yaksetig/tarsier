@@ -210,7 +210,9 @@ fn collect_semantic_token_candidates(
                 | "exists" | "resilience" | "quorum" | "certificate" | "adversary"
                 | "pacemaker" | "enum" | "to" | "channel" | "identity" | "equivocation"
                 | "module" | "assumes" | "guarantees" | "committee" | "sign" | "lock"
-                | "justify" | "form" | "has" => SEMANTIC_TOKEN_KEYWORD,
+                | "justify" | "form" | "has" | "refines" | "dag_round" | "extends"
+                | "log" | "sequence" | "fifo_channel" | "append" | "enqueue"
+                | "dequeue" | "reconfigure" => SEMANTIC_TOKEN_KEYWORD,
                 _ => {
                     if let Some(&def_type) = def_types.get(word) {
                         def_type

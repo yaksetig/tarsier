@@ -278,6 +278,18 @@ async fn completion_at_top_level() {
         labels.contains(&"message"),
         "top-level completions should include 'message'"
     );
+    assert!(
+        labels.contains(&"refines"),
+        "top-level completions should include 'refines'"
+    );
+    assert!(
+        labels.contains(&"dag_round"),
+        "top-level completions should include 'dag_round'"
+    );
+    assert!(
+        labels.contains(&"fifo_channel"),
+        "top-level completions should include 'fifo_channel'"
+    );
 }
 
 #[tokio::test]
