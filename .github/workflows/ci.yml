@@ -851,6 +851,37 @@ jobs:
         run: |
           cargo test -p tarsier-engine --test multi_quant_temporal_matrix -- --nocapture
 
+  timed-fair-liveness-matrix:
+    runs-on: ubuntu-latest
+    needs: build-test
+    strategy:
+      fail-fast: false
+      matrix:
+        solver: [z3, cvc5]
+        fairness: [weak, strong]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Pinned Solvers
+        run: ./.github/scripts/install_solvers.sh
+
+      - name: Verify Solver Versions
+        run: |
+          z3 --version
+          cvc5 --version
+
+      - name: Timed Fair-Liveness Matrix Regression
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+          TARSIER_MATRIX_SOLVER: ${{ matrix.solver }}
+          TARSIER_MATRIX_FAIRNESS: ${{ matrix.fairness }}
+        run: |
+          cargo test -p tarsier-engine --test timed_liveness_matrix -- --nocapture
+
   proof-checking-gate:
     runs-on: ubuntu-latest
     needs: build-test
@@ -1575,12 +1606,30 @@ jobs:
       - build-test
       - library-benchmark-smoke
       - library-benchmark-large
+      - x04-encoding-perf-gate
     steps:
       - name: Performance Gate Passed
         run: |
           echo "build-test + benchmark smoke/large gates passed"
           echo "statistical-regression checks, POR equivalence/soundness tests,"
           echo "and perf-budget regressions are all green under pinned benchmark jobs."
+
+  x04-encoding-perf-gate:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: X-04 Encoding Perf Smoke
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-smt --test solver_parity_perf_expansions refinement_equivalence_encoding_perf_smoke_under_10s -- --nocapture
+          cargo test -p tarsier-engine --test timed_liveness_matrix timed_fair_cycle_bounded_matrix -- --nocapture
 
   cvc5-parity:
     runs-on: ubuntu-latest
@@ -1597,7 +1646,9 @@ jobs:
       - name: Run backend parity tests
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-        run: cargo test -p tarsier-smt --test backend_parity -- --ignored
+        run: |
+          cargo test -p tarsier-smt --test backend_parity -- --ignored
+          cargo test -p tarsier-smt --test solver_parity_perf_expansions cvc5_parity_ -- --ignored --nocapture
 
   cross-platform-tests:
     strategy:
