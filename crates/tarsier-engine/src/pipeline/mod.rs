@@ -531,6 +531,7 @@ pub fn abstract_to_cs(ta: ThresholdAutomaton) -> CounterSystem {
 pub(crate) mod analysis;
 pub(crate) mod certification;
 pub(crate) mod diagnostics;
+pub(crate) mod proof_export;
 pub(crate) mod property;
 pub mod stages;
 pub(crate) mod verification;
@@ -565,6 +566,12 @@ pub use certification::{
     generate_fair_liveness_certificate, generate_fair_liveness_certificate_with_mode,
     generate_kinduction_safety_certificate, generate_pdr_safety_certificate,
     generate_safety_certificate,
+};
+
+// From proof_export
+pub use proof_export::{
+    export_ir_from_fair_liveness_certificate, export_ir_from_safety_certificate, ProofExportIr,
+    ProofExportKind, ProofExportObligation,
 };
 
 pub use stages::{
