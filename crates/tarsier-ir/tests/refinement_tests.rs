@@ -38,6 +38,8 @@ fn make_ta(
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
         });
     }
     for name in params {
@@ -356,6 +358,8 @@ fn product_with_guarded_rules() {
         }),
         updates: vec![],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
     });
 
     let abstract_ta = make_ta(&["A", "B"], &[0], &[(0, 1)], &["n"], &["votes"]);
@@ -391,6 +395,8 @@ fn product_with_updates() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        clock_guards: vec![],
+        clock_updates: vec![],
     });
 
     let abstract_ta = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &["counter"]);

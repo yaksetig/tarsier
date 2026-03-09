@@ -196,6 +196,13 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     enc.assert_term(SmtTerm::var(pending).ge(SmtTerm::int(0)));
                 }
             }
+            for c in 0..ta.clocks.len() {
+                enc.declare(clock_var(step, c), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(clock_var(step, c)).ge(SmtTerm::int(0)));
+                if step == 0 {
+                    enc.assert_term(SmtTerm::var(clock_var(step, c)).eq(SmtTerm::int(0)));
+                }
+            }
             enc.declare(time_var(step), SmtSort::Int);
             enc.assert_term(SmtTerm::var(time_var(step)).ge(SmtTerm::int(0)));
 
@@ -467,6 +474,19 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     };
                     enc.assert_term(dr_pos.clone().implies(guard_term));
                 }
+                for guard in &rule.clock_guards {
+                    let lhs = SmtTerm::var(clock_var(step, guard.clock.as_usize()));
+                    let rhs = encode_lc(&guard.bound);
+                    let guard_term = match guard.op {
+                        CmpOp::Ge => lhs.ge(rhs),
+                        CmpOp::Gt => lhs.gt(rhs),
+                        CmpOp::Le => lhs.le(rhs),
+                        CmpOp::Lt => lhs.lt(rhs),
+                        CmpOp::Eq => lhs.eq(rhs),
+                        CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
+                    };
+                    enc.assert_term(dr_pos.clone().implies(guard_term));
+                }
                 enc.assert_term(
                     SmtTerm::var(delta_var(step, r)).le(SmtTerm::var(kappa_var(step, rule.from))),
                 );
@@ -491,6 +511,50 @@ impl<'a> KInductionEncoderBuilder<'a> {
                 SmtTerm::var(time_var(step + 1))
                     .eq(SmtTerm::var(time_var(step)).add(SmtTerm::int(1))),
             );
+
+            // Clock updates and frame conditions.
+            for c in 0..ta.clocks.len() {
+                let curr = SmtTerm::var(clock_var(step, c));
+                let next = SmtTerm::var(clock_var(step + 1, c));
+                let mut updating_rules = Vec::new();
+                for &r in active_rule_ids {
+                    if ta.rules[r]
+                        .clock_updates
+                        .iter()
+                        .any(|u| u.clock.as_usize() == c)
+                    {
+                        updating_rules.push(r);
+                        let mut updated = curr.clone();
+                        for upd in ta.rules[r]
+                            .clock_updates
+                            .iter()
+                            .filter(|u| u.clock.as_usize() == c)
+                        {
+                            match &upd.kind {
+                                ClockUpdateKind::Reset => {
+                                    updated = SmtTerm::int(0);
+                                }
+                                ClockUpdateKind::TickBy(delta) => {
+                                    updated = updated.add(encode_lc(delta));
+                                }
+                            }
+                        }
+                        let fired = SmtTerm::var(delta_var(step, r)).gt(SmtTerm::int(0));
+                        enc.assert_term(fired.implies(next.clone().eq(updated)));
+                    }
+                }
+                if updating_rules.is_empty() {
+                    enc.assert_term(next.eq(curr));
+                } else {
+                    let no_updates = SmtTerm::and(
+                        updating_rules
+                            .iter()
+                            .map(|r| SmtTerm::var(delta_var(step, *r)).eq(SmtTerm::int(0)))
+                            .collect(),
+                    );
+                    enc.assert_term(no_updates.implies(next.eq(curr)));
+                }
+            }
 
             // Shared variable updates (with adversary and omission drops)
             for (v, inc_only) in increment_only_var.iter().enumerate() {

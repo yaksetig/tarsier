@@ -29,6 +29,8 @@ fn make_ta(
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
         });
     }
     for name in params {
