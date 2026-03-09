@@ -104,6 +104,11 @@ pub(super) fn lower_guard(
             // Return trivial guard for the threshold-level encoding.
             Ok(Guard::trivial())
         }
+        ast::GuardExpr::Timeout { .. } => {
+            // Timeout guards are lowered in the timed semantics pipeline.
+            // At this stage they are treated as local-state filters.
+            Ok(Guard::trivial())
+        }
         ast::GuardExpr::BoolVar(_) => {
             // Boolean var guards are enforced by filtering source locations
             // in extract_local_guard_requirements().
@@ -289,6 +294,7 @@ pub(super) fn local_guard_satisfied(
         }
         ast::GuardExpr::Threshold(_) => Ok(true),
         ast::GuardExpr::HasCryptoObject { .. } => Ok(true),
+        ast::GuardExpr::Timeout { .. } => Ok(true),
     }
 }
 

@@ -1141,12 +1141,31 @@ module M {
     message M;
     role R { var v: nat = 0; init s; phase s {} }
 }
-}
 "#;
     let err = parse(src, "test.trs").unwrap_err();
     assert!(
         matches!(err, ParseError::UnsupportedInModule { .. }),
         "expected UnsupportedInModule for pacemaker, got: {err:?}"
+    );
+}
+
+#[test]
+fn parse_module_rejects_clock_inside() {
+    let src = r#"
+protocol P {
+module M {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    clock view_deadline;
+    message M;
+    role R { init s; phase s {} }
+}
+}
+"#;
+    let err = parse(src, "test.trs").unwrap_err();
+    assert!(
+        matches!(err, ParseError::UnsupportedInModule { .. }),
+        "expected UnsupportedInModule for clock, got: {err:?}"
     );
 }
 
@@ -2696,7 +2715,9 @@ protocol IndexTest {
     match &transition.actions[0] {
         Action::Assign { var, value } => {
             assert_eq!(var, "x");
-            assert!(matches!(value, Expr::Index(coll, idx) if coll == "Buf" && matches!(idx.as_ref(), Expr::IntLit(0))));
+            assert!(
+                matches!(value, Expr::Index(coll, idx) if coll == "Buf" && matches!(idx.as_ref(), Expr::IntLit(0)))
+            );
         }
         other => panic!("Expected Assign, got {:?}", other),
     }
@@ -2954,4 +2975,106 @@ protocol DagProto {
     assert_eq!(proto.dag_rounds[1].parents, vec!["r0"]);
     assert_eq!(proto.dag_rounds[2].name, "r2");
     assert_eq!(proto.dag_rounds[2].parents, vec!["r0", "r1"]);
+}
+
+#[test]
+fn parse_clock_declaration() {
+    let src = r#"
+protocol TimeoutDsl {
+    params n, t;
+    resilience: n > 3*t;
+    clock round_deadline;
+    message Tick;
+    role Voter {
+        init Idle;
+        phase Idle {}
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "clock_decl.trs").expect("should parse");
+    let proto = &program.protocol.node;
+    assert_eq!(proto.clocks.len(), 1);
+    assert_eq!(proto.clocks[0].name, "round_deadline");
+}
+
+#[test]
+fn parse_timeout_guard() {
+    let src = r#"
+protocol TimeoutGuardDsl {
+    params n, t;
+    resilience: n > 3*t;
+    clock view_deadline;
+    message Tick;
+    role Voter {
+        init Idle;
+        phase Idle {
+            when timeout view_deadline >= 10 => {
+                goto phase Idle;
+            }
+        }
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "timeout_guard.trs").expect("should parse");
+    let transition = &program.protocol.node.roles[0].node.phases[0]
+        .node
+        .transitions[0]
+        .node;
+    assert!(matches!(
+        &transition.guard,
+        GuardExpr::Timeout {
+            clock,
+            op,
+            threshold
+        } if clock == "view_deadline"
+            && matches!(op, CmpOp::Ge)
+            && matches!(threshold, LinearExpr::Const(10))
+    ));
+}
+
+#[test]
+fn parse_clock_actions_reset_and_tick() {
+    let src = r#"
+protocol TimeoutActionsDsl {
+    params n, t;
+    resilience: n > 3*t;
+    clock view_deadline;
+    message Tick;
+    role Voter {
+        init Idle;
+        phase Idle {
+            when received >= 1 Tick => {
+                tick view_deadline by 2*t+1;
+                reset view_deadline;
+                goto phase Idle;
+            }
+        }
+    }
+    property safe: safety {
+        forall p: Voter. p.Idle == 0
+    }
+}
+"#;
+    let program = parse(src, "timeout_actions.trs").expect("should parse");
+    let transition = &program.protocol.node.roles[0].node.phases[0]
+        .node
+        .transitions[0]
+        .node;
+    assert!(matches!(
+        &transition.actions[0],
+        Action::TickClock {
+            clock,
+            amount: Some(LinearExpr::Add(_, _))
+        } if clock == "view_deadline"
+    ));
+    assert!(matches!(
+        &transition.actions[1],
+        Action::ResetClock { clock } if clock == "view_deadline"
+    ));
 }

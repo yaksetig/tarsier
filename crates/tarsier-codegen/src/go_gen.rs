@@ -566,6 +566,16 @@ fn render_guard_go(guard: &GuardExpr, params: &HashSet<String>) -> String {
             let op_str = render_cmp_op(op);
             format!("{l} {op_str} {r}")
         }
+        GuardExpr::Timeout {
+            clock,
+            op,
+            threshold,
+        } => {
+            let l = format!("s.{}", to_pascal_case(clock));
+            let r = render_linear_expr(threshold, params, CodegenTarget::Go);
+            let op_str = render_cmp_op(op);
+            format!("{l} {op_str} {r}")
+        }
         GuardExpr::BoolVar(name) => {
             format!("s.{}", to_pascal_case(name))
         }
@@ -673,6 +683,21 @@ fn write_actions_go(
                         param = upd.param,
                         val = upd.value)?;
                 }
+            }
+            Action::ResetClock { clock } => {
+                writeln!(out, "{indent}s.{} = 0", to_pascal_case(clock))?;
+            }
+            Action::TickClock { clock, amount } => {
+                let delta = amount
+                    .as_ref()
+                    .map(|expr| render_linear_expr(expr, params, CodegenTarget::Go))
+                    .unwrap_or_else(|| "1".to_string());
+                writeln!(
+                    out,
+                    "{indent}s.{} = s.{} + {delta}",
+                    to_pascal_case(clock),
+                    to_pascal_case(clock)
+                )?;
             }
         }
     }

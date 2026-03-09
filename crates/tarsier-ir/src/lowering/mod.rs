@@ -1067,6 +1067,10 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                 });
                             }
                         }
+                        ast::Action::ResetClock { .. } | ast::Action::TickClock { .. } => {
+                            // Timed actions are introduced by TIME-* tasks and are handled by
+                            // dedicated timed lowering/encoding stages.
+                        }
                     }
                 }
 
