@@ -1,7 +1,9 @@
 use miette::IntoDiagnostic;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tarsier_engine::pipeline::{
     export_ir_from_fair_liveness_certificate, export_ir_from_safety_certificate,
     FairLivenessProofCertificate, FairnessMode, ProofEngine, ProofExportIr, SafetyProofCertificate,
@@ -15,13 +17,38 @@ pub(crate) struct ProofExportReport {
     pub(crate) bundle: String,
     pub(crate) output: Option<String>,
     pub(crate) kind: String,
+    pub(crate) certcheck: Option<ProofExportCertcheckReport>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ProofExportCertcheckReport {
+    pub(crate) binary: String,
+    pub(crate) overall: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CertcheckJsonReport {
+    overall: String,
 }
 
 pub(crate) fn run_proof_export_command(
     bundle: PathBuf,
     to: String,
     out: Option<PathBuf>,
+    certcheck: bool,
+    certcheck_bin: Option<PathBuf>,
 ) -> miette::Result<()> {
+    let certcheck_result = if certcheck {
+        Some(run_certcheck(
+            &bundle,
+            certcheck_bin
+                .as_deref()
+                .unwrap_or_else(|| std::path::Path::new("tarsier-certcheck")),
+        )?)
+    } else {
+        None
+    };
+
     let target = parse_export_target(&to)?;
     let metadata = load_metadata(&bundle).into_diagnostic()?;
     let obligations = metadata
@@ -88,10 +115,56 @@ pub(crate) fn run_proof_export_command(
         bundle: bundle.display().to_string(),
         output: out.as_ref().map(|p| p.display().to_string()),
         kind: metadata.kind,
+        certcheck: certcheck_result,
     };
     let report_json = serde_json::to_string(&report).into_diagnostic()?;
     eprintln!("{report_json}");
     Ok(())
+}
+
+fn run_certcheck(
+    bundle: &std::path::Path,
+    certcheck_bin: &std::path::Path,
+) -> miette::Result<ProofExportCertcheckReport> {
+    let ts_nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .into_diagnostic()?
+        .as_nanos();
+    let report_path =
+        std::env::temp_dir().join(format!("tarsier-proof-export-certcheck-{ts_nanos}.json"));
+    let output = Command::new(certcheck_bin)
+        .arg(bundle)
+        .arg("--json-report")
+        .arg(&report_path)
+        .arg("--fail-fast")
+        .output()
+        .into_diagnostic()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        miette::bail!(
+            "certcheck failed while validating '{}': {}",
+            bundle.display(),
+            stderr.trim()
+        );
+    }
+
+    let report_json = fs::read_to_string(&report_path).into_diagnostic()?;
+    let parsed: CertcheckJsonReport = serde_json::from_str(&report_json).into_diagnostic()?;
+    let _ = fs::remove_file(&report_path);
+
+    if parsed.overall != "pass" {
+        miette::bail!(
+            "certcheck reported overall='{}' for '{}'",
+            parsed.overall,
+            bundle.display()
+        );
+    }
+
+    Ok(ProofExportCertcheckReport {
+        binary: certcheck_bin.display().to_string(),
+        overall: parsed.overall,
+    })
 }
 
 fn parse_export_target(target: &str) -> miette::Result<&'static str> {
@@ -230,12 +303,18 @@ fn render_coq_module(ir: &ProofExportIr) -> String {
         out.push_str("Definition fairness : option string := None.\n");
     }
     if let Some(k) = ir.induction_k {
-        out.push_str(&format!("Definition induction_k : option nat := Some {}.\n", k));
+        out.push_str(&format!(
+            "Definition induction_k : option nat := Some {}.\n",
+            k
+        ));
     } else {
         out.push_str("Definition induction_k : option nat := None.\n");
     }
     if let Some(frame) = ir.frame {
-        out.push_str(&format!("Definition frame : option nat := Some {}.\n", frame));
+        out.push_str(&format!(
+            "Definition frame : option nat := Some {}.\n",
+            frame
+        ));
     } else {
         out.push_str("Definition frame : option nat := None.\n");
     }
@@ -321,6 +400,7 @@ fn parse_fairness_mode(s: &str) -> miette::Result<FairnessMode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tarsier_engine::pipeline::{ProofExportKind, ProofExportObligation};
 
     #[test]
@@ -385,5 +465,87 @@ mod tests {
     fn coq_escape_escapes_quotes_and_newlines() {
         let escaped = coq_escape("a\"b\nc");
         assert_eq!(escaped, "a\"\"b\\nc");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_certcheck_reports_pass_for_valid_json_report() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        let base =
+            std::env::temp_dir().join(format!("tarsier-proof-export-certcheck-pass-{unique}"));
+        fs::create_dir_all(&base).expect("temp dir should be created");
+
+        let script_path = base.join("fake-certcheck.sh");
+        let script = r#"#!/bin/sh
+set -eu
+REPORT=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--json-report" ]; then
+    REPORT="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+printf '{"overall":"pass"}' > "$REPORT"
+"#;
+        fs::write(&script_path, script).expect("script should be written");
+        let mut perms = fs::metadata(&script_path)
+            .expect("script metadata should be readable")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).expect("script should be executable");
+
+        let result = run_certcheck(&base, &script_path).expect("certcheck wrapper should pass");
+        assert_eq!(result.overall, "pass");
+        assert_eq!(result.binary, script_path.display().to_string());
+
+        fs::remove_dir_all(&base).expect("temp dir cleanup should succeed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_certcheck_fails_when_report_overall_is_fail() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        let base =
+            std::env::temp_dir().join(format!("tarsier-proof-export-certcheck-fail-{unique}"));
+        fs::create_dir_all(&base).expect("temp dir should be created");
+
+        let script_path = base.join("fake-certcheck.sh");
+        let script = r#"#!/bin/sh
+set -eu
+REPORT=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--json-report" ]; then
+    REPORT="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+printf '{"overall":"fail"}' > "$REPORT"
+"#;
+        fs::write(&script_path, script).expect("script should be written");
+        let mut perms = fs::metadata(&script_path)
+            .expect("script metadata should be readable")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).expect("script should be executable");
+
+        let err = run_certcheck(&base, &script_path).expect_err("certcheck wrapper should fail");
+        let msg = format!("{err:?}");
+        assert!(msg.contains("overall='fail'"));
+
+        fs::remove_dir_all(&base).expect("temp dir cleanup should succeed");
     }
 }

@@ -998,6 +998,14 @@ pub(crate) enum Commands {
         /// Optional output path (prints JSON to stdout when omitted)
         #[arg(long)]
         out: Option<PathBuf>,
+
+        /// Run standalone certcheck before exporting and fail fast on certificate issues
+        #[arg(long, default_value_t = false)]
+        certcheck: bool,
+
+        /// Optional certcheck executable path (defaults to tarsier-certcheck in PATH)
+        #[arg(long)]
+        certcheck_bin: Option<PathBuf>,
     },
 
     /// Generate a machine-readable trust report with trust-boundary sections
