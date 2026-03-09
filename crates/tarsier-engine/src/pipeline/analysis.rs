@@ -137,6 +137,7 @@ pub(super) fn apply_round_erasure_abstraction(
         constraints: ta.constraints.clone(),
         semantics: ta.semantics.clone(),
         security: ta.security.clone(),
+        clocks: ta.clocks.clone(),
         leader_roles: ta.leader_roles.clone(),
         collections: ta.collections.clone(),
         dag_rounds: ta.dag_rounds.clone(),
@@ -254,6 +255,8 @@ pub(super) fn apply_round_erasure_abstraction(
                     kind: update.kind.clone(),
                 })
                 .collect(),
+            clock_guards: rule.clock_guards.clone(),
+            clock_updates: rule.clock_updates.clone(),
             collection_updates: rule.collection_updates.clone(),
         })
         .collect();

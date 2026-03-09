@@ -492,6 +492,50 @@ protocol FairAfterGst {
 }
 
 #[test]
+fn fair_liveness_timeout_guards_affect_fairness_enablement() {
+    let source = r#"
+protocol FairTimedNonTerminating {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    clock deadline;
+    role R {
+        var decided: bool = false;
+        init s;
+        phase s {
+            when timeout deadline >= 1 => {
+                goto phase s;
+            }
+        }
+    }
+}
+"#;
+    let options = PipelineOptions {
+        solver: SolverChoice::Z3,
+        max_depth: 4,
+        timeout_secs: 30,
+        dump_smt: None,
+        soundness: SoundnessMode::Strict,
+        proof_engine: ProofEngine::KInduction,
+    };
+    let result = tarsier_engine::pipeline::check_fair_liveness(
+        source,
+        "fair_timed_nonterminating.trs",
+        &options,
+    )
+    .expect("timed fair-liveness search should complete");
+    match result {
+        FairLivenessResult::FairCycleFound {
+            depth, loop_start, ..
+        } => {
+            assert!(depth >= 1);
+            assert!(loop_start < depth);
+        }
+        other => panic!("Expected fair cycle with permanently-disabled timeout rule, got: {other}"),
+    }
+}
+
+#[test]
 fn prove_fair_liveness_reports_counterexample() {
     let source = r#"
 protocol FairNonTerminatingProof {
@@ -527,6 +571,50 @@ protocol FairNonTerminatingProof {
             assert!(loop_start < depth);
         }
         other => panic!("Expected fair cycle counterexample, got: {other}"),
+    }
+}
+
+#[test]
+fn prove_fair_liveness_timeout_guards_affect_fairness_enablement() {
+    let source = r#"
+protocol FairTimedNonTerminatingProof {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    clock deadline;
+    role R {
+        var decided: bool = false;
+        init s;
+        phase s {
+            when timeout deadline >= 1 => {
+                goto phase s;
+            }
+        }
+    }
+}
+"#;
+    let options = PipelineOptions {
+        solver: SolverChoice::Z3,
+        max_depth: 4,
+        timeout_secs: 30,
+        dump_smt: None,
+        soundness: SoundnessMode::Strict,
+        proof_engine: ProofEngine::Pdr,
+    };
+    let result = tarsier_engine::pipeline::prove_fair_liveness(
+        source,
+        "fair_timed_nonterminating_proof.trs",
+        &options,
+    )
+    .expect("timed unbounded fair-liveness proof should complete");
+    match result {
+        UnboundedFairLivenessResult::FairCycleFound {
+            depth, loop_start, ..
+        } => {
+            assert!(depth >= 1);
+            assert!(loop_start < depth);
+        }
+        other => panic!("Expected timed fair-cycle counterexample, got: {other}"),
     }
 }
 
