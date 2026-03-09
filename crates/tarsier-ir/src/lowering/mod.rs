@@ -436,6 +436,21 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         });
     }
 
+    // 2e. Process logical clock declarations
+    let mut clock_ids: IndexMap<String, ClockId> = IndexMap::new();
+    for clock in &proto.clocks {
+        if clock_ids.contains_key(&clock.name) {
+            return Err(LoweringError::Unsupported(format!(
+                "Duplicate clock declaration '{}'",
+                clock.name
+            )));
+        }
+        let id = ta.add_clock(IrClockSpec {
+            name: clock.name.clone(),
+        });
+        clock_ids.insert(clock.name.clone(), id);
+    }
+
     // 3. Add shared variables for each message type (expanded by field values)
     let mut message_infos =
         build_message_infos(&proto.messages, &enum_defs, ta.semantics.value_abstraction)?;
@@ -966,6 +981,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                 let mut assigns: Vec<(String, ast::Expr)> = Vec::new();
                 let mut pending_actions: Vec<PendingTransitionAction> = Vec::new();
                 let mut pending_collection_updates: Vec<CollectionUpdate> = Vec::new();
+                let mut clock_updates: Vec<ClockUpdate> = Vec::new();
                 let mut decide_value: Option<ast::Expr> = None;
 
                 for action in &trans.actions {
@@ -1059,9 +1075,32 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                 "reconfigure actions require the dynamic membership extension (RECONF-02+)".into(),
                             ));
                         }
-                        ast::Action::ResetClock { .. } | ast::Action::TickClock { .. } => {
-                            // Timed actions are introduced by TIME-* tasks and are handled by
-                            // dedicated timed lowering/encoding stages.
+                        ast::Action::ResetClock { clock } => {
+                            let clock_id = clock_ids.get(clock).copied().ok_or_else(|| {
+                                LoweringError::Unsupported(format!(
+                                    "Unknown clock '{clock}' in reset action"
+                                ))
+                            })?;
+                            clock_updates.push(ClockUpdate {
+                                clock: clock_id,
+                                kind: ClockUpdateKind::Reset,
+                            });
+                        }
+                        ast::Action::TickClock { clock, amount } => {
+                            let clock_id = clock_ids.get(clock).copied().ok_or_else(|| {
+                                LoweringError::Unsupported(format!(
+                                    "Unknown clock '{clock}' in tick action"
+                                ))
+                            })?;
+                            let delta = amount
+                                .as_ref()
+                                .map(|amt| lower_linear_expr_to_lc(amt, &param_ids))
+                                .transpose()?
+                                .unwrap_or_else(|| LinearCombination::constant(1));
+                            clock_updates.push(ClockUpdate {
+                                clock: clock_id,
+                                kind: ClockUpdateKind::TickBy(delta),
+                            });
                         }
                     }
                 }
@@ -1160,6 +1199,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             role_name: &role_decl.name,
                         };
                         let mut guard = lower_guard(guard_clause, &guard_ctx)?;
+                        let timeout_guards =
+                            collect_timeout_guards(guard_clause, &clock_ids, &param_ids)?;
 
                         // Build updates (message sends), resolved for this location.
                         let mut updates = Vec::new();
@@ -1456,7 +1497,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     guard: guard.clone(),
                                     updates: updates.clone(),
                                     collection_updates: pending_collection_updates.clone(),
-                                    clock_updates: vec![],
+                                    clock_guards: timeout_guards.clone(),
+                                    clock_updates: clock_updates.clone(),
                                 });
                                 break;
                             }
@@ -1536,6 +1578,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     guard: Guard::trivial(),
                                     updates: Vec::new(),
                                     collection_updates: vec![],
+                                    clock_guards: vec![],
                                     clock_updates: vec![],
                                 });
                                 break;
@@ -1584,6 +1627,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     kind: UpdateKind::Increment,
                                 }],
                                 collection_updates: vec![],
+                                clock_guards: vec![],
                                 clock_updates: vec![],
                             });
                             break;
@@ -1632,6 +1676,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     guard: Guard::trivial(),
                                     updates: vec![],
                                     collection_updates: vec![],
+                                    clock_guards: vec![],
                                     clock_updates: vec![],
                                 });
                                 break;
@@ -1645,6 +1690,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             guard: Guard::trivial(),
                             updates: vec![],
                             collection_updates: vec![],
+                            clock_guards: vec![],
                             clock_updates: vec![],
                         });
                     }

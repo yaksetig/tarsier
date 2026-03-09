@@ -105,8 +105,8 @@ pub(super) fn lower_guard(
             Ok(Guard::trivial())
         }
         ast::GuardExpr::Timeout { .. } => {
-            // Timeout guards are lowered in the timed semantics pipeline.
-            // At this stage they are treated as local-state filters.
+            // Timeout guards are lowered separately into `Rule.clock_guards`
+            // in the timed lowering path.
             Ok(Guard::trivial())
         }
         ast::GuardExpr::BoolVar(_) => {
@@ -119,6 +119,36 @@ pub(super) fn lower_guard(
              before threshold-guard lowering"
                 .into(),
         )),
+    }
+}
+
+pub(super) fn collect_timeout_guards(
+    guard: &ast::GuardExpr,
+    clock_ids: &IndexMap<String, ClockId>,
+    params: &IndexMap<String, ParamId>,
+) -> Result<Vec<ClockGuard>, LoweringError> {
+    match guard {
+        ast::GuardExpr::And(lhs, rhs) => {
+            let mut out = collect_timeout_guards(lhs, clock_ids, params)?;
+            out.extend(collect_timeout_guards(rhs, clock_ids, params)?);
+            Ok(out)
+        }
+        ast::GuardExpr::Timeout {
+            clock,
+            op,
+            threshold,
+        } => {
+            let clock_id = clock_ids.get(clock).copied().ok_or_else(|| {
+                LoweringError::Unsupported(format!("Unknown clock '{clock}' in timeout guard"))
+            })?;
+            let bound = lower_linear_expr_to_lc(threshold, params)?;
+            Ok(vec![ClockGuard {
+                clock: clock_id,
+                op: lower_cmp_op(*op),
+                bound,
+            }])
+        }
+        _ => Ok(vec![]),
     }
 }
 
