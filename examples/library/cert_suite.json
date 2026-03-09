@@ -43,7 +43,7 @@
       "proof_engine": "kinduction",
       "cegar_iters": 0,
       "notes": "Bug seed: Casper FFG-style finality gadget with conflicting justification paths; the supermajority link rule is intentionally weakened so that two incompatible checkpoints can both be justified, violating agreement.",
-      "model_sha256": "3ce0e069021612269bcbda4981b1c9440305c139b092b69ae4d04108ec163729"
+      "model_sha256": "b3c3426add72f373f13626b3b16da4d58c2b9adea73de78486e144b1a635f221"
     },
     {
       "file": "diembft_epoch.trs",
