@@ -1,0 +1,18 @@
+protocol DagRoundAlphaInvalidCycle {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    dag_round r0 extends r1;
+    dag_round r1 extends r0;
+
+    role Node {
+        var decided: bool = false;
+        init start;
+        phase start {}
+    }
+
+    property inv: invariant {
+        forall p: Node. p.decided == false
+    }
+}
