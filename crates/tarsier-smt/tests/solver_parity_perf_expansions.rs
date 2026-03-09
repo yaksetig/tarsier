@@ -39,6 +39,7 @@ fn make_ta(loc_names: &[&str], initial: &[usize], rules: &[(usize, usize)]) -> T
             collection_updates: vec![],
             clock_guards: vec![],
             clock_updates: vec![],
+            param_updates: vec![],
         });
     }
     ta
