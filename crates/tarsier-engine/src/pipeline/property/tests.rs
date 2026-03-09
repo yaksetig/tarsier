@@ -75,6 +75,7 @@ fn test_ta() -> ThresholdAutomaton {
     let mut ta = ThresholdAutomaton::new();
     ta.parameters.push(Parameter {
         name: "n".to_string(),
+        time_varying: false,
     });
     ta.locations
         .push(mk_loc("r0", "R", "p0", false, true, "Init", 0)); // 0
@@ -94,6 +95,7 @@ fn test_ta() -> ThresholdAutomaton {
         guard: Guard::trivial(),
         updates: vec![],
                     collection_updates: vec![],
+                    param_updates: vec![],
     });
     ta.rules.push(Rule {
         from: 1.into(),
@@ -101,6 +103,7 @@ fn test_ta() -> ThresholdAutomaton {
         guard: Guard::trivial(),
         updates: vec![],
                     collection_updates: vec![],
+                    param_updates: vec![],
     });
     ta.rules.push(Rule {
         from: 3.into(),
@@ -108,6 +111,7 @@ fn test_ta() -> ThresholdAutomaton {
         guard: Guard::trivial(),
         updates: vec![],
                     collection_updates: vec![],
+                    param_updates: vec![],
     });
     ta
 }

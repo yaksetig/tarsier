@@ -1962,9 +1962,9 @@ fn lower_interface_assumption_converts_parameter_constraint() {
 
     // Build a minimal TA with parameters n, t, f
     let mut ta = ThresholdAutomaton::new();
-    ta.parameters.push(Parameter { name: "n".into() });
-    ta.parameters.push(Parameter { name: "t".into() });
-    ta.parameters.push(Parameter { name: "f".into() });
+    ta.parameters.push(Parameter { name: "n".into(), time_varying: false });
+    ta.parameters.push(Parameter { name: "t".into(), time_varying: false });
+    ta.parameters.push(Parameter { name: "f".into(), time_varying: false });
 
     // AST assumption: n > 3*t
     let assumption = ast::InterfaceAssumption {
@@ -3198,4 +3198,159 @@ protocol MixedCollections {
     assert_eq!(ta.collections[1].queue_model, QueueModel::None);
     assert_eq!(ta.collections[2].kind, IrCollectionKind::FifoChannel);
     assert_eq!(ta.collections[2].queue_model, QueueModel::LinearFifo);
+}
+
+// ---------------------------------------------------------------------------
+// RECONF-03: reconfigure action lowering
+// ---------------------------------------------------------------------------
+
+#[test]
+fn lower_reconfigure_constant_updates() {
+    let src = r#"
+protocol Reconfig {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    message Vote;
+    role Replica {
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                reconfigure {
+                    n = 10;
+                    t = 3;
+                }
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let prog = parse(src, "reconfig.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    // At least one rule should have param_updates
+    let reconf_rules: Vec<_> = ta.rules.iter().filter(|r| !r.param_updates.is_empty()).collect();
+    assert!(!reconf_rules.is_empty(), "should have rules with param_updates");
+
+    let rule = &reconf_rules[0];
+    assert_eq!(rule.param_updates.len(), 2);
+
+    // n = 10
+    let n_id = ta.find_param_by_name("n").unwrap();
+    let t_id = ta.find_param_by_name("t").unwrap();
+    assert_eq!(rule.param_updates[0].param, n_id);
+    assert_eq!(rule.param_updates[0].value.constant, 10);
+    assert!(rule.param_updates[0].value.terms.is_empty());
+
+    // t = 3
+    assert_eq!(rule.param_updates[1].param, t_id);
+    assert_eq!(rule.param_updates[1].value.constant, 3);
+    assert!(rule.param_updates[1].value.terms.is_empty());
+
+    // Targeted params should be marked time-varying
+    assert!(ta.parameters[n_id.as_usize()].time_varying);
+    assert!(ta.parameters[t_id.as_usize()].time_varying);
+}
+
+#[test]
+fn lower_reconfigure_param_expression() {
+    let src = r#"
+protocol Reconfig {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    message Vote;
+    role Replica {
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                reconfigure {
+                    t = n - 1;
+                }
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let prog = parse(src, "reconfig_expr.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    let reconf_rules: Vec<_> = ta.rules.iter().filter(|r| !r.param_updates.is_empty()).collect();
+    assert!(!reconf_rules.is_empty());
+
+    let rule = &reconf_rules[0];
+    assert_eq!(rule.param_updates.len(), 1);
+
+    let t_id = ta.find_param_by_name("t").unwrap();
+    let n_id = ta.find_param_by_name("n").unwrap();
+    assert_eq!(rule.param_updates[0].param, t_id);
+    // value should be n - 1
+    assert_eq!(rule.param_updates[0].value.constant, -1);
+    assert_eq!(rule.param_updates[0].value.terms, vec![(1, n_id)]);
+
+    // Only t should be time-varying (target), n should remain fixed
+    assert!(ta.parameters[t_id.as_usize()].time_varying);
+    assert!(!ta.parameters[n_id.as_usize()].time_varying);
+}
+
+#[test]
+fn lower_reconfigure_empty_is_noop() {
+    let src = r#"
+protocol Reconfig {
+    parameters { n: nat; }
+    resilience { n > 1; }
+    message Vote;
+    role Replica {
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                reconfigure {}
+                goto phase waiting;
+            }
+        }
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let prog = parse(src, "reconfig_empty.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+
+    // No rule should have param_updates
+    assert!(ta.rules.iter().all(|r| r.param_updates.is_empty()));
+    // No params should be time-varying
+    assert!(ta.parameters.iter().all(|p| !p.time_varying));
+}
+
+#[test]
+fn lower_reconfigure_unknown_param_errors() {
+    let src = r#"
+protocol Reconfig {
+    parameters { n: nat; }
+    resilience { n > 1; }
+    message Vote;
+    role Replica {
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                reconfigure {
+                    unknown_param = 5;
+                }
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let prog = parse(src, "reconfig_bad.trs").unwrap();
+    let err = lower(&prog).unwrap_err();
+    assert!(
+        format!("{err:?}").contains("unknown_param"),
+        "error should mention unknown param, got: {err:?}"
+    );
 }

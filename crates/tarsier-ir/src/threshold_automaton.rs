@@ -370,6 +370,8 @@ pub struct ThresholdAutomaton {
     pub leader_roles: Vec<String>,
     /// Bounded log/sequence collection declarations.
     pub collections: Vec<IrCollectionSpec>,
+    /// Reconfiguration specification (None if protocol has no dynamic membership).
+    pub reconfiguration: Option<ReconfigurationSpec>,
 }
 
 /// A value that is either a reference to a protocol parameter or a concrete constant.
@@ -465,6 +467,7 @@ impl ThresholdAutomaton {
             security: ThresholdAutomatonSecurity::default(),
             leader_roles: Vec::new(),
             collections: Vec::new(),
+            reconfiguration: None,
         }
     }
 
@@ -595,6 +598,21 @@ impl ThresholdAutomaton {
         self.security.compromised_keys.contains(key)
     }
 
+    /// True if any rule has parameter updates (reconfiguration actions).
+    pub fn has_reconfiguration(&self) -> bool {
+        self.rules.iter().any(|r| !r.param_updates.is_empty())
+    }
+
+    /// Return the IDs and names of parameters marked as time-varying.
+    pub fn time_varying_params(&self) -> Vec<(ParamId, &str)> {
+        self.parameters
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.time_varying)
+            .map(|(i, p)| (ParamId::from(i), p.name.as_str()))
+            .collect()
+    }
+
     /// Validate internal consistency of the threshold automaton.
     ///
     /// Checks that all location, shared-variable, and parameter references
@@ -676,6 +694,32 @@ impl ThresholdAutomaton {
                                 max: num_params.saturating_sub(1),
                             });
                         }
+                    }
+                }
+            }
+
+            // Check param updates (reconfiguration)
+            for pu in &rule.param_updates {
+                if pu.param.as_usize() >= num_params {
+                    return Err(ValidationError::InvalidParamUpdateTarget {
+                        rule_id,
+                        param_id: pu.param,
+                        max: num_params.saturating_sub(1),
+                    });
+                }
+                if !self.parameters[pu.param.as_usize()].time_varying {
+                    return Err(ValidationError::ParamUpdateOnFixedParam {
+                        rule_id,
+                        param_name: self.parameters[pu.param.as_usize()].name.clone(),
+                    });
+                }
+                for &(_, ref_param_id) in &pu.value.terms {
+                    if ref_param_id.as_usize() >= num_params {
+                        return Err(ValidationError::InvalidParamUpdateValue {
+                            rule_id,
+                            param_id: ref_param_id,
+                            max: num_params.saturating_sub(1),
+                        });
                     }
                 }
             }
@@ -785,6 +829,23 @@ pub enum ValidationError {
     },
     #[error("Resilience condition references invalid parameter {param_id} (max: {max})")]
     InvalidResilienceParam { param_id: ParamId, max: usize },
+    #[error("Rule {rule_id} param_update targets invalid parameter {param_id} (max: {max})")]
+    InvalidParamUpdateTarget {
+        rule_id: RuleId,
+        param_id: ParamId,
+        max: usize,
+    },
+    #[error("Rule {rule_id} param_update targets fixed (non-time-varying) parameter '{param_name}'")]
+    ParamUpdateOnFixedParam {
+        rule_id: RuleId,
+        param_name: String,
+    },
+    #[error("Rule {rule_id} param_update value references invalid parameter {param_id} (max: {max})")]
+    InvalidParamUpdateValue {
+        rule_id: RuleId,
+        param_id: ParamId,
+        max: usize,
+    },
 }
 
 impl Default for ThresholdAutomaton {
@@ -998,6 +1059,27 @@ impl fmt::Display for ThresholdAutomaton {
 #[derive(Debug, Clone)]
 pub struct Parameter {
     pub name: String,
+    /// True if this parameter can change via `reconfigure` actions.
+    /// Time-varying parameters get per-epoch SMT variables.
+    pub time_varying: bool,
+}
+
+impl Parameter {
+    /// Create a static (non-time-varying) parameter.
+    pub fn fixed(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            time_varying: false,
+        }
+    }
+
+    /// Create a time-varying parameter (can be updated by reconfigure).
+    pub fn varying(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            time_varying: true,
+        }
+    }
 }
 
 /// A location in the threshold automaton.
@@ -1062,6 +1144,9 @@ pub struct Rule {
     pub guard: Guard,
     pub updates: Vec<Update>,
     pub collection_updates: Vec<CollectionUpdate>,
+    /// Parameter updates from `reconfigure` actions.
+    /// These change time-varying parameters at epoch boundaries.
+    pub param_updates: Vec<ParamUpdate>,
 }
 
 /// An update to a bounded collection (log append or sequence set).
@@ -1331,6 +1416,56 @@ impl fmt::Display for LinearConstraint {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Dynamic membership / reconfiguration (RECONF-02)
+// ---------------------------------------------------------------------------
+
+/// When a reconfiguration takes effect relative to the transition that fires it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReconfigurationSemantics {
+    /// New parameter values take effect at the *next* step boundary.
+    /// The transition that fires the reconfigure uses the old values.
+    #[default]
+    NextStep,
+    /// New parameter values take effect immediately within the same step.
+    /// Guards have already been checked with old values, but subsequent
+    /// transitions in the same step see the new values.
+    Immediate,
+}
+
+impl fmt::Display for ReconfigurationSemantics {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReconfigurationSemantics::NextStep => write!(f, "next_step"),
+            ReconfigurationSemantics::Immediate => write!(f, "immediate"),
+        }
+    }
+}
+
+/// Protocol-level reconfiguration specification.
+#[derive(Debug, Clone, Default)]
+pub struct ReconfigurationSpec {
+    /// When parameter changes take effect.
+    pub semantics: ReconfigurationSemantics,
+    /// Maximum number of reconfigurations allowed per run (0 = unbounded).
+    pub max_reconfigurations: usize,
+}
+
+/// A parameter update produced by a `reconfigure` action on a rule.
+#[derive(Debug, Clone)]
+pub struct ParamUpdate {
+    /// Which parameter is being updated.
+    pub param: ParamId,
+    /// New value as a linear combination over (old) parameters.
+    pub value: LinearCombination,
+}
+
+impl fmt::Display for ParamUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "p{} := {}", self.param, self.value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1349,9 +1484,9 @@ mod tests {
     /// Helper to build a minimal valid TA for validation tests.
     fn minimal_ta() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into() });
-        ta.add_parameter(Parameter { name: "t".into() });
-        ta.add_parameter(Parameter { name: "f".into() });
+        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
+        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
         let loc0 = ta.add_location(Location {
             name: "Init".into(),
             role: "R".into(),
@@ -1385,6 +1520,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         ta.constraints.adversary_bound_param = Some(ParamId::from(2)); // f
         ta.constraints.resilience_condition = Some(LinearConstraint {
@@ -1424,6 +1560,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1444,6 +1581,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1469,6 +1607,7 @@ mod tests {
             }),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1494,6 +1633,7 @@ mod tests {
             }),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1517,6 +1657,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         let err = ta.validate().unwrap_err();
         assert!(matches!(
@@ -1678,5 +1819,108 @@ mod tests {
             terms: vec![(0, ParamId::from(3))],
         };
         assert_eq!(format!("{zero}"), "0");
+    }
+
+    // -----------------------------------------------------------------------
+    // RECONF-02: time-varying parameters and reconfiguration
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parameter_fixed_and_varying_constructors() {
+        let fixed = Parameter::fixed("n".to_string());
+        assert!(!fixed.time_varying);
+        assert_eq!(fixed.name, "n");
+
+        let varying = Parameter::varying("committee_size".to_string());
+        assert!(varying.time_varying);
+        assert_eq!(varying.name, "committee_size");
+    }
+
+    #[test]
+    fn has_reconfiguration_reflects_param_updates() {
+        let mut ta = minimal_ta();
+        assert!(!ta.has_reconfiguration());
+
+        // Add a varying param and a rule with a param_update
+        let v_id = ta.add_parameter(Parameter::varying("epoch_n".to_string()));
+        ta.rules[0].param_updates.push(ParamUpdate {
+            param: v_id,
+            value: LinearCombination::constant(42),
+        });
+        assert!(ta.has_reconfiguration());
+    }
+
+    #[test]
+    fn time_varying_params_lists_only_varying() {
+        let mut ta = minimal_ta();
+        // All default params are fixed
+        assert!(ta.time_varying_params().is_empty());
+
+        // Add a varying param
+        let v_id = ta.add_parameter(Parameter::varying("epoch_n".to_string()));
+        let varying = ta.time_varying_params();
+        assert_eq!(varying.len(), 1);
+        assert_eq!(varying[0], (v_id, "epoch_n"));
+    }
+
+    #[test]
+    fn validate_param_update_on_fixed_param_rejected() {
+        let mut ta = minimal_ta();
+        // param 0 ("n") is fixed — updating it should fail
+        ta.rules[0].param_updates.push(ParamUpdate {
+            param: ParamId::from(0),
+            value: LinearCombination::constant(10),
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(err, ValidationError::ParamUpdateOnFixedParam { .. }));
+    }
+
+    #[test]
+    fn validate_param_update_on_invalid_param_rejected() {
+        let mut ta = minimal_ta();
+        ta.rules[0].param_updates.push(ParamUpdate {
+            param: ParamId::from(999),
+            value: LinearCombination::constant(10),
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidParamUpdateTarget { .. }
+        ));
+    }
+
+    #[test]
+    fn validate_param_update_value_with_invalid_param_rejected() {
+        let mut ta = minimal_ta();
+        let v_id = ta.add_parameter(Parameter::varying("epoch_n".to_string()));
+        ta.rules[0].param_updates.push(ParamUpdate {
+            param: v_id,
+            value: LinearCombination::param(ParamId::from(999)),
+        });
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::InvalidParamUpdateValue { .. }
+        ));
+    }
+
+    #[test]
+    fn validate_param_update_on_varying_param_accepted() {
+        let mut ta = minimal_ta();
+        let v_id = ta.add_parameter(Parameter::varying("epoch_n".to_string()));
+        ta.rules[0].param_updates.push(ParamUpdate {
+            param: v_id,
+            value: LinearCombination::param(ParamId::from(0)).add(&LinearCombination::constant(1)),
+        });
+        assert!(ta.validate().is_ok());
+    }
+
+    #[test]
+    fn reconfiguration_semantics_variants() {
+        let next = ReconfigurationSemantics::NextStep;
+        let imm = ReconfigurationSemantics::Immediate;
+        // Just ensure both variants exist and are distinct
+        assert!(!matches!(next, ReconfigurationSemantics::Immediate));
+        assert!(!matches!(imm, ReconfigurationSemantics::NextStep));
     }
 }

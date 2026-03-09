@@ -130,8 +130,8 @@ mod tests {
 
     fn make_test_automaton() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into() });
-        ta.add_parameter(Parameter { name: "t".into() });
+        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
         // L0: Init
         ta.add_location(Location {
             name: "Process_Init".into(),
@@ -176,6 +176,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         ta.add_rule(Rule {
             from: tarsier_ir::threshold_automaton::LocationId::from(0),
@@ -183,6 +184,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         ta
     }

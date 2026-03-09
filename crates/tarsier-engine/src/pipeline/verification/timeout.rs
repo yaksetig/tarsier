@@ -2,7 +2,6 @@
 
 use std::time::{Duration, Instant};
 
-use crate::pipeline::verification::*;
 use crate::pipeline::*;
 
 pub(crate) fn deadline_exceeded(deadline: Option<Instant>) -> bool {

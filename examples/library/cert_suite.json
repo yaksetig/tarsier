@@ -542,6 +542,46 @@
       "cegar_iters": 0,
       "notes": "Reliable Broadcast with process-selective network semantics. Demonstrates concrete process identities with per-process channels for instance-exact verification.",
       "model_sha256": "d208f88fbfd06d537e6a7fcf5e4775c99d2a1515a9bd281e4b47dfe22d7fd8fa"
+    },
+    {
+      "file": "rbft_qbft_safe_faithful.trs",
+      "family": "qbft",
+      "class": "expected_safe",
+      "verify": "safe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "RBFT/QBFT consensus safety model with distinct-sender Prepare/Commit quorums (2f+1 of 3f+1). Agreement holds because quorum overlap ensures locked value carries across rounds.",
+      "model_sha256": "e24f96ee159e3e86152f467f7659888ed5f27823eb163a1387bcbb71e7a0f0eb"
+    },
+    {
+      "file": "minimmit_safe_faithful.trs",
+      "family": "minimmit",
+      "class": "expected_safe",
+      "verify": "safe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "Minimmit 2-round finality BFT (n>=5f+1) safety model. Dual-quorum structure: L-notarisation (n-f) for finalization, M-notarisation (2f+1) for view change. Agreement via quorum overlap.",
+      "model_sha256": "2ce3d6cb2ecbd6c8b54d5d70fd774e81463f95a0ba55f45a44730e30a4ece827"
+    },
+    {
+      "file": "phoenixx_safe_faithful.trs",
+      "family": "phoenixx",
+      "class": "expected_safe",
+      "verify": "safe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "Phoenixx linear BFT with endorser sampling. HotStuff-inspired 3-phase with NQC (2f+1) and probabilistic EQC via committee. Safety from quorum overlap plus honest endorser guarantee.",
+      "model_sha256": "ef6397a39840b0ddc7d4363d5fc2b007d7c26e5d9e6940cd3436033381745f86"
+    },
+    {
+      "file": "reliable_broadcast_reconfig_safe.trs",
+      "family": "reliable-broadcast",
+      "class": "expected_safe",
+      "verify": "safe",
+      "depth": 2,
+      "cegar_iters": 0,
+      "notes": "Reliable broadcast with mid-execution reconfiguration (tightens threshold after delivery). Agreement trivially holds since only one decision value exists in single-value broadcast.",
+      "model_sha256": "ca9f19746f7c6eb2d5183e3e7111529a8af85a228575f8fc40f3cb1ec55a2c8b"
     }
   ]
 }

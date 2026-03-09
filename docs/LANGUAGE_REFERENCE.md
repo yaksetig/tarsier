@@ -5,25 +5,27 @@ This document is the complete reference for the `.trs` protocol modeling languag
 ## Table of Contents
 
 1. [Program Structure](#1-program-structure)
-2. [Parameters](#2-parameters)
-3. [Resilience](#3-resilience)
-4. [Adversary Model](#4-adversary-model)
-5. [Messages](#5-messages)
-6. [Enums](#6-enums)
-7. [Roles](#7-roles)
-8. [Variables](#8-variables)
-9. [Phases and Transitions](#9-phases-and-transitions)
-10. [Guards](#10-guards)
-11. [Actions](#11-actions)
-12. [Properties](#12-properties)
-13. [Identity, Channel, and Equivocation Declarations](#13-identity-channel-and-equivocation-declarations)
-14. [Cryptographic Objects](#14-cryptographic-objects)
-15. [Committees](#15-committees)
-16. [Pacemaker](#16-pacemaker)
-17. [Expressions](#17-expressions)
-18. [Comments and Whitespace](#18-comments-and-whitespace)
-19. [Verification Workflow](#19-verification-workflow)
-20. [Complete Examples](#20-complete-examples)
+2. [Refinement Declaration (`refines`)](#2-refinement-declaration-refines)
+3. [Parameters](#3-parameters)
+4. [Resilience](#4-resilience)
+5. [Adversary Model](#5-adversary-model)
+6. [Messages](#6-messages)
+7. [Bounded Collections](#7-bounded-collections)
+8. [Enums](#8-enums)
+9. [Roles](#9-roles)
+10. [Variables](#10-variables)
+11. [Phases and Transitions](#11-phases-and-transitions)
+12. [Guards](#12-guards)
+13. [Actions](#13-actions)
+14. [Properties](#14-properties)
+15. [Identity, Channel, and Equivocation Declarations](#15-identity-channel-and-equivocation-declarations)
+16. [Cryptographic Objects](#16-cryptographic-objects)
+17. [Committees](#17-committees)
+18. [Pacemaker](#18-pacemaker)
+19. [Expressions](#19-expressions)
+20. [Comments and Whitespace](#20-comments-and-whitespace)
+21. [Verification Workflow](#21-verification-workflow)
+22. [Complete Examples](#22-complete-examples)
 
 ---
 
@@ -41,7 +43,24 @@ Declarations can appear in any order inside the protocol block. All declarations
 
 ---
 
-## 2. Parameters
+## 2. Refinement Declaration (`refines`)
+
+Use `refines` to declare that the current protocol is intended to refine an abstract baseline protocol.
+
+```
+protocol ConcreteProtocol {
+    refines "base_protocol.trs";
+    ...
+}
+```
+
+- The path is resolved relative to the concrete protocol file unless overridden by CLI flags.
+- `refines` is consumed by `tarsier refinement-check` when `--abstract-file` is not provided.
+- This declaration is optional and does not affect plain verification (`verify`, `prove`, `analyze`) by itself.
+
+---
+
+## 3. Parameters
 
 Parameters are symbolic protocol constants (e.g., `n` for total processes, `t` for fault tolerance threshold, `f` for actual faults). They take non-negative integer values during verification.
 
@@ -75,7 +94,7 @@ Parameters used in resilience constraints or adversary bounds are automatically 
 
 ---
 
-## 3. Resilience
+## 4. Resilience
 
 The resilience declaration constrains protocol parameters to ensure fault tolerance. It defines the relationship between the total number of processes and the fault tolerance threshold.
 
@@ -105,7 +124,7 @@ The left-hand and right-hand sides are linear expressions over parameters. Suppo
 
 ---
 
-## 4. Adversary Model
+## 5. Adversary Model
 
 The adversary block configures the fault model, network timing assumptions, and authentication semantics.
 
@@ -205,7 +224,7 @@ adversary {
 
 ---
 
-## 5. Messages
+## 6. Messages
 
 Messages are the unit of communication between processes. Each message type can carry typed fields.
 
@@ -245,7 +264,37 @@ When using `values: sign`, ranges are optional. Without a range, values are abst
 
 ---
 
-## 6. Enums
+## 7. Bounded Collections
+
+Bounded collections let you model logs, bounded sequences, and FIFO channels.
+
+### Declarations
+
+```
+log History: int[n];
+sequence VoteBuf: int[n];
+fifo_channel MsgQueue: int[n];
+```
+
+- Capacity is the bracket expression (`[n]` above) and must be linear over parameters.
+- Element type can be `bool`, `nat`, `int`, or an enum type.
+- `fifo_channel` adds queue-order semantics used by enqueue/dequeue actions.
+
+### Collection expressions
+
+You can read collection content and length in expressions:
+
+```
+x = History[0];
+y = len(History);
+```
+
+- `collection[index]` reads an element.
+- `len(collection)` returns current collection length.
+
+---
+
+## 8. Enums
 
 User-defined finite types for message fields and local variables.
 
@@ -259,7 +308,7 @@ Enum variants can be used as field types, variable types, and in expressions.
 
 ---
 
-## 7. Roles
+## 9. Roles
 
 A role defines the behavior of a class of processes. Each role is a state machine with local variables, an initial phase, and phases containing guarded transitions.
 
@@ -296,7 +345,7 @@ role Replica {
 
 ---
 
-## 8. Variables
+## 10. Variables
 
 Local variables define per-process state within a role. They drive the state-space explosion: each variable value combination creates a distinct location in the threshold automaton.
 
@@ -320,7 +369,7 @@ The initializer (`= <expr>`) is optional. Variables without an initializer defau
 
 ---
 
-## 9. Phases and Transitions
+## 11. Phases and Transitions
 
 Phases are the nodes of the role's control-flow automaton. Each phase contains zero or more guarded transitions.
 
@@ -346,7 +395,7 @@ when <guard> => {
 
 ---
 
-## 10. Guards
+## 12. Guards
 
 Guards are conditions that must hold for a transition to fire. They can be composed with `&&` (conjunction) and `||` (disjunction).
 
@@ -415,7 +464,7 @@ when flag1 || flag2 => { ... }
 
 ---
 
-## 11. Actions
+## 13. Actions
 
 Actions execute when a transition fires. They are processed in order within a transition body.
 
@@ -480,9 +529,43 @@ lock QC;
 justify TS(round=current_round);
 ```
 
+### Append to bounded log/sequence
+
+Appends a value to a `log` or `sequence` collection:
+
+```
+append History 1;
+append VoteBuf round;
+```
+
+### FIFO queue operations
+
+Queue operations are valid on `fifo_channel` collections:
+
+```
+enqueue MsgQueue 42;
+dequeue MsgQueue;
+```
+
+`enqueue` appends to the queue tail; `dequeue` removes from the head.
+
+### Dynamic parameter updates (`reconfigure`)
+
+Use `reconfigure` to update protocol parameters at transition boundaries:
+
+```
+reconfigure {
+    t = t + 1;
+    n = n + 3;
+}
+```
+
+- Empty blocks are allowed: `reconfigure {}`.
+- Reconfiguration semantics are applied through lowering/SMT encoding, enabling epoch-aware parameter evolution.
+
 ---
 
-## 12. Properties
+## 14. Properties
 
 Properties define what the verifier checks. Each property has a name, a kind, and a quantified formula.
 
@@ -642,7 +725,7 @@ Use `verify_all_properties` to check all named properties in one run, independen
 
 ---
 
-## 13. Identity, Channel, and Equivocation Declarations
+## 15. Identity, Channel, and Equivocation Declarations
 
 These declarations enable the faithful network semantics, which provide more precise modeling of sender identity, message authentication, and equivocation.
 
@@ -719,7 +802,7 @@ when received distinct >= 2*t+1 Vote => { ... }
 
 ---
 
-## 14. Cryptographic Objects
+## 16. Cryptographic Objects
 
 Quorum certificates (QCs) and threshold signatures are first-class objects built from aggregating messages.
 
@@ -776,7 +859,7 @@ Interpretation rule: `SAFE`/`PROVED` means secure in the declared symbolic model
 
 ---
 
-## 15. Committees
+## 17. Committees
 
 Committee declarations enable probabilistic verification for protocols with random committee selection (e.g., Algorand-style sortition).
 
@@ -812,7 +895,7 @@ If the protocol is safe under `b <= b_max`, the result is `ProbabilisticallySafe
 
 ---
 
-## 16. Pacemaker
+## 18. Pacemaker
 
 The pacemaker declaration adds automatic view-change transitions to a role.
 
@@ -834,7 +917,7 @@ When a pacemaker is active, the engine injects additional transitions that incre
 
 ---
 
-## 17. Expressions
+## 19. Expressions
 
 ### Arithmetic expressions
 
@@ -884,7 +967,7 @@ Qualified variable access (in formulas): `p.decided`, `q.round`.
 
 ---
 
-## 18. Comments and Whitespace
+## 20. Comments and Whitespace
 
 **Line comments:**
 
@@ -904,17 +987,22 @@ Whitespace (spaces, tabs, newlines) is ignored between tokens.
 
 ---
 
-## 19. Verification Workflow
+## 21. Verification Workflow
 
 ### CLI commands
 
 | Command | Description |
 |---|---|
+| `tarsier analyze <file>` | Primary unified workflow (bughunt/safety/safety+liveness/release) |
 | `tarsier verify <file>` | Bounded model checking (safety) |
 | `tarsier prove <file>` | Unbounded safety proof (k-induction/PDR) |
 | `tarsier liveness <file>` | Bounded liveness check |
 | `tarsier fair-liveness <file>` | Bounded fair liveness (cycle detection) |
 | `tarsier prove-fair <file>` | Unbounded fair liveness proof |
+| `tarsier infer-invariants <file>` | Candidate invariant mining with inductiveness scoring |
+| `tarsier refinement-check <file>` | Directional simulation/refinement check (concrete vs abstract) |
+| `tarsier equivalence-check <file> --other <file>` | Bidirectional bounded equivalence diagnostics |
+| `tarsier conformance-replay <file>` | Counterexample concretization + replay self-validation |
 | `tarsier lint <file>` | Semantic linting and warnings |
 | `tarsier comm <file>` | Communication complexity analysis |
 | `tarsier visualize <file>` | Trace visualization (timeline, MSC) |
@@ -924,11 +1012,12 @@ Whitespace (spaces, tabs, newlines) is ignored between tokens.
 
 | Flag | Description |
 |---|---|
-| `--depth <N>` | Maximum exploration depth (default: 6) |
-| `--k <N>` | Induction parameter for prove (default: 8) |
+| `--depth <N>` | Maximum exploration depth (default: 10 for most commands) |
+| `--k <N>` | Induction/frame parameter for unbounded proof commands (default: 10) |
 | `--solver z3\|cvc5` | SMT solver backend |
 | `--soundness strict\|permissive` | Soundness profile |
 | `--timeout <secs>` | Per-protocol timeout |
+| `--auto-strengthen` | `prove` pre-pass for automatic invariant strengthening |
 | `--liveness-memory-budget-mb <MiB>` | RSS guardrail for unbounded fair-liveness proving (`0` disables) |
 | `--format text\|json` | Output format |
 | `--network-semantics dsl\|faithful` | Network semantics mode |
@@ -997,7 +1086,7 @@ summary metadata (`crypto.kind`, `crypto.source`, `crypto.signer_role`,
 
 ---
 
-## 20. Complete Examples
+## 22. Complete Examples
 
 ### Bracha Reliable Broadcast (Byzantine, minimal)
 

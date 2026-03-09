@@ -233,6 +233,7 @@ fn merge_parameters(
         let new_id = ParamId::from(parameters.len());
         parameters.push(Parameter {
             name: format!("conc_{}", p.name),
+            time_varying: p.time_varying,
         });
         concrete_map.insert(ParamId::from(i), new_id);
     }
@@ -241,6 +242,7 @@ fn merge_parameters(
         let new_id = ParamId::from(parameters.len());
         parameters.push(Parameter {
             name: format!("abs_{}", p.name),
+            time_varying: p.time_varying,
         });
         abstract_map.insert(ParamId::from(i), new_id);
     }
@@ -546,6 +548,7 @@ mod tests {
                 guard: Guard::trivial(),
                 updates: vec![],
                 collection_updates: vec![],
+                param_updates: vec![],
             });
         }
         ta
@@ -678,11 +681,11 @@ mod tests {
     #[test]
     fn product_merged_parameters() {
         let mut concrete = minimal_ta(2, &[0], vec![(0, 1)]);
-        concrete.add_parameter(Parameter { name: "n".into() });
-        concrete.add_parameter(Parameter { name: "t".into() });
+        concrete.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        concrete.add_parameter(Parameter { name: "t".into(), time_varying: false });
 
         let mut abstract_ta = minimal_ta(2, &[0], vec![(0, 1)]);
-        abstract_ta.add_parameter(Parameter { name: "n".into() });
+        abstract_ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
 
         let mut mapping = RefinementMapping::new("abstract.trs".into());
         mapping.map_location(LocationId::from(0), LocationId::from(0));

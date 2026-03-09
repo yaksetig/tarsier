@@ -560,6 +560,7 @@ mod tests {
         let mut ta = ThresholdAutomaton::new();
         ta.parameters.push(Parameter {
             name: "n".to_string(),
+            time_varying: false,
         });
         ta.locations.push(Location {
             name: "Init".to_string(),
@@ -574,6 +575,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
                     collection_updates: vec![],
+                    param_updates: vec![],
         });
         ta
     }

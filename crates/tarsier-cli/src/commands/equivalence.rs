@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use serde_json::json;
 use tarsier_dsl::parser::parse;
 use tarsier_ir::equivalence::build_equivalence_products;
 use tarsier_ir::lowering::lower;
@@ -49,17 +50,20 @@ pub(crate) fn run_equivalence_check(
                 "encoding_ready"
             };
             println!(
-                r#"{{"protocol_a":"{}","protocol_b":"{}","depth":{},"forward_product_locations":{},"forward_product_rules":{},"forward_mismatches":{},"backward_product_locations":{},"backward_product_rules":{},"backward_mismatches":{},"result":"{}"}}"#,
-                file_a.display(),
-                file_b.display(),
-                depth,
-                products.forward.num_locations(),
-                products.forward.num_rules(),
-                fwd_mismatches,
-                products.backward.num_locations(),
-                products.backward.num_rules(),
-                bwd_mismatches,
-                result_str,
+                "{}",
+                json!({
+                    "schema_version": 1,
+                    "protocol_a": file_a.display().to_string(),
+                    "protocol_b": file_b.display().to_string(),
+                    "depth": depth,
+                    "forward_product_locations": products.forward.num_locations(),
+                    "forward_product_rules": products.forward.num_rules(),
+                    "forward_mismatches": fwd_mismatches,
+                    "backward_product_locations": products.backward.num_locations(),
+                    "backward_product_rules": products.backward.num_rules(),
+                    "backward_mismatches": bwd_mismatches,
+                    "result": result_str,
+                })
             );
         }
         _ => {

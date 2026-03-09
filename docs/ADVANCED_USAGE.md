@@ -36,6 +36,18 @@ tarsier analyze examples/pbft_simple.trs --mode proof --portfolio --format json
 
 Legacy commands remain available with `--profile pro`. See [MIGRATION.md](MIGRATION.md) for the full V2 migration guide.
 
+### Focused Expert Commands
+
+Use these when you need targeted diagnostics beyond the default `analyze` flow:
+
+| Command | Purpose |
+|---|---|
+| `tarsier infer-invariants <file> --solver z3 --depth 12` | Mine and rank candidate strengthening predicates |
+| `tarsier prove <file> --auto-strengthen` | Run prove with invariant-inference pre-pass |
+| `tarsier refinement-check concrete.trs --abstract-file abstract.trs --depth 12` | Directional refinement/simulation diagnostics |
+| `tarsier equivalence-check a.trs --other b.trs --depth 12` | Bidirectional bounded equivalence diagnostics |
+| `tarsier conformance-replay <file> --check verify --export-trace replay.json` | Concretize/replay traces for conformance workflows |
+
 ### Scale Guardrails by Mode
 
 - **quick**: `--depth 4..8`, `--timeout 60..120`. Keep faithful fallback at `identity` or `classic` with budgets near `--fallback-max-locations 6000 --fallback-max-shared-vars 30000 --fallback-max-message-counters 20000`.

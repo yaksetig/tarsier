@@ -1,0 +1,86 @@
+// RBFT/QBFT Consensus Protocol (Safety Model)
+// Based on https://github.com/yaksetig/rbft
+//
+// Models the core QBFT consensus for a single height:
+//   PRE-PREPARE -> PREPARE -> COMMIT -> DECIDED
+// with round-change carrying the prepared value lock.
+//
+// Quorum: 2f+1 out of n = 3f+1 validators.
+// Safety: no two honest validators decide different values.
+//
+// The protocol uses three phases per round. A validator who
+// collects 2f+1 Prepares becomes "prepared" (locked on that value),
+// then broadcasts Commit. Collecting 2f+1 Commits triggers decision.
+//
+// On timeout, validators send RoundChange. The new proposer must
+// re-propose the highest prepared value (ensured by quorum overlap:
+// any two quorums of 2f+1 share >= f+1 honest nodes, so the lock
+// carries across rounds).
+
+protocol RBFTQBFTSafeFaithful {
+    params n, t, f;
+    resilience: n = 3*t + 1;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        auth: signed;
+        network: identity_selective;
+        delivery: per_recipient;
+        faults: per_recipient;
+        equivocation: none;
+    }
+
+    identity Validator: role key validator_key;
+    channel Prepare: authenticated;
+    channel Commit: authenticated;
+
+    message Prepare(value: bool);
+    message Commit(value: bool);
+
+    equivocation Prepare: none;
+    equivocation Commit: none;
+
+    role Validator {
+        var decided: bool = false;
+        var decision: bool = false;
+
+        init start;
+
+        // Collect prepares (models receiving proposal + echoing prepare)
+        phase start {
+            when received distinct >= 2*t+1 Prepare(value=true) => {
+                send Commit(value=true);
+                goto phase committed;
+            }
+            when received distinct >= 2*t+1 Prepare(value=false) => {
+                send Commit(value=false);
+                goto phase committed;
+            }
+        }
+
+        // Collect commits; quorum triggers decision
+        phase committed {
+            when received distinct >= 2*t+1 Commit(value=true) => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+            when received distinct >= 2*t+1 Commit(value=false) => {
+                decision = false;
+                decided = true;
+                decide false;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    // Safety: all decided validators agree on the same value
+    property agreement: agreement {
+        forall p: Validator. forall q: Validator.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

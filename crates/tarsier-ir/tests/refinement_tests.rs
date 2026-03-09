@@ -38,11 +38,13 @@ fn make_ta(
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
     }
     for name in params {
         ta.add_parameter(Parameter {
             name: name.to_string(),
+            time_varying: false,
         });
     }
     for name in shared_vars {
@@ -356,6 +358,7 @@ fn product_with_guarded_rules() {
         }),
         updates: vec![],
         collection_updates: vec![],
+        param_updates: vec![],
     });
 
     let abstract_ta = make_ta(&["A", "B"], &[0], &[(0, 1)], &["n"], &["votes"]);
@@ -391,6 +394,7 @@ fn product_with_updates() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        param_updates: vec![],
     });
 
     let abstract_ta = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &["counter"]);
@@ -480,4 +484,259 @@ fn product_error_display() {
     let msg = format!("{err}");
     assert!(msg.contains("42"));
     assert!(msg.contains("no refinement mapping"));
+}
+
+// ===========================================================================
+// REF-06: Extended tests and benchmark suite
+// ===========================================================================
+
+// ── Self-refinement: identity mapping should have no mismatches ──
+
+#[test]
+fn self_refinement_identity_no_mismatches() {
+    let ta = make_ta(
+        &["Init", "Voted", "Done"],
+        &[0],
+        &[(0, 1), (1, 2)],
+        &["n", "t"],
+        &["votes"],
+    );
+    let mut mapping = RefinementMapping::new("self".into());
+    for i in 0..3 {
+        mapping.map_location(LocationId::from(i), LocationId::from(i));
+    }
+    mapping.map_variable(SharedVarId::from(0), SharedVarId::from(0));
+    let rel = RefinementRelation::new(mapping);
+    let product = build_product(&ta, &ta, &rel).unwrap();
+
+    assert_eq!(product.num_locations(), 9); // 3×3
+    // Off-diagonal product locations are mismatches (e.g., (Init,Done)).
+    // For N=3, diagonal has 3 locations, off-diagonal has 6 mismatches.
+    // This is expected: the simulation check verifies these are unreachable.
+    assert_eq!(
+        product.mismatch_locations.len(),
+        6,
+        "3×3 identity mapping should have 6 off-diagonal mismatches"
+    );
+}
+
+// ── Star topology: one hub with many branches ──
+
+#[test]
+fn product_star_topology_with_shared_vars() {
+    // Concrete star: Hub→A, Hub→B, Hub→C
+    let concrete = make_ta(
+        &["Hub", "A", "B", "C"],
+        &[0],
+        &[(0, 1), (0, 2), (0, 3)],
+        &["n"],
+        &["msg_a", "msg_b"],
+    );
+    // Abstract: Hub→Done (collapses A/B/C into Done)
+    let abstract_ta = make_ta(&["Hub", "Done"], &[0], &[(0, 1)], &["n"], &["msg_a"]);
+
+    let mut mapping = RefinementMapping::new("abs".into());
+    mapping.map_location(LocationId::from(0), LocationId::from(0)); // Hub→Hub
+    mapping.map_location(LocationId::from(1), LocationId::from(1)); // A→Done
+    mapping.map_location(LocationId::from(2), LocationId::from(1)); // B→Done
+    mapping.map_location(LocationId::from(3), LocationId::from(1)); // C→Done
+    mapping.map_variable(SharedVarId::from(0), SharedVarId::from(0)); // msg_a→msg_a
+    mapping.mark_variable_internal(SharedVarId::from(1)); // msg_b is internal
+
+    let rel = RefinementRelation::new(mapping);
+    let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
+
+    assert_eq!(product.num_locations(), 8); // 4×2
+    // Check that parameters were merged correctly
+    assert_eq!(product.parameters.len(), 2); // conc_n + abs_n
+}
+
+// ── Scaling: large concrete, small abstract ──
+
+#[test]
+fn product_scaling_10_concrete_2_abstract() {
+    let loc_names: Vec<String> = (0..10).map(|i| format!("L{i}")).collect();
+    let loc_refs: Vec<&str> = loc_names.iter().map(|s| s.as_str()).collect();
+    let rules: Vec<(usize, usize)> = (0..9).map(|i| (i, i + 1)).collect();
+    let concrete = make_ta(&loc_refs, &[0], &rules, &["n"], &[]);
+    let abstract_ta = make_ta(&["Start", "End"], &[0], &[(0, 1)], &["n"], &[]);
+
+    let mut mapping = RefinementMapping::new("abs".into());
+    mapping.map_location(LocationId::from(0), LocationId::from(0)); // L0→Start
+    for i in 1..9 {
+        mapping.mark_location_internal(LocationId::from(i));
+    }
+    mapping.map_location(LocationId::from(9), LocationId::from(1)); // L9→End
+
+    let rel = RefinementRelation::new(mapping);
+    let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
+
+    assert_eq!(product.num_locations(), 20); // 10×2
+    assert!(product.has_mismatches());
+    // Stutter rules for the 8 internal locations
+    let stutter_count = product.rules.iter().filter(|r| r.abstract_rule.is_none()).count();
+    assert!(stutter_count >= 8, "should have stutter rules for internal transitions");
+}
+
+// ── Multiple initial locations in both automata ──
+
+#[test]
+fn product_multiple_initials_both_automata() {
+    let concrete = make_ta(&["A", "B", "C"], &[0, 1], &[(0, 2), (1, 2)], &[], &[]);
+    let abstract_ta = make_ta(&["X", "Y"], &[0], &[(0, 1)], &[], &[]);
+
+    let mut mapping = RefinementMapping::new("abs".into());
+    mapping.map_location(LocationId::from(0), LocationId::from(0)); // A→X
+    mapping.map_location(LocationId::from(1), LocationId::from(0)); // B→X
+    mapping.map_location(LocationId::from(2), LocationId::from(1)); // C→Y
+
+    let rel = RefinementRelation::new(mapping);
+    let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
+
+    assert_eq!(product.num_locations(), 6); // 3×2
+    // Initial locations should be product states where concrete is initial
+    // and abstract matches the mapping
+    assert!(!product.initial_locations.is_empty());
+}
+
+// ── Backward simulation ──
+
+#[test]
+fn backward_simulation_kind_preserved() {
+    let concrete = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &[]);
+    let abstract_ta = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &[]);
+
+    let mut mapping = RefinementMapping::new("abs".into());
+    mapping.map_location(LocationId::from(0), LocationId::from(0));
+    mapping.map_location(LocationId::from(1), LocationId::from(1));
+
+    let mut rel = RefinementRelation::new(mapping);
+    rel.simulation_kind = SimulationKind::Backward;
+
+    let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
+    assert_eq!(product.num_locations(), 4); // 2×2
+}
+
+// ── DSL-based E2E refinement tests ──
+
+#[test]
+fn dsl_refinement_self_check_product_construction() {
+    // A protocol should refine itself
+    let src = r#"
+protocol Simple {
+    params n, t;
+    resilience: n > 3*t;
+    message Vote;
+    role R {
+        var decided: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= n - t Vote => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let prog = tarsier_dsl::parse(src, "simple.trs").unwrap();
+    let ta = tarsier_ir::lowering::lower(&prog).unwrap();
+
+    // Self-mapping: map every location to itself
+    let mut mapping = RefinementMapping::new("self.trs".into());
+    for (i, _) in ta.locations.iter().enumerate() {
+        mapping.map_location(LocationId::from(i), LocationId::from(i));
+    }
+    for (i, _) in ta.shared_vars.iter().enumerate() {
+        mapping.map_variable(SharedVarId::from(i), SharedVarId::from(i));
+    }
+
+    let rel = RefinementRelation::new(mapping);
+    let product = build_product(&ta, &ta, &rel).unwrap();
+
+    let n = ta.locations.len();
+    assert_eq!(product.num_locations(), n * n);
+    // Every diagonal location is a match, so no mismatches on diagonal
+}
+
+#[test]
+fn dsl_refinement_concrete_extends_abstract() {
+    // Concrete has an extra phase that the abstract doesn't
+    let concrete_src = r#"
+protocol Concrete {
+    params n, t;
+    resilience: n > 3*t;
+    message Vote;
+    role R {
+        var decided: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                goto phase validating;
+            }
+        }
+        phase validating {
+            when received >= n - t Vote => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let abstract_src = r#"
+protocol Abstract {
+    params n, t;
+    resilience: n > 3*t;
+    message Vote;
+    role R {
+        var decided: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= n - t Vote => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let concrete_prog = tarsier_dsl::parse(concrete_src, "concrete.trs").unwrap();
+    let abstract_prog = tarsier_dsl::parse(abstract_src, "abstract.trs").unwrap();
+    let concrete_ta = tarsier_ir::lowering::lower(&concrete_prog).unwrap();
+    let abstract_ta = tarsier_ir::lowering::lower(&abstract_prog).unwrap();
+
+    // Auto-mapping by name: "waiting" and "done" match, "validating" is internal
+    let mut mapping = RefinementMapping::new("abstract.trs".into());
+    for (c_idx, c_loc) in concrete_ta.locations.iter().enumerate() {
+        let c_id = LocationId::from(c_idx);
+        if let Some(a_id) = abstract_ta.find_location_by_name(&c_loc.name) {
+            mapping.map_location(c_id, a_id);
+        } else {
+            mapping.mark_location_internal(c_id);
+        }
+    }
+    for (c_idx, c_var) in concrete_ta.shared_vars.iter().enumerate() {
+        let c_id = SharedVarId::from(c_idx);
+        if let Some(a_id) = abstract_ta.find_shared_var_by_name(&c_var.name) {
+            mapping.map_variable(c_id, a_id);
+        }
+    }
+
+    let rel = RefinementRelation::new(mapping);
+    let product = build_product(&concrete_ta, &abstract_ta, &rel).unwrap();
+
+    // Product should be non-trivial
+    assert!(product.num_locations() > 0);
+    assert!(product.num_rules() > 0);
+
+    // Should have some internal (stutter) rules for validating transitions
+    let stutter_count = product.rules.iter().filter(|r| r.abstract_rule.is_none()).count();
+    assert!(stutter_count > 0, "extra validating phase should produce stutter rules");
 }

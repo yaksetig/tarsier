@@ -1092,6 +1092,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         };
         assert!(is_pure_stutter_rule(&rule));
     }
@@ -1104,6 +1105,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         };
         assert!(!is_pure_stutter_rule(&rule));
     }
@@ -1119,6 +1121,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            param_updates: vec![],
         };
         assert!(!is_pure_stutter_rule(&rule));
     }

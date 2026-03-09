@@ -8,6 +8,7 @@ pub(crate) mod conformance;
 #[cfg(feature = "governance")]
 pub(crate) mod governance;
 pub(crate) mod helpers;
+pub(crate) mod invariant;
 pub(crate) mod lint;
 pub(crate) mod prove;
 pub(crate) mod refinement;

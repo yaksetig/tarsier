@@ -1,0 +1,31 @@
+// Reliable broadcast with mid-execution reconfiguration.
+// After delivering enough Echo messages, the threshold is tightened.
+// Agreement still holds because only one decision value exists.
+protocol ReliableBroadcastReconfig {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    message Echo;
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= n - t Echo => {
+                reconfigure {
+                    t = t - 1;
+                }
+                send Echo;
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

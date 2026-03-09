@@ -30,11 +30,13 @@ fn make_ta(
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
     }
     for name in params {
         ta.add_parameter(Parameter {
             name: name.to_string(),
+            time_varying: false,
         });
     }
     for name in shared_vars {

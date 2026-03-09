@@ -227,7 +227,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
     let param_ids: IndexMap<String, ParamId> = param_order
         .into_iter()
         .map(|name| {
-            let id = ta.add_parameter(Parameter { name: name.clone() });
+            let id = ta.add_parameter(Parameter::fixed(name.clone()));
             (name, id)
         })
         .collect();
@@ -957,6 +957,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                 let mut assigns: Vec<(String, ast::Expr)> = Vec::new();
                 let mut pending_actions: Vec<PendingTransitionAction> = Vec::new();
                 let mut pending_collection_updates: Vec<CollectionUpdate> = Vec::new();
+                let mut pending_param_updates: Vec<ParamUpdate> = Vec::new();
                 let mut decide_value: Option<ast::Expr> = None;
 
                 for action in &trans.actions {
@@ -1045,10 +1046,17 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                 kind: CollectionUpdateKind::Dequeue,
                             });
                         }
-                        ast::Action::Reconfigure { .. } => {
-                            return Err(LoweringError::Unsupported(
-                                "reconfigure actions require the dynamic membership extension (RECONF-02+)".into(),
-                            ));
+                        ast::Action::Reconfigure { updates } => {
+                            for upd in updates {
+                                let pid = *param_ids.get(&upd.param).ok_or_else(|| {
+                                    LoweringError::UnknownParameter(upd.param.clone())
+                                })?;
+                                let value = helpers::lower_expr_to_lc(&upd.value, &param_ids)?;
+                                pending_param_updates.push(ParamUpdate {
+                                    param: pid,
+                                    value,
+                                });
+                            }
                         }
                     }
                 }
@@ -1443,12 +1451,25 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     guard: guard.clone(),
                                     updates: updates.clone(),
                                     collection_updates: pending_collection_updates.clone(),
+                                    param_updates: pending_param_updates.clone(),
                                 });
                                 break;
                             }
                         }
                     }
                 }
+            }
+        }
+
+        // 5b. Mark parameters targeted by reconfigure actions as time-varying.
+        {
+            let varying_ids: Vec<usize> = ta
+                .rules
+                .iter()
+                .flat_map(|r| r.param_updates.iter().map(|pu| pu.param.as_usize()))
+                .collect();
+            for id in varying_ids {
+                ta.parameters[id].time_varying = true;
             }
         }
 
@@ -1521,7 +1542,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     to: to_lid,
                                     guard: Guard::trivial(),
                                     updates: Vec::new(),
-                    collection_updates: vec![],
+                                    collection_updates: vec![],
+                                    param_updates: vec![],
                                 });
                                 break;
                             }
@@ -1569,6 +1591,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     kind: UpdateKind::Increment,
                                 }],
                                 collection_updates: vec![],
+                                param_updates: vec![],
                             });
                             break;
                         }
@@ -1615,7 +1638,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     to: to_lid,
                                     guard: Guard::trivial(),
                                     updates: vec![],
-                    collection_updates: vec![],
+                                    collection_updates: vec![],
+                                    param_updates: vec![],
                                 });
                                 break;
                             }
@@ -1627,7 +1651,8 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             to: init_lid,
                             guard: Guard::trivial(),
                             updates: vec![],
-                    collection_updates: vec![],
+                            collection_updates: vec![],
+                            param_updates: vec![],
                         });
                     }
                 }

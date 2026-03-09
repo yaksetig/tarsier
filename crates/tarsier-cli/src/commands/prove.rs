@@ -51,6 +51,7 @@ pub(crate) struct ProveCommandArgs {
     pub(crate) cegar_iters: usize,
     pub(crate) cegar_report_out: Option<PathBuf>,
     pub(crate) portfolio: bool,
+    pub(crate) auto_strengthen: bool,
     pub(crate) format: String,
     pub(crate) cli_network_mode: CliNetworkSemanticsMode,
 }
@@ -312,6 +313,8 @@ pub(crate) fn run_prove_command(args: ProveCommandArgs) -> miette::Result<()> {
 
     if prove_target == ProveAutoTarget::FairLiveness {
         run_prove_fair_liveness_branch(&source, &filename, &options, args.portfolio, exec)?;
+    } else if args.auto_strengthen {
+        run_prove_safety_auto_strengthen(&source, &filename, &options, exec.output_format)?;
     } else if args.portfolio {
         run_prove_safety_portfolio(&source, &filename, &options, exec)?;
     } else {
@@ -957,6 +960,52 @@ fn run_prove_safety_single(
                 if matches!(output_format, OutputFormat::Text) {
                     eprintln!("Skipping certificate generation: proof did not conclude SAFE.");
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Run `tarsier prove` with auto-strengthen invariant inference pre-pass.
+fn run_prove_safety_auto_strengthen(
+    source: &str,
+    filename: &str,
+    options: &PipelineOptions,
+    output_format: OutputFormat,
+) -> miette::Result<()> {
+    let result =
+        tarsier_engine::pipeline::verification::prove_safety_with_auto_strengthen(
+            source, filename, options,
+        )
+        .map_err(|e| miette::miette!("Error: {e}"))?;
+    match output_format {
+        OutputFormat::Json => {
+            let artifact = json!({
+                "schema_version": 1,
+                "file": filename,
+                "mode": "prove",
+                "prove_target": "safety",
+                "auto_strengthen": true,
+                "result": unbounded_safety_result_kind(&result),
+                "details": unbounded_safety_result_details(&result),
+                "output": format!("{result}"),
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&artifact).into_diagnostic()?
+            );
+        }
+        OutputFormat::Text => {
+            println!("{result}");
+            let diag = tarsier_engine::pipeline::take_run_diagnostics();
+            if let Some(opt) = render_optimization_summary(&diag) {
+                eprintln!("{opt}");
+            }
+            if let Some(fb) = render_fallback_summary(&diag) {
+                eprintln!("{fb}");
+            }
+            if let Some(pp) = render_phase_profile_summary(&diag) {
+                eprintln!("{pp}");
             }
         }
     }

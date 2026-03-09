@@ -1,6 +1,5 @@
 //! `FormulaValue`, `eval_formula_*` functions.
 
-use crate::pipeline::property::*;
 use crate::pipeline::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

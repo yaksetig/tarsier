@@ -1,6 +1,5 @@
 //! `LivenessSpec`, `TemporalFormula`, `TemporalBuchiAutomaton`, etc.
 
-use crate::pipeline::property::*;
 use crate::pipeline::*;
 
 #[derive(Debug, Clone)]

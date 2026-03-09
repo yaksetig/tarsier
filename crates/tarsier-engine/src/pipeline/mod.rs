@@ -533,7 +533,7 @@ pub(crate) mod certification;
 pub(crate) mod diagnostics;
 pub(crate) mod property;
 pub mod stages;
-pub(crate) mod verification;
+pub mod verification;
 
 use diagnostics::push_phase_profile;
 
@@ -581,9 +581,7 @@ fn current_rss_bytes() -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::analysis::*;
     use super::certification::*;
-    use super::diagnostics::*;
     use super::property::*;
     use super::verification::*;
     use crate::pipeline::*;

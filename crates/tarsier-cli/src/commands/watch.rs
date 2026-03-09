@@ -47,6 +47,7 @@ fn run_once(args: &WatchCommandArgs) {
         cegar_iters: 0,
         cegar_report_out: None,
         portfolio: args.portfolio,
+        auto_strengthen: false,
         format: args.format.clone(),
         cli_network_mode: args.cli_network_mode,
     });

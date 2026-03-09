@@ -29,8 +29,6 @@ pub(crate) use temporal_buchi::*;
 pub(crate) use temporal_encoding::*;
 pub(crate) use temporal_types::*;
 
-use crate::pipeline::*;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QuantifiedFragment {
     /// `forall p:R. forall q:R. p.x == q.x` (or guarded variant with `==>`)

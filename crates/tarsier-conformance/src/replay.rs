@@ -212,8 +212,8 @@ mod tests {
 
     fn make_test_automaton() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into() });
-        ta.add_parameter(Parameter { name: "t".into() });
+        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
 
         // L0: Init
         ta.add_location(Location {
@@ -248,6 +248,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            param_updates: vec![],
         });
 
         ta
@@ -255,7 +256,7 @@ mod tests {
 
     fn make_set_update_automaton() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into() });
+        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
 
         ta.add_location(Location {
             name: "Worker_Init".into(),
@@ -290,6 +291,7 @@ mod tests {
                 }),
             }],
             collection_updates: vec![],
+            param_updates: vec![],
         });
 
         ta

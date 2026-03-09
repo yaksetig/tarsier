@@ -644,6 +644,35 @@ pub(super) fn encode_lc(lc: &LinearCombination) -> SmtTerm {
     sum_terms_balanced(terms)
 }
 
+/// Encode a [`LinearCombination`] using step-dependent variables for time-varying
+/// parameters. Fixed parameters use global `p_i`; time-varying parameters use
+/// `p_i_step`.
+pub(super) fn encode_lc_at_step(
+    lc: &LinearCombination,
+    step: usize,
+    time_varying_ids: &[usize],
+) -> SmtTerm {
+    let mut terms = Vec::with_capacity(lc.terms.len() + usize::from(lc.constant != 0));
+    if lc.constant != 0 {
+        terms.push(SmtTerm::int(lc.constant));
+    }
+    for &(coeff, pid) in &lc.terms {
+        let pid_usize = pid.as_usize();
+        let param_term = if time_varying_ids.contains(&pid_usize) {
+            SmtTerm::var(param_var_at_step(step, pid))
+        } else {
+            SmtTerm::var(param_var(pid))
+        };
+        let scaled = if coeff == 1 {
+            param_term
+        } else {
+            SmtTerm::int(coeff).mul(param_term)
+        };
+        terms.push(scaled);
+    }
+    sum_terms_balanced(terms)
+}
+
 /// Encode a threshold guard atom as an SmtTerm for a given step.
 pub(super) fn encode_threshold_guard_at_step(
     step: usize,
@@ -673,6 +702,47 @@ pub(super) fn encode_threshold_guard_at_step(
         sum_terms_balanced(terms)
     };
     let rhs = encode_lc(bound);
+    match op {
+        CmpOp::Ge => lhs.ge(rhs),
+        CmpOp::Gt => lhs.gt(rhs),
+        CmpOp::Le => lhs.le(rhs),
+        CmpOp::Lt => lhs.lt(rhs),
+        CmpOp::Eq => lhs.eq(rhs),
+        CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
+    }
+}
+
+/// Like [`encode_threshold_guard_at_step`] but uses step-dependent variables
+/// for time-varying parameters.
+pub(super) fn encode_threshold_guard_at_step_epoch(
+    step: usize,
+    vars: &[impl Copy + std::fmt::Display],
+    op: CmpOp,
+    bound: &LinearCombination,
+    distinct: bool,
+    time_varying_ids: &[usize],
+) -> SmtTerm {
+    let lhs = if distinct {
+        let terms: Vec<SmtTerm> = vars
+            .iter()
+            .map(|var| {
+                let gv = SmtTerm::var(gamma_var(step, *var));
+                SmtTerm::Ite(
+                    Box::new(gv.gt(SmtTerm::int(0))),
+                    Box::new(SmtTerm::int(1)),
+                    Box::new(SmtTerm::int(0)),
+                )
+            })
+            .collect();
+        sum_terms_balanced(terms)
+    } else {
+        let terms: Vec<SmtTerm> = vars
+            .iter()
+            .map(|var| SmtTerm::var(gamma_var(step, *var)))
+            .collect();
+        sum_terms_balanced(terms)
+    };
+    let rhs = encode_lc_at_step(bound, step, time_varying_ids);
     match op {
         CmpOp::Ge => lhs.ge(rhs),
         CmpOp::Gt => lhs.gt(rhs),

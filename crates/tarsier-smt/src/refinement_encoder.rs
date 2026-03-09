@@ -8,7 +8,7 @@
 
 use tarsier_ir::product::{ProductAutomaton, ProductLocationId};
 use tarsier_ir::threshold_automaton::{
-    CmpOp, GuardAtom, LinearCombination, ParamId, SharedVarId, UpdateKind,
+    CmpOp, GuardAtom, LinearCombination, SharedVarId, UpdateKind,
 };
 
 use crate::sorts::SmtSort;
@@ -455,6 +455,7 @@ mod tests {
                 guard: Guard::trivial(),
                 updates: vec![],
                 collection_updates: vec![],
+                param_updates: vec![],
             });
         }
         ta

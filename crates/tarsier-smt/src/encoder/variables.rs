@@ -8,12 +8,18 @@ pub(crate) type MessageVariantGroups = (Vec<Vec<usize>>, Vec<String>, HashMap<St
 pub(crate) type CryptoVariantBuckets = HashMap<(String, String), Vec<(String, Vec<usize>)>>;
 
 /// Variable naming conventions:
-/// - `p_i` — parameter i
+/// - `p_i` — parameter i (fixed, global)
+/// - `p_i_k` — parameter i at step k (time-varying)
 /// - `kappa_k_l` — counter for location l at step k
 /// - `g_k_v` — shared variable v at step k
 /// - `delta_k_r` — firing count for rule r at step k
 pub(super) fn param_var(i: impl std::fmt::Display) -> String {
     format!("p_{i}")
+}
+
+/// Step-dependent parameter variable for time-varying parameters.
+pub(super) fn param_var_at_step(step: usize, i: impl std::fmt::Display) -> String {
+    format!("p_{i}_{step}")
 }
 
 /// Counter variable: number of processes at location `loc` at step `step`.
@@ -84,11 +90,6 @@ pub(super) fn net_drop_var(step: usize, var: impl std::fmt::Display) -> String {
 /// Length of bounded collection `coll` at step `step`.
 pub(super) fn coll_len_var(step: usize, coll: usize) -> String {
     format!("clen_{step}_{coll}")
-}
-
-/// Element `index` of bounded collection `coll` at step `step`.
-pub(super) fn coll_elem_var(step: usize, coll: usize, index: usize) -> String {
-    format!("celem_{step}_{coll}_{index}")
 }
 
 /// Head index of FIFO queue `coll` at step `step`.

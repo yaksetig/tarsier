@@ -54,6 +54,8 @@ pub(super) struct CommonEncoderContext {
     pub(super) crash_recovery: bool,
     /// Location IDs where `__alive=false` (dead locations), for crash-recovery fault budget.
     pub(super) dead_loc_ids: Vec<usize>,
+    /// Parameter indices that are time-varying (updated by reconfigure actions).
+    pub(super) time_varying_param_ids: Vec<usize>,
 }
 
 /// Build the shared preamble context for encoder front-ends.
@@ -238,6 +240,14 @@ pub(super) fn build_common_encoder_context(cs: &CounterSystem) -> CommonEncoderC
         Vec::new()
     };
 
+    let time_varying_param_ids: Vec<usize> = ta
+        .parameters
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.time_varying)
+        .map(|(i, _)| i)
+        .collect();
+
     CommonEncoderContext {
         num_locs,
         num_svars,
@@ -274,5 +284,6 @@ pub(super) fn build_common_encoder_context(cs: &CounterSystem) -> CommonEncoderC
         leader_role_locs,
         crash_recovery,
         dead_loc_ids,
+        time_varying_param_ids,
     }
 }

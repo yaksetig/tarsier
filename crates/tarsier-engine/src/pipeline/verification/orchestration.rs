@@ -1123,39 +1123,22 @@ pub fn prove_safety_with_cegar(
 
         let property = extract_property(&ta, &program, options.soundness)?;
         let cs = abstract_to_cs(ta.clone());
-        let candidate_budget = (max_refinements.max(1)) * 2;
-        let candidates =
-            cti_zero_location_candidates(&ta, &property, &cti_summary, candidate_budget);
-        if candidates.is_empty() {
-            return Ok(baseline_result);
-        }
-
-        let mut synthesized_locs = Vec::new();
-        for loc in candidates {
-            let synthesis_options = match options_with_remaining_timeout(
-                options,
-                deadline,
-                "CTI predicate synthesis",
-            ) {
-                Ok(adjusted) => adjusted,
-                Err(_) => {
-                    return Ok(UnboundedSafetyResult::Unknown {
-                        reason: timeout_unknown_reason("CTI predicate synthesis"),
-                    });
-                }
-            };
-            if prove_location_unreachable_for_synthesis(
-                &cs,
-                &synthesis_options,
-                &committee_bounds,
-                loc,
-            )? {
-                synthesized_locs.push(loc);
+        let synthesized_locs = match synthesize_cti_zero_location_invariants(
+            &ta,
+            &property,
+            &cti_summary,
+            &cs,
+            options,
+            &committee_bounds,
+            max_refinements,
+            deadline,
+        ) {
+            Ok(locs) => locs,
+            Err(PipelineError::Solver(reason)) if reason.contains("timed out") => {
+                return Ok(UnboundedSafetyResult::Unknown { reason });
             }
-            if synthesized_locs.len() >= max_refinements.max(1) {
-                break;
-            }
-        }
+            Err(e) => return Err(e),
+        };
         if synthesized_locs.is_empty() {
             return Ok(baseline_result);
         }

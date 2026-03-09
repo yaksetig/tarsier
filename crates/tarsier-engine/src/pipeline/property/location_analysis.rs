@@ -1,6 +1,5 @@
 //! Location grouping, guard parsing, reachability.
 
-use crate::pipeline::property::*;
 use crate::pipeline::*;
 
 pub(crate) fn graph_reachable_locations(ta: &ThresholdAutomaton) -> HashSet<usize> {

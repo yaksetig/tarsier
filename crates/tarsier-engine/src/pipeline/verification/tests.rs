@@ -5,7 +5,7 @@ use crate::pipeline::*;
 use std::collections::HashMap;
 use tarsier_ir::properties::SafetyProperty;
 use tarsier_ir::threshold_automaton::{
-    LocalValue, Location, Parameter, SharedVar, SharedVarKind, ThresholdAutomaton,
+    Location, Parameter, SharedVar, SharedVarKind, ThresholdAutomaton,
 };
 use tarsier_smt::bmc::{BmcResult, KInductionCti};
 use tarsier_smt::solver::{Model, ModelValue};
@@ -13,7 +13,7 @@ use tarsier_smt::terms::SmtTerm;
 
 fn report_ta() -> ThresholdAutomaton {
     let mut ta = ThresholdAutomaton::new();
-    ta.parameters.push(Parameter { name: "n".into() });
+    ta.parameters.push(Parameter { name: "n".into(), time_varying: false });
     ta.locations.push(Location {
         name: "Init".into(),
         role: "R".into(),
@@ -761,6 +761,7 @@ fn is_pure_stutter_rule_detection() {
         guard: make_guard(vec![]),
         updates: vec![],
         collection_updates: vec![],
+        param_updates: vec![],
     };
     assert!(is_pure_stutter_rule(&stutter));
 
@@ -770,6 +771,7 @@ fn is_pure_stutter_rule_detection() {
         guard: make_guard(vec![]),
         updates: vec![],
         collection_updates: vec![],
+        param_updates: vec![],
     };
     assert!(!is_pure_stutter_rule(&non_stutter_move));
 
@@ -782,6 +784,7 @@ fn is_pure_stutter_rule_detection() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        param_updates: vec![],
     };
     assert!(!is_pure_stutter_rule(&non_stutter_update));
 }
@@ -789,7 +792,7 @@ fn is_pure_stutter_rule_detection() {
 fn make_por_ta() -> ThresholdAutomaton {
     let mut ta = ThresholdAutomaton::new();
     ta.parameters
-        .push(tarsier_ir::threshold_automaton::Parameter { name: "n".into() });
+        .push(tarsier_ir::threshold_automaton::Parameter { name: "n".into(), time_varying: false });
     // Location 0: Init (role A)
     ta.locations.push(Location {
         name: "Init".into(),
@@ -847,6 +850,7 @@ fn rules_independent_disjoint_locations_and_vars() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        param_updates: vec![],
     };
     // Rule B: 2 -> 3 (role B), writes var 1
     let rule_b = Rule {
@@ -858,6 +862,7 @@ fn rules_independent_disjoint_locations_and_vars() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        param_updates: vec![],
     };
     assert!(rules_independent(&ta, &rule_a, &rule_b));
 }
@@ -872,6 +877,7 @@ fn rules_not_independent_shared_location() {
         guard: make_guard(vec![]),
         updates: vec![],
         collection_updates: vec![],
+        param_updates: vec![],
     };
     let rule_b = Rule {
         from: 0.into(),
@@ -879,6 +885,7 @@ fn rules_not_independent_shared_location() {
         guard: make_guard(vec![]),
         updates: vec![],
         collection_updates: vec![],
+        param_updates: vec![],
     };
     assert!(!rules_independent(&ta, &rule_a, &rule_b));
 }
@@ -896,6 +903,7 @@ fn rules_not_independent_write_read_conflict() {
             kind: UpdateKind::Increment,
         }],
         collection_updates: vec![],
+        param_updates: vec![],
     };
     // Rule B: 2 -> 3, reads var 0 (in guard)
     let rule_b = Rule {
@@ -904,6 +912,7 @@ fn rules_not_independent_write_read_conflict() {
         guard: make_guard(vec![make_guard_atom(vec![0], CmpOp::Ge, 1, vec![], false)]),
         updates: vec![],
         collection_updates: vec![],
+        param_updates: vec![],
     };
     assert!(!rules_independent(&ta, &rule_a, &rule_b));
 }

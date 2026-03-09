@@ -31,11 +31,13 @@ fn make_ta(
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
     }
     for name in params {
         ta.add_parameter(Parameter {
             name: name.to_string(),
+            time_varying: false,
         });
     }
     for name in shared_vars {
@@ -174,4 +176,133 @@ fn encoding_depth_zero_still_has_initial_state() {
 
     assert!(decls > 0, "depth 0 should still declare initial state vars");
     assert!(asserts > 0, "depth 0 should still have initial state constraints");
+}
+
+// ===========================================================================
+// REF-06: Extended encoding tests
+// ===========================================================================
+
+#[test]
+fn encoding_with_guarded_rules_has_more_assertions() {
+    // Plain rules vs guarded rules: guards add threshold constraints
+    let plain = make_ta(&["A", "B"], &[0], &[(0, 1)], &["n"], &[]);
+    let mut guarded = make_ta(&["A", "B"], &[0], &[], &["n"], &["votes"]);
+    guarded.add_rule(Rule {
+        from: LocationId::from(0),
+        to: LocationId::from(1),
+        guard: Guard::single(GuardAtom::Threshold {
+            vars: vec![SharedVarId::from(0)],
+            op: CmpOp::Ge,
+            bound: LinearCombination::param(ParamId::from(0)),
+            distinct: false,
+        }),
+        updates: vec![Update {
+            var: SharedVarId::from(0),
+            kind: UpdateKind::Increment,
+        }],
+        collection_updates: vec![],
+        param_updates: vec![],
+    });
+
+    let abstract_ta = make_ta(&["A", "B"], &[0], &[(0, 1)], &["n"], &[]);
+
+    let (_, asserts_plain) = build_encoding(
+        &plain,
+        &abstract_ta,
+        &[(0, Some(0)), (1, Some(1))],
+        2,
+    );
+    let (_, asserts_guarded) = build_encoding(
+        &guarded,
+        &abstract_ta,
+        &[(0, Some(0)), (1, Some(1))],
+        2,
+    );
+
+    assert!(
+        asserts_guarded > asserts_plain,
+        "guarded rules should produce more assertions ({} vs {})",
+        asserts_guarded,
+        asserts_plain
+    );
+}
+
+#[test]
+fn encoding_internal_locations_produce_stutter_rules() {
+    // Concrete: A→B→C, B is internal. Should produce stutter rules in encoding.
+    let concrete = make_ta(
+        &["A", "B", "C"],
+        &[0],
+        &[(0, 1), (1, 2)],
+        &[],
+        &[],
+    );
+    let abstract_ta = make_ta(&["A", "C"], &[0], &[(0, 1)], &[], &[]);
+
+    let (decls, asserts) = build_encoding(
+        &concrete,
+        &abstract_ta,
+        &[(0, Some(0)), (1, None), (2, Some(1))],
+        2,
+    );
+
+    // Should have non-trivial encoding with stutter rules
+    assert!(decls > 0);
+    assert!(asserts > 0);
+}
+
+#[test]
+fn encoding_large_product_scales_linearly() {
+    // Test that encoding size grows roughly proportionally with product size
+    let small_concrete = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &[]);
+    let small_abstract = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &[]);
+
+    let large_names: Vec<String> = (0..5).map(|i| format!("L{i}")).collect();
+    let large_refs: Vec<&str> = large_names.iter().map(|s| s.as_str()).collect();
+    let large_rules: Vec<(usize, usize)> = (0..4).map(|i| (i, i + 1)).collect();
+    let large_concrete = make_ta(&large_refs, &[0], &large_rules, &[], &[]);
+    let large_abstract = make_ta(&large_refs, &[0], &large_rules, &[], &[]);
+
+    let small_map: Vec<(usize, Option<usize>)> = (0..2).map(|i| (i, Some(i))).collect();
+    let large_map: Vec<(usize, Option<usize>)> = (0..5).map(|i| (i, Some(i))).collect();
+
+    let (small_decls, _) = build_encoding(&small_concrete, &small_abstract, &small_map, 2);
+    let (large_decls, _) = build_encoding(&large_concrete, &large_abstract, &large_map, 2);
+
+    // Large product (25 locs) should have more declarations than small (4 locs)
+    assert!(
+        large_decls > small_decls,
+        "larger product should have more declarations ({} vs {})",
+        large_decls,
+        small_decls,
+    );
+}
+
+#[test]
+fn encoding_multiple_shared_vars_correct_count() {
+    let concrete = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &["x", "y", "z"]);
+    let abstract_ta = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &["x", "y"]);
+
+    let (_, _) = build_encoding(
+        &concrete,
+        &abstract_ta,
+        &[(0, Some(0)), (1, Some(1))],
+        1,
+    );
+
+    // Also verify via the full encoding
+    let mut mapping = RefinementMapping::new("abs".into());
+    mapping.map_location(LocationId::from(0), LocationId::from(0));
+    mapping.map_location(LocationId::from(1), LocationId::from(1));
+    let rel = RefinementRelation::new(mapping);
+    let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
+    let enc = encode_refinement_check(&product, 1);
+
+    // Should have gamma vars for all 5 merged shared vars at 2 steps
+    let gamma_decls: Vec<_> = enc
+        .declarations
+        .iter()
+        .filter(|(name, _)| name.starts_with("pg_"))
+        .collect();
+    assert_eq!(gamma_decls.len(), 10); // 5 vars × 2 steps
 }

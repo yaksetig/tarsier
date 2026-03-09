@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use serde_json::json;
 use tarsier_dsl::parser::parse;
 use tarsier_ir::lowering::lower;
 use tarsier_ir::product::build_product;
@@ -70,14 +71,17 @@ pub(crate) fn run_refinement_check(
                 "encoding_ready"
             };
             println!(
-                r#"{{"concrete":"{}","abstract":"{}","depth":{},"product_locations":{},"product_rules":{},"mismatch_locations":{},"result":"{}"}}"#,
-                concrete_path.display(),
-                abstract_path.display(),
-                depth,
-                product.num_locations(),
-                product.num_rules(),
-                product.mismatch_locations.len(),
-                result_str,
+                "{}",
+                json!({
+                    "schema_version": 1,
+                    "concrete": concrete_path.display().to_string(),
+                    "abstract": abstract_path.display().to_string(),
+                    "depth": depth,
+                    "product_locations": product.num_locations(),
+                    "product_rules": product.num_rules(),
+                    "mismatch_locations": product.mismatch_locations.len(),
+                    "result": result_str,
+                })
             );
         }
         _ => {

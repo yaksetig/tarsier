@@ -670,6 +670,7 @@ mod tests {
         let mut ta = ThresholdAutomaton::new();
         ta.add_parameter(Parameter {
             name: "n".to_string(),
+            time_varying: false,
         });
         let from = ta.add_location(make_location("L0", "Replica", 0));
         let to = ta.add_location(make_location("L1", "Replica", 1));
@@ -689,6 +690,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         ta.security.role_identities.insert(
             "Replica".to_string(),
@@ -994,6 +996,7 @@ mod tests {
                 kind: UpdateKind::Increment,
             }],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         let cs = ta;
         let model = test_model(&[

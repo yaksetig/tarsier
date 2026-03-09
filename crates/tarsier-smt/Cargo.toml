@@ -12,7 +12,7 @@ categories.workspace = true
 
 [dependencies]
 tarsier-ir = { path = "../tarsier-ir", version = "0.1.0" }
-z3 = { version = "0.19", features = ["static-link-z3"] }
+z3 = { version = "0.19" }
 thiserror.workspace = true
 tracing.workspace = true
 

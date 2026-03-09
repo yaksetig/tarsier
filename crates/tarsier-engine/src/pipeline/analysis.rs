@@ -137,6 +137,7 @@ pub(super) fn apply_round_erasure_abstraction(
         constraints: ta.constraints.clone(),
         semantics: ta.semantics.clone(),
         security: ta.security.clone(),
+        reconfiguration: ta.reconfiguration.clone(),
         leader_roles: ta.leader_roles.clone(),
         collections: ta.collections.clone(),
     };
@@ -254,6 +255,7 @@ pub(super) fn apply_round_erasure_abstraction(
                 })
                 .collect(),
             collection_updates: rule.collection_updates.clone(),
+            param_updates: rule.param_updates.clone(),
         })
         .collect();
 
@@ -1619,6 +1621,7 @@ mod tests {
         let mut ta = ThresholdAutomaton::new();
         ta.parameters.push(Parameter {
             name: "n".to_string(),
+            time_varying: false,
         });
         ta.locations.push(mk_location("l0", 1, false));
         ta.locations.push(mk_location("l1", 2, false));
@@ -1668,6 +1671,7 @@ mod tests {
                 },
             ],
             collection_updates: vec![],
+            param_updates: vec![],
         });
         ta
     }
@@ -1903,9 +1907,11 @@ mod tests {
         let mut ta = ThresholdAutomaton::new();
         ta.parameters.push(Parameter {
             name: "n".to_string(),
+            time_varying: false,
         });
         ta.parameters.push(Parameter {
             name: "f".to_string(),
+            time_varying: false,
         });
         ta.constraints.committees.push(IrCommitteeSpec {
             name: "c1".to_string(),
@@ -1924,9 +1930,11 @@ mod tests {
         let mut ambiguous = ThresholdAutomaton::new();
         ambiguous.parameters.push(Parameter {
             name: "f1".to_string(),
+            time_varying: false,
         });
         ambiguous.parameters.push(Parameter {
             name: "f2".to_string(),
+            time_varying: false,
         });
         ambiguous.constraints.committees.push(IrCommitteeSpec {
             name: "c1".to_string(),
@@ -1966,6 +1974,7 @@ mod tests {
 
         ta.parameters.push(Parameter {
             name: "n".to_string(),
+            time_varying: false,
         });
         ensure_n_parameter(&ta).expect("n parameter should pass");
     }

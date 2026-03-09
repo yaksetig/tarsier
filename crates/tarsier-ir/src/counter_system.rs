@@ -284,8 +284,8 @@ mod tests {
     #[test]
     fn counter_system_accessors_reflect_underlying_automaton_sizes() {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into() });
-        ta.add_parameter(Parameter { name: "t".into() });
+        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
         ta.add_location(Location {
             name: "L0".into(),
             role: "R".into(),
@@ -309,7 +309,8 @@ mod tests {
             to: 1.into(),
             guard: Guard::trivial(),
             updates: vec![],
-                    collection_updates: vec![],
+            collection_updates: vec![],
+            param_updates: vec![],
         });
 
         let cs: CounterSystem = ta;

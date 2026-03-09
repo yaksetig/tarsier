@@ -712,3 +712,160 @@ fn pipeline_stages_chain_correctly_with_explicit_intermediate_inspection() {
         "bundle should have integrity hash"
     );
 }
+
+// ===========================================================================
+// RECONF-05: Reconfiguration regression tests
+// ===========================================================================
+
+/// A safe protocol with a reconfigure action. Processes can reconfigure the
+/// fault tolerance threshold. Agreement still holds because there is only one
+/// decision value (true).
+const SAFE_RECONFIG_PROTOCOL: &str = r#"
+protocol SafeReconfig {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    message Vote;
+    role Replica {
+        var decided: bool = false;
+        var decision: bool = false;
+        init waiting;
+        phase waiting {
+            when received >= n - t Vote => {
+                reconfigure {
+                    t = t - 1;
+                }
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
+"#;
+
+/// A safe invariant protocol with reconfiguration: the invariant holds regardless
+/// of parameter changes.
+const SAFE_RECONFIG_INVARIANT: &str = r#"
+protocol SafeReconfigInvariant {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    message M;
+    role R {
+        var decided: bool = false;
+        init s;
+        phase s {
+            when received >= n - t M => {
+                reconfigure {
+                    t = t - 1;
+                }
+                goto phase s;
+            }
+        }
+    }
+    property inv: invariant {
+        forall p: R. p.decided == false
+    }
+}
+"#;
+
+#[test]
+fn reconfig_safe_agreement_bmc() {
+    let opts = default_options();
+    let result = pipeline::verify(SAFE_RECONFIG_PROTOCOL, "safe_reconfig.trs", &opts)
+        .expect("BMC should complete");
+    match &result {
+        VerificationResult::Safe { depth_checked } => {
+            assert!(*depth_checked > 0);
+        }
+        other => panic!("Expected SAFE for reconfigured protocol BMC, got: {other}"),
+    }
+}
+
+#[test]
+fn reconfig_safe_agreement_prove() {
+    let opts = default_options();
+    let result = pipeline::prove_safety(SAFE_RECONFIG_PROTOCOL, "safe_reconfig.trs", &opts)
+        .expect("prove should complete");
+    match &result {
+        UnboundedSafetyResult::Safe { induction_k } => {
+            assert!(*induction_k >= 1);
+        }
+        other => panic!("Expected SAFE for reconfigured protocol, got: {other}"),
+    }
+}
+
+#[test]
+fn reconfig_safe_invariant_bmc() {
+    let opts = default_options();
+    let result = pipeline::verify(SAFE_RECONFIG_INVARIANT, "safe_reconfig_inv.trs", &opts)
+        .expect("BMC should complete");
+    match &result {
+        VerificationResult::Safe { depth_checked } => {
+            assert!(*depth_checked > 0);
+        }
+        other => panic!("Expected SAFE for reconfigured invariant BMC, got: {other}"),
+    }
+}
+
+#[test]
+fn reconfig_safe_invariant_prove() {
+    let opts = default_options();
+    let result =
+        pipeline::prove_safety(SAFE_RECONFIG_INVARIANT, "safe_reconfig_inv.trs", &opts)
+            .expect("prove should complete");
+    match &result {
+        UnboundedSafetyResult::Safe { induction_k } => {
+            assert!(*induction_k >= 1);
+        }
+        other => panic!("Expected SAFE for reconfigured invariant, got: {other}"),
+    }
+}
+
+#[test]
+fn reconfig_lowering_marks_params_time_varying() {
+    let program = pipeline::parse(SAFE_RECONFIG_PROTOCOL, "safe_reconfig.trs")
+        .expect("parse should succeed");
+    let ta = pipeline::lower(&program).expect("lower should succeed");
+
+    // 't' should be time-varying (target of reconfigure)
+    let t_id = ta.find_param_by_name("t").expect("t param should exist");
+    assert!(
+        ta.parameters[t_id.as_usize()].time_varying,
+        "t should be marked time-varying after lowering"
+    );
+
+    // 'n' should NOT be time-varying (not reconfigured)
+    let n_id = ta.find_param_by_name("n").expect("n param should exist");
+    assert!(
+        !ta.parameters[n_id.as_usize()].time_varying,
+        "n should remain fixed"
+    );
+
+    // At least one rule should have param_updates
+    assert!(
+        ta.rules.iter().any(|r| !r.param_updates.is_empty()),
+        "some rule should have param_updates from reconfigure"
+    );
+}
+
+#[test]
+fn reconfig_pdr_safe_invariant() {
+    let opts = pdr_options();
+    let result =
+        pipeline::prove_safety(SAFE_RECONFIG_INVARIANT, "safe_reconfig_inv.trs", &opts)
+            .expect("PDR should complete");
+    match &result {
+        UnboundedSafetyResult::Safe { induction_k } => {
+            assert!(*induction_k >= 1);
+        }
+        other => panic!("Expected SAFE for reconfigured invariant (PDR), got: {other}"),
+    }
+}

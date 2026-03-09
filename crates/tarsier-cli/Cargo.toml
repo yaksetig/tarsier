@@ -18,6 +18,7 @@ path = "src/main.rs"
 tarsier-dsl = { path = "../tarsier-dsl", version = "0.1.0" }
 tarsier-ir = { path = "../tarsier-ir", version = "0.1.0", features = ["serialize"] }
 tarsier-engine = { path = "../tarsier-engine", version = "0.1.0" }
+tarsier-smt = { path = "../tarsier-smt", version = "0.1.0" }
 tarsier-codegen = { path = "../tarsier-codegen", version = "0.1.0" }
 tarsier-conformance = { path = "../tarsier-conformance", version = "0.1.0" }
 tarsier-prob = { path = "../tarsier-prob", version = "0.1.0" }

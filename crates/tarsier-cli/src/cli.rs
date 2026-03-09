@@ -220,6 +220,10 @@ pub(crate) enum Commands {
         #[arg(long, default_value_t = false)]
         portfolio: bool,
 
+        /// Run invariant-inference pre-pass to auto-discover strengthening predicates
+        #[arg(long, default_value_t = false)]
+        auto_strengthen: bool,
+
         /// Output format: text | json
         #[arg(long, default_value = "text")]
         format: String,
@@ -932,6 +936,29 @@ pub(crate) enum Commands {
         /// Maximum BMC depth for bounded equivalence check
         #[arg(long, default_value_t = 10)]
         depth: usize,
+
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
+    /// Infer likely invariant predicates from a protocol's structure
+    #[command(display_order = 9)]
+    InferInvariants {
+        /// Path to the .trs protocol file
+        file: PathBuf,
+
+        /// Solver backend to use
+        #[arg(long, default_value = "z3")]
+        solver: String,
+
+        /// Maximum depth for candidate evaluation
+        #[arg(long, default_value_t = 10)]
+        depth: usize,
+
+        /// Timeout in seconds
+        #[arg(long, default_value_t = 300)]
+        timeout: u64,
 
         /// Output format: text | json
         #[arg(long, default_value = "text")]

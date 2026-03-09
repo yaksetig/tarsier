@@ -75,6 +75,7 @@ mod tests {
                 guard: Guard::trivial(),
                 updates: vec![],
                 collection_updates: vec![],
+                param_updates: vec![],
             });
         }
         ta

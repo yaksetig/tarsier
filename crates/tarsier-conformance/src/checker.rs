@@ -9,6 +9,8 @@ use tarsier_ir::threshold_automaton::{
 /// Result of checking a runtime trace against a model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckResult {
+    /// Schema version for JSON output stability.
+    pub schema_version: u32,
     /// Whether the trace passes all checks.
     pub passed: bool,
     /// List of violations found (empty if passed).
@@ -359,6 +361,7 @@ impl<'a> ConformanceChecker<'a> {
         }
 
         CheckResult {
+            schema_version: 1,
             passed: violations.is_empty(),
             violations,
         }
@@ -471,8 +474,8 @@ mod tests {
     /// L0 (Init) --[trivial]--> L2 (Abort)
     fn make_test_automaton() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
-        let _n = ta.add_parameter(Parameter { name: "n".into() });
-        let t = ta.add_parameter(Parameter { name: "t".into() });
+        let _n = ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        let t = ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
 
         // L0: Init
         ta.add_location(Location {
@@ -523,6 +526,7 @@ mod tests {
             }),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
 
         // Rule 1: L0 -> L2, trivial guard
@@ -532,6 +536,7 @@ mod tests {
             guard: Guard::trivial(),
             updates: vec![],
             collection_updates: vec![],
+            param_updates: vec![],
         });
 
         ta

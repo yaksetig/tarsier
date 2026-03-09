@@ -217,6 +217,7 @@ fn run() -> miette::Result<()> {
             cegar_iters,
             cegar_report_out,
             portfolio,
+            auto_strengthen,
             format,
         } => {
             commands::prove::run_prove_command(commands::prove::ProveCommandArgs {
@@ -231,6 +232,7 @@ fn run() -> miette::Result<()> {
                 cegar_iters,
                 cegar_report_out,
                 portfolio,
+                auto_strengthen,
                 format,
                 cli_network_mode,
             })?;
@@ -449,6 +451,15 @@ fn run() -> miette::Result<()> {
             format,
         } => {
             commands::equivalence::run_equivalence_check(&file, &other, depth, &format)?;
+        }
+        Commands::InferInvariants {
+            file,
+            solver,
+            depth,
+            timeout,
+            format,
+        } => {
+            commands::invariant::run_infer_invariants(&file, &solver, depth, timeout, &format)?;
         }
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
