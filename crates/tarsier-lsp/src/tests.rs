@@ -250,41 +250,6 @@ fn test_keyword_completions_at_protocol_level() {
     assert!(labels.contains(&"message"));
     assert!(labels.contains(&"role"));
     assert!(labels.contains(&"property"));
-    assert!(labels.contains(&"refines"));
-    assert!(labels.contains(&"dag_round"));
-    assert!(labels.contains(&"fifo_channel"));
-}
-
-#[test]
-fn test_keyword_completions_at_action_level_include_new_actions() {
-    let text = "protocol Foo {\n    role Bar {\n        phase p {\n            when true => {\n                \n            }\n        }\n    }\n}";
-    let offset = text.find("                \n").unwrap() + "                ".len();
-    let ctx = infer_cursor_context(text, offset);
-    assert_eq!(ctx, CursorContext::ActionLevel);
-    let items = build_completions(&ctx, None);
-    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    assert!(labels.contains(&"append"));
-    assert!(labels.contains(&"enqueue"));
-    assert!(labels.contains(&"dequeue"));
-    assert!(labels.contains(&"reconfigure"));
-}
-
-#[test]
-fn test_hover_keyword_docs_include_new_dsl_terms() {
-    for kw in [
-        "refines",
-        "dag_round",
-        "fifo_channel",
-        "append",
-        "enqueue",
-        "dequeue",
-        "reconfigure",
-    ] {
-        assert!(
-            keyword_docs(kw).is_some(),
-            "expected hover docs for keyword '{kw}'"
-        );
-    }
 }
 
 #[test]

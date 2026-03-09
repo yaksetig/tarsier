@@ -50,22 +50,11 @@ pub struct ProtocolDecl {
     pub channels: Vec<ChannelDecl>,
     pub equivocation_policies: Vec<EquivocationDecl>,
     pub committees: Vec<CommitteeDecl>,
-    pub dag_rounds: Vec<DagRoundDecl>,
     pub collections: Vec<CollectionDecl>,
-    pub clocks: Vec<ClockDecl>,
     pub messages: Vec<MessageDecl>,
     pub crypto_objects: Vec<CryptoObjectDecl>,
     pub roles: Vec<Spanned<RoleDecl>>,
     pub properties: Vec<Spanned<PropertyDecl>>,
-}
-
-/// DAG round declaration.
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
-pub struct DagRoundDecl {
-    pub name: String,
-    pub parents: Vec<String>,
-    pub span: Span,
 }
 
 /// Import declaration: `import ModuleName from "path";`
@@ -295,14 +284,6 @@ pub struct CollectionDecl {
     pub span: Span,
 }
 
-/// Protocol-level logical clock declaration.
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
-pub struct ClockDecl {
-    pub name: String,
-    pub span: Span,
-}
-
 /// First-class cryptographic object declaration.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize))]
@@ -412,11 +393,6 @@ pub enum GuardExpr {
     HasCryptoObject {
         object_name: String,
         object_args: Vec<(String, Expr)>,
-    },
-    Timeout {
-        clock: String,
-        op: CmpOp,
-        threshold: LinearExpr,
     },
     Comparison {
         lhs: Expr,
@@ -558,13 +534,6 @@ pub enum Action {
     },
     Dequeue {
         collection: String,
-    },
-    ResetClock {
-        clock: String,
-    },
-    TickClock {
-        clock: String,
-        amount: Option<LinearExpr>,
     },
     Assign {
         var: String,

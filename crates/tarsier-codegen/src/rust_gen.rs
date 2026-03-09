@@ -587,16 +587,6 @@ fn render_guard(guard: &GuardExpr, params: &HashSet<String>) -> String {
             let op_str = render_cmp_op(op);
             format!("{l} {op_str} {r}")
         }
-        GuardExpr::Timeout {
-            clock,
-            op,
-            threshold,
-        } => {
-            let l = format!("self.{clock}");
-            let r = render_linear_expr(threshold, params, CodegenTarget::Rust);
-            let op_str = render_cmp_op(op);
-            format!("{l} {op_str} {r}")
-        }
         GuardExpr::BoolVar(name) => {
             format!("self.{name}")
         }
@@ -703,16 +693,6 @@ fn write_actions(
                         param = upd.param,
                         val = upd.value)?;
                 }
-            }
-            Action::ResetClock { clock } => {
-                writeln!(out, "{indent}self.{clock} = 0;")?;
-            }
-            Action::TickClock { clock, amount } => {
-                let delta = amount
-                    .as_ref()
-                    .map(|expr| render_linear_expr(expr, params, CodegenTarget::Rust))
-                    .unwrap_or_else(|| "1".to_string());
-                writeln!(out, "{indent}self.{clock} = self.{clock} + {delta};")?;
             }
         }
     }

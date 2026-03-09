@@ -21,9 +21,7 @@ protocol_item = _{
     | channel_decl
     | equivocation_decl
     | committee_decl
-    | dag_round_decl
     | collection_decl
-    | clock_decl
     | message_decl
     | crypto_object_decl
     | role_decl
@@ -148,19 +146,11 @@ committee_decl = {
 committee_item = { ident ~ ":" ~ committee_value ~ ";" }
 committee_value = _{ float_literal | int_literal | ident }
 
-// --- DAG rounds ---
-dag_round_decl = {
-    "dag_round" ~ ident ~ ("extends" ~ ident_list)? ~ ";"
-}
-
 // --- Bounded log/sequence types ---
 collection_decl = {
     collection_kind ~ ident ~ ":" ~ field_type ~ "[" ~ linear_expr ~ "]" ~ ";"
 }
 collection_kind = { "log" | "sequence" | "fifo_channel" }
-
-// --- Clocks / timeouts ---
-clock_decl = { "clock" ~ ident ~ ";" }
 
 // --- Messages ---
 message_decl = {
@@ -216,7 +206,6 @@ guard_expr = { guard_atom ~ (guard_op ~ guard_atom)* }
 guard_atom = _{
     threshold_guard
     | has_crypto_guard
-    | timeout_guard
     | comparison_guard
     | bool_guard
     | "(" ~ guard_expr ~ ")"
@@ -228,7 +217,6 @@ threshold_guard = {
 distinct_kw = { "distinct" }
 
 has_crypto_guard = { "has" ~ ident ~ msg_filter? }
-timeout_guard = { "timeout" ~ ident ~ cmp_op ~ linear_expr_no_implicit }
 
 msg_filter = { "(" ~ msg_filter_list? ~ ")" }
 msg_filter_list = { msg_filter_item ~ ("," ~ msg_filter_item)* }
@@ -252,8 +240,6 @@ action = _{
     | dequeue_action
     | append_action
     | reconfigure_action
-    | reset_clock_action
-    | tick_clock_action
     | assign_action
     | goto_action
     | decide_action
@@ -262,8 +248,6 @@ action = _{
 append_action = { "append" ~ ident ~ expr ~ ";" }
 enqueue_action = { "enqueue" ~ ident ~ expr ~ ";" }
 dequeue_action = { "dequeue" ~ ident ~ ";" }
-reset_clock_action = { "reset" ~ ident ~ ";" }
-tick_clock_action = { "tick" ~ ident ~ ("by" ~ linear_expr_no_implicit)? ~ ";" }
 
 send_action = {
     "send" ~ ident ~
