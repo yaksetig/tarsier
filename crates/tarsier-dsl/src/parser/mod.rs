@@ -181,6 +181,7 @@ fn parse_protocol(
     let mut channels = Vec::new();
     let mut equivocation_policies = Vec::new();
     let mut committees = Vec::new();
+    let mut dag_rounds = Vec::new();
     let mut collections = Vec::new();
     let mut messages = Vec::new();
     let mut crypto_objects = Vec::new();
@@ -240,6 +241,9 @@ fn parse_protocol(
             Rule::committee_decl => {
                 committees.push(parse_committee(item)?);
             }
+            Rule::dag_round_decl => {
+                dag_rounds.push(parse_dag_round(item)?);
+            }
             Rule::collection_decl => {
                 collections.push(parse_collection(item)?);
             }
@@ -284,6 +288,7 @@ fn parse_protocol(
             channels,
             equivocation_policies,
             committees,
+            dag_rounds,
             collections,
             messages,
             crypto_objects,
@@ -361,6 +366,7 @@ fn parse_module(pair: Pair<'_>, _source: &str, _filename: &str) -> Result<Module
             | Rule::enum_decl
             | Rule::crypto_object_decl
             | Rule::committee_decl
+            | Rule::dag_round_decl
             | Rule::collection_decl
             | Rule::channel_decl
             | Rule::equivocation_decl
@@ -705,6 +711,27 @@ fn parse_identity(pair: Pair<'_>) -> Result<IdentityDecl, ParseError> {
         scope,
         process_var,
         key,
+        span,
+    })
+}
+
+fn parse_dag_round(pair: Pair<'_>) -> Result<DagRoundDecl, ParseError> {
+    let span = span_from(&pair);
+    let mut inner = pair.into_inner();
+    let name = next_child(&mut inner, "dag_round name")?
+        .as_str()
+        .to_string();
+    let mut parents = Vec::new();
+    if let Some(maybe_list) = inner.next() {
+        for item in maybe_list.into_inner() {
+            if item.as_rule() == Rule::ident {
+                parents.push(item.as_str().to_string());
+            }
+        }
+    }
+    Ok(DagRoundDecl {
+        name,
+        parents,
         span,
     })
 }

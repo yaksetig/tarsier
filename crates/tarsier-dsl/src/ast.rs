@@ -50,11 +50,21 @@ pub struct ProtocolDecl {
     pub channels: Vec<ChannelDecl>,
     pub equivocation_policies: Vec<EquivocationDecl>,
     pub committees: Vec<CommitteeDecl>,
+    pub dag_rounds: Vec<DagRoundDecl>,
     pub collections: Vec<CollectionDecl>,
     pub messages: Vec<MessageDecl>,
     pub crypto_objects: Vec<CryptoObjectDecl>,
     pub roles: Vec<Spanned<RoleDecl>>,
     pub properties: Vec<Spanned<PropertyDecl>>,
+}
+
+/// DAG round declaration.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
+pub struct DagRoundDecl {
+    pub name: String,
+    pub parents: Vec<String>,
+    pub span: Span,
 }
 
 /// Import declaration: `import ModuleName from "path";`
