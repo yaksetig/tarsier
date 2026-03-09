@@ -11,7 +11,7 @@ mod validation;
 
 use indexmap::{IndexMap, IndexSet};
 use miette::{Diagnostic, NamedSource, SourceSpan};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 use crate::threshold_automaton::*;
@@ -413,6 +413,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             parent_rounds: round.parents.clone(),
         });
     }
+    validate_dag_rounds(&ta.dag_rounds)?;
 
     // 2e. Process bounded collection declarations
     for coll in &proto.collections {
@@ -1646,6 +1647,71 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
     validate_identity_and_key_invariants(&ta)?;
 
     Ok(ta)
+}
+
+fn validate_dag_rounds(rounds: &[IrDagRoundSpec]) -> Result<(), LoweringError> {
+    if rounds.is_empty() {
+        return Ok(());
+    }
+
+    let mut round_index: HashMap<&str, usize> = HashMap::new();
+    for (idx, round) in rounds.iter().enumerate() {
+        if round_index.insert(round.name.as_str(), idx).is_some() {
+            return Err(LoweringError::Unsupported(format!(
+                "Duplicate dag_round declaration '{}'",
+                round.name
+            )));
+        }
+    }
+
+    for round in rounds {
+        for parent in &round.parent_rounds {
+            if !round_index.contains_key(parent.as_str()) {
+                return Err(LoweringError::Unsupported(format!(
+                    "dag_round '{}' references unknown parent '{}'",
+                    round.name, parent
+                )));
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum VisitState {
+        Visiting,
+        Done,
+    }
+
+    fn dfs<'a>(
+        node: &'a str,
+        rounds: &'a [IrDagRoundSpec],
+        idx: &HashMap<&'a str, usize>,
+        state: &mut HashMap<&'a str, VisitState>,
+    ) -> Result<(), LoweringError> {
+        if let Some(existing) = state.get(node) {
+            return match existing {
+                VisitState::Done => Ok(()),
+                VisitState::Visiting => Err(LoweringError::Unsupported(format!(
+                    "dag_round dependency graph contains a cycle involving '{}'",
+                    node
+                ))),
+            };
+        }
+
+        state.insert(node, VisitState::Visiting);
+        let round = &rounds[idx[node]];
+        for parent in &round.parent_rounds {
+            dfs(parent.as_str(), rounds, idx, state)?;
+        }
+        state.insert(node, VisitState::Done);
+        Ok(())
+    }
+
+    let mut state: HashMap<&str, VisitState> = HashMap::new();
+    for round in rounds {
+        dfs(round.name.as_str(), rounds, &round_index, &mut state)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -2301,6 +2301,74 @@ role Replica {
 }
 
 #[test]
+fn lower_dag_round_rejects_unknown_parent() {
+    let src = r#"
+protocol DagRoundUnknownParent {
+params n, t;
+resilience: n > 3*t;
+dag_round r0 extends missing;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    let prog = parse(src, "dag_round_unknown_parent.trs").unwrap();
+    let err = lower(&prog).expect_err("lowering should reject unknown dag parent");
+    match err {
+        LoweringError::Unsupported(msg) => assert!(msg.contains("unknown parent")),
+        other => panic!("expected Unsupported, got {:?}", other),
+    }
+}
+
+#[test]
+fn lower_dag_round_rejects_cycles() {
+    let src = r#"
+protocol DagRoundCycle {
+params n, t;
+resilience: n > 3*t;
+dag_round r0 extends r1;
+dag_round r1 extends r0;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    let prog = parse(src, "dag_round_cycle.trs").unwrap();
+    let err = lower(&prog).expect_err("lowering should reject dag cycles");
+    match err {
+        LoweringError::Unsupported(msg) => assert!(msg.contains("cycle")),
+        other => panic!("expected Unsupported, got {:?}", other),
+    }
+}
+
+#[test]
+fn lower_dag_round_rejects_duplicate_names() {
+    let src = r#"
+protocol DagRoundDuplicate {
+params n, t;
+resilience: n > 3*t;
+dag_round r0;
+dag_round r0;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    let prog = parse(src, "dag_round_duplicate.trs").unwrap();
+    let err = lower(&prog).expect_err("lowering should reject duplicate dag rounds");
+    match err {
+        LoweringError::Unsupported(msg) => assert!(msg.contains("Duplicate dag_round")),
+        other => panic!("expected Unsupported, got {:?}", other),
+    }
+}
+
+#[test]
 fn lower_byzantine_adversary_model() {
     let src = r#"
 protocol ByzantineCfg {
