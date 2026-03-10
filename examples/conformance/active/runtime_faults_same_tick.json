@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "faults": [
+    { "tick": 9, "kind": "drop_message", "channel": "Vote", "from_process": 1, "to_process": 2 },
+    { "tick": 9, "kind": "spawn_twin", "process_id": 9, "twin_id": 9001 },
+    { "tick": 9, "action": { "kind": "heal_partition" } },
+    { "tick": 10, "kind": "retire_twin", "twin_id": 9001 }
+  ]
+}

@@ -1153,107 +1153,161 @@ mod active_tests {
         );
     }
 
+    struct ActiveCorpusCase {
+        adapter: &'static str,
+        fixture: &'static str,
+        seed: u64,
+        expected_faults: usize,
+    }
+
+    fn active_corpus_cases() -> Vec<ActiveCorpusCase> {
+        vec![
+            ActiveCorpusCase {
+                adapter: "cometbft",
+                fixture: "cometbft_faults_basic.json",
+                seed: 11,
+                expected_faults: 6,
+            },
+            ActiveCorpusCase {
+                adapter: "runtime",
+                fixture: "runtime_faults_basic.json",
+                seed: 5,
+                expected_faults: 3,
+            },
+            ActiveCorpusCase {
+                adapter: "etcd-raft",
+                fixture: "etcd_raft_faults_basic.json",
+                seed: 17,
+                expected_faults: 6,
+            },
+        ]
+    }
+
+    fn active_same_tick_cases() -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("cometbft", "cometbft_faults_same_tick.json"),
+            ("runtime", "runtime_faults_same_tick.json"),
+            ("etcd-raft", "etcd_raft_faults_same_tick.json"),
+        ]
+    }
+
+    fn action_kinds(value: &serde_json::Value) -> Vec<String> {
+        value["faults"]
+            .as_array()
+            .expect("faults array")
+            .iter()
+            .map(|f| {
+                f["action"]["kind"]
+                    .as_str()
+                    .expect("kind string")
+                    .to_string()
+            })
+            .collect()
+    }
+
     #[test]
-    fn conformance_active_command_corpus_fixture_writes_expected_json_shape() {
-        let trace = active_fixture_path("cometbft_faults_basic.json");
-        let out = tmp_path("tarsier_conformance_active");
-        run_conformance_active_command(&trace, "cometbft", 11, "json", Some(&out), None, 5000)
+    fn conformance_active_command_corpus_matrix_writes_expected_json_shape() {
+        for case in active_corpus_cases() {
+            let trace = active_fixture_path(case.fixture);
+            let out = tmp_path(&format!("tarsier_conformance_active_{}", case.adapter));
+            run_conformance_active_command(
+                &trace,
+                case.adapter,
+                case.seed,
+                "json",
+                Some(&out),
+                None,
+                5000,
+            )
             .expect("conformance-active should succeed on corpus fixture");
 
-        let raw = fs::read_to_string(&out).expect("output JSON should be readable");
-        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
-        assert_eq!(value["schema_version"], 1);
-        assert_eq!(value["adapter"], "cometbft");
-        assert_eq!(value["seed"], 11);
-        assert!(
-            value["faults"]
-                .as_array()
-                .expect("faults should be array")
-                .len()
-                >= 4
-        );
-        fs::remove_file(out).ok();
+            let raw = fs::read_to_string(&out).expect("output JSON should be readable");
+            let value: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
+            assert_eq!(value["schema_version"], 1);
+            assert_eq!(value["adapter"], case.adapter);
+            assert_eq!(value["seed"], case.seed);
+            assert_eq!(
+                value["faults"]
+                    .as_array()
+                    .expect("faults should be array")
+                    .len(),
+                case.expected_faults
+            );
+            fs::remove_file(out).ok();
+        }
     }
 
     #[test]
-    fn conformance_active_command_runtime_fixture_writes_expected_json_shape() {
-        let trace = active_fixture_path("runtime_faults_basic.json");
-        let out = tmp_path("tarsier_conformance_active_runtime");
-        run_conformance_active_command(&trace, "runtime", 5, "json", Some(&out))
-            .expect("conformance-active should succeed on runtime fixture");
+    fn conformance_active_command_same_seed_is_deterministic_for_corpus_matrix() {
+        for case in active_corpus_cases() {
+            let trace = active_fixture_path(case.fixture);
+            let out_a = tmp_path(&format!(
+                "tarsier_conformance_active_det_a_{}",
+                case.adapter
+            ));
+            let out_b = tmp_path(&format!(
+                "tarsier_conformance_active_det_b_{}",
+                case.adapter
+            ));
 
-        let raw = fs::read_to_string(&out).expect("output JSON should be readable");
-        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
-        assert_eq!(value["schema_version"], 1);
-        assert_eq!(value["adapter"], "runtime");
-        assert_eq!(value["seed"], 5);
-        assert_eq!(
-            value["faults"]
-                .as_array()
-                .expect("faults should be array")
-                .len(),
-            3
-        );
-        fs::remove_file(out).ok();
+            run_conformance_active_command(
+                &trace,
+                case.adapter,
+                case.seed,
+                "json",
+                Some(&out_a),
+                None,
+                5000,
+            )
+            .expect("first deterministic replay should pass");
+            run_conformance_active_command(
+                &trace,
+                case.adapter,
+                case.seed,
+                "json",
+                Some(&out_b),
+                None,
+                5000,
+            )
+            .expect("second deterministic replay should pass");
+
+            let a: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&out_a).expect("seed a output"))
+                    .expect("seed a json");
+            let b: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&out_b).expect("seed b output"))
+                    .expect("seed b json");
+            assert_eq!(a["faults"], b["faults"]);
+
+            fs::remove_file(out_a).ok();
+            fs::remove_file(out_b).ok();
+        }
     }
 
     #[test]
-    fn conformance_active_command_etcd_raft_fixture_writes_expected_json_shape() {
-        let trace = active_fixture_path("etcd_raft_faults_basic.json");
-        let out = tmp_path("tarsier_conformance_active_etcd");
-        run_conformance_active_command(&trace, "etcd-raft", 17, "json", Some(&out))
-            .expect("conformance-active should succeed on etcd-raft fixture");
+    fn conformance_active_command_seed_changes_same_tick_order_for_corpus_matrix() {
+        for (adapter, fixture) in active_same_tick_cases() {
+            let trace = active_fixture_path(fixture);
+            let out_a = tmp_path(&format!("tarsier_conformance_active_seed_a_{adapter}"));
+            let out_b = tmp_path(&format!("tarsier_conformance_active_seed_b_{adapter}"));
 
-        let raw = fs::read_to_string(&out).expect("output JSON should be readable");
-        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
-        assert_eq!(value["schema_version"], 1);
-        assert_eq!(value["adapter"], "etcd-raft");
-        assert_eq!(value["seed"], 17);
-        assert_eq!(
-            value["faults"]
-                .as_array()
-                .expect("faults should be array")
-                .len(),
-            6
-        );
-        fs::remove_file(out).ok();
-    }
+            run_conformance_active_command(&trace, adapter, 1, "json", Some(&out_a), None, 5000)
+                .expect("seed 1 run should pass");
+            run_conformance_active_command(&trace, adapter, 2, "json", Some(&out_b), None, 5000)
+                .expect("seed 2 run should pass");
 
-    #[test]
-    fn conformance_active_command_seed_changes_same_tick_order_for_corpus_fixture() {
-        let trace = active_fixture_path("cometbft_faults_same_tick.json");
-        let out_a = tmp_path("tarsier_conformance_active_seed_a");
-        let out_b = tmp_path("tarsier_conformance_active_seed_b");
+            let a: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&out_a).expect("seed a output"))
+                    .expect("seed a json");
+            let b: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&out_b).expect("seed b output"))
+                    .expect("seed b json");
 
-        run_conformance_active_command(&trace, "cometbft", 1, "json", Some(&out_a), None, 5000)
-            .expect("seed 1 run should pass");
-        run_conformance_active_command(&trace, "cometbft", 2, "json", Some(&out_b), None, 5000)
-            .expect("seed 2 run should pass");
+            assert_ne!(action_kinds(&a), action_kinds(&b));
 
-        let a: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&out_a).expect("seed a output"))
-                .expect("seed a json");
-        let b: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&out_b).expect("seed b output"))
-                .expect("seed b json");
-
-        let names = |v: &serde_json::Value| -> Vec<String> {
-            v["faults"]
-                .as_array()
-                .expect("faults array")
-                .iter()
-                .map(|f| {
-                    f["action"]["kind"]
-                        .as_str()
-                        .expect("kind string")
-                        .to_string()
-                })
-                .collect()
-        };
-        assert_ne!(names(&a), names(&b));
-
-        fs::remove_file(out_a).ok();
-        fs::remove_file(out_b).ok();
+            fs::remove_file(out_a).ok();
+            fs::remove_file(out_b).ok();
+        }
     }
 
     #[test]

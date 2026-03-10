@@ -149,6 +149,14 @@ jobs:
       - name: CLI Feature Contract (Default Build)
         run: cargo test -p tarsier-cli --test cli_feature_contract_default -- --nocapture
 
+      - name: Twins Active Replay Corpus Gate
+        run: |
+          cargo test -p tarsier-cli conformance_active_command_corpus_matrix_writes_expected_json_shape -- --nocapture
+          cargo test -p tarsier-cli conformance_active_command_same_seed_is_deterministic_for_corpus_matrix -- --nocapture
+          cargo test -p tarsier-cli conformance_active_command_seed_changes_same_tick_order_for_corpus_matrix -- --nocapture
+          cargo test -p tarsier-cli conformance_active_live_mode_posts_contract_events -- --nocapture
+          cargo test -p tarsier-cli conformance_active_live_mode_reports_endpoint_errors -- --nocapture
+
       - name: Checker Soundness Subset Gate
         run: |
           output=$(cargo test -p tarsier-proof-kernel soundness_subset_ -- --nocapture 2>&1)
