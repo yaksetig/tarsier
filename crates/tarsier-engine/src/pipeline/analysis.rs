@@ -513,12 +513,13 @@ pub(super) fn analyze_and_constrain_committees(
             }
         }
         if candidate_params.len() == 1 {
-            let pid = *candidate_params.iter().next().expect("len() checked");
-            ta.constraints.adversary_bound_param = Some(pid);
-            info!(
-                param = %ta.parameters[pid.as_usize()].name,
-                "Using committee-derived adversary bound parameter"
-            );
+            if let Some(&pid) = candidate_params.iter().next() {
+                ta.constraints.adversary_bound_param = Some(pid);
+                info!(
+                    param = %ta.parameters[pid.as_usize()].name,
+                    "Using committee-derived adversary bound parameter"
+                );
+            }
         } else if candidate_params.len() > 1 {
             return Err(PipelineError::Property(
                 "Multiple committee bound parameters found but adversary.bound is not set. \
