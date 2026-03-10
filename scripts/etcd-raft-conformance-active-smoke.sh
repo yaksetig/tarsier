@@ -55,6 +55,33 @@ print("fixture contract ok")
 PY
 }
 
+assert_live_etcd_contract() {
+  local endpoint="$1"
+  python3 - "$endpoint" <<'PY'
+import json
+import sys
+import urllib.request
+
+endpoint = sys.argv[1].rstrip("/")
+
+def get_json(path: str):
+    with urllib.request.urlopen(f"{endpoint}{path}", timeout=5) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+version = get_json("/version")
+server = version.get("etcdserver")
+cluster = version.get("etcdcluster")
+assert server, "etcd /version missing etcdserver"
+assert cluster, "etcd /version missing etcdcluster"
+
+health = get_json("/health")
+healthy = health.get("health")
+assert healthy in ("true", True), f"unexpected etcd health payload: {health}"
+
+print(f"etcd http contract ok: server={server} cluster={cluster}")
+PY
+}
+
 start_mock_live_endpoint() {
   python3 -u - "$SERVER_PORT" "$EVENTS_FILE" <<'PY' >"$SERVER_LOG" 2>&1 &
 import http.server
@@ -134,6 +161,7 @@ run_smoke() {
   "$HARNESS_SCRIPT" start
   ETCD_ENDPOINT="$("$HARNESS_SCRIPT" endpoint)"
   curl -fsS "${ETCD_ENDPOINT}/health" >/dev/null
+  assert_live_etcd_contract "$ETCD_ENDPOINT"
 
   start_mock_live_endpoint
   wait_for_mock_endpoint

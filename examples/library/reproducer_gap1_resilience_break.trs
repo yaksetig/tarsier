@@ -5,8 +5,8 @@
 // only asserted on initial parameter values (global p_i), not on per-step
 // epoch variables (p_i_k).
 //
-// Expected verdict after RECONF-02 fix: UNSAFE (resilience violation at step 1).
-// Current verdict: SAFE (false positive — resilience breach is invisible).
+// Expected verdict in strict mode: VALIDATION ERROR (reconfigure weakens resilience).
+// Permissive mode may still report SAFE because strict fail-closed checks are disabled.
 
 protocol ResilienceBreakReproducer {
     params n, t, f;

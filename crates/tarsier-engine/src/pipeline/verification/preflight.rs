@@ -1,6 +1,6 @@
 //\! Guard analysis, protocol queries, preflight validation.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::pipeline::verification::*;
 use crate::pipeline::*;
@@ -74,6 +74,120 @@ pub(crate) fn guard_has_non_monotone_threshold(guard: &ast::GuardExpr) -> bool {
             guard_has_non_monotone_threshold(lhs) || guard_has_non_monotone_threshold(rhs)
         }
         _ => false,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReconfigureUpdateEffect {
+    Increase,
+    Decrease,
+    NoChange,
+    Constant,
+    Unknown,
+}
+
+fn collect_linear_coefficients(expr: &ast::LinearExpr, scale: i64, out: &mut HashMap<String, i64>) {
+    match expr {
+        ast::LinearExpr::Const(_) => {}
+        ast::LinearExpr::Var(name) => {
+            *out.entry(name.clone()).or_insert(0) += scale;
+        }
+        ast::LinearExpr::Add(lhs, rhs) => {
+            collect_linear_coefficients(lhs, scale, out);
+            collect_linear_coefficients(rhs, scale, out);
+        }
+        ast::LinearExpr::Sub(lhs, rhs) => {
+            collect_linear_coefficients(lhs, scale, out);
+            collect_linear_coefficients(rhs, -scale, out);
+        }
+        ast::LinearExpr::Mul(factor, inner) => {
+            collect_linear_coefficients(inner, scale * *factor, out);
+        }
+    }
+}
+
+fn resilience_param_coefficients(expr: &ast::ResilienceExpr) -> HashMap<String, i64> {
+    let mut out = HashMap::new();
+    collect_linear_coefficients(&expr.lhs, 1, &mut out);
+    collect_linear_coefficients(&expr.rhs, -1, &mut out);
+    out.retain(|_, coeff| *coeff != 0);
+    out
+}
+
+fn expr_param_delta(param: &str, value: &ast::Expr) -> Option<i64> {
+    match value {
+        ast::Expr::Var(name) if name == param => Some(0),
+        ast::Expr::Add(lhs, rhs) => {
+            if let ast::Expr::Var(name) = lhs.as_ref() {
+                if name == param {
+                    if let ast::Expr::IntLit(c) = rhs.as_ref() {
+                        return Some(*c);
+                    }
+                }
+            }
+            if let ast::Expr::Var(name) = rhs.as_ref() {
+                if name == param {
+                    if let ast::Expr::IntLit(c) = lhs.as_ref() {
+                        return Some(*c);
+                    }
+                }
+            }
+            None
+        }
+        ast::Expr::Sub(lhs, rhs) => {
+            if let ast::Expr::Var(name) = lhs.as_ref() {
+                if name == param {
+                    if let ast::Expr::IntLit(c) = rhs.as_ref() {
+                        return Some(-*c);
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn classify_reconfigure_update_effect(param: &str, value: &ast::Expr) -> ReconfigureUpdateEffect {
+    if let Some(delta) = expr_param_delta(param, value) {
+        return if delta > 0 {
+            ReconfigureUpdateEffect::Increase
+        } else if delta < 0 {
+            ReconfigureUpdateEffect::Decrease
+        } else {
+            ReconfigureUpdateEffect::NoChange
+        };
+    }
+    if matches!(value, ast::Expr::IntLit(_)) {
+        ReconfigureUpdateEffect::Constant
+    } else {
+        ReconfigureUpdateEffect::Unknown
+    }
+}
+
+fn reconfigure_update_may_weaken_resilience(
+    op: ast::CmpOp,
+    coeff_lhs_minus_rhs: i64,
+    effect: ReconfigureUpdateEffect,
+) -> bool {
+    if coeff_lhs_minus_rhs == 0 {
+        return false;
+    }
+
+    let effective_coeff = match op {
+        ast::CmpOp::Gt | ast::CmpOp::Ge => coeff_lhs_minus_rhs,
+        ast::CmpOp::Lt | ast::CmpOp::Le => -coeff_lhs_minus_rhs,
+        ast::CmpOp::Eq | ast::CmpOp::Ne => coeff_lhs_minus_rhs,
+    };
+
+    match op {
+        ast::CmpOp::Eq | ast::CmpOp::Ne => !matches!(effect, ReconfigureUpdateEffect::NoChange),
+        _ => match effect {
+            ReconfigureUpdateEffect::Increase => effective_coeff < 0,
+            ReconfigureUpdateEffect::Decrease => effective_coeff > 0,
+            ReconfigureUpdateEffect::NoChange => false,
+            ReconfigureUpdateEffect::Constant | ReconfigureUpdateEffect::Unknown => true,
+        },
     }
 }
 
@@ -227,6 +341,69 @@ pub(crate) fn strict_preflight_validate(
     }
     if proto.resilience.is_none() {
         issues.push("Missing resilience declaration.".into());
+    }
+
+    if let Some(resilience) = &proto.resilience {
+        let coeffs = resilience_param_coefficients(&resilience.condition);
+        if !coeffs.is_empty() {
+            let mut risky_updates: Vec<String> = Vec::new();
+            for role in &proto.roles {
+                for phase in &role.node.phases {
+                    for tr in &phase.node.transitions {
+                        for action in &tr.node.actions {
+                            if let ast::Action::Reconfigure { updates } = action {
+                                for update in updates {
+                                    let Some(&coeff) = coeffs.get(&update.param) else {
+                                        continue;
+                                    };
+                                    let effect = classify_reconfigure_update_effect(
+                                        &update.param,
+                                        &update.value,
+                                    );
+                                    if reconfigure_update_may_weaken_resilience(
+                                        resilience.condition.op,
+                                        coeff,
+                                        effect,
+                                    ) {
+                                        risky_updates.push(format!(
+                                            "{}.{}: {} = {}",
+                                            role.node.name,
+                                            phase.node.name,
+                                            update.param,
+                                            update.value
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !risky_updates.is_empty() {
+                let listed = risky_updates
+                    .iter()
+                    .take(6)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let overflow = risky_updates.len().saturating_sub(6);
+                let suffix = if overflow > 0 {
+                    format!(" (+{overflow} more)")
+                } else {
+                    String::new()
+                };
+                issues.push(format!(
+                    "Reconfigure updates may weaken resilience `{}` and are rejected in strict mode: {}{}. \
+                     Use monotone-preserving updates (e.g., `t = t - 1` for `n > 3*t`) or switch to permissive mode.",
+                    format_args!(
+                        "{} {} {}",
+                        resilience.condition.lhs, resilience.condition.op, resilience.condition.rhs
+                    ),
+                    listed,
+                    suffix
+                ));
+            }
+        }
     }
 
     for role in &proto.roles {
@@ -992,6 +1169,61 @@ mod tests {
         assert!(effective_message_non_equivocating(&proto, "Vote", "full"));
         // Message not covered by policy falls back to global
         assert!(!effective_message_non_equivocating(&proto, "Other", "full"));
+    }
+
+    fn strict_reconfigure_protocol(update_stmt: &str) -> String {
+        format!(
+            r#"
+protocol StrictReconfigure {{
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary {{ model: byzantine; bound: f; }}
+    message Vote;
+    role Replica {{
+        var decided: bool = false;
+        init waiting;
+        phase waiting {{
+            when received >= 1 Vote => {{
+                reconfigure {{
+                    {update_stmt};
+                }}
+                goto phase waiting;
+            }}
+        }}
+    }}
+    property inv: invariant {{
+        forall p: Replica. p.decided == false
+    }}
+}}
+"#
+        )
+    }
+
+    #[test]
+    fn strict_preflight_rejects_resilience_weakening_reconfigure_update() {
+        let src = strict_reconfigure_protocol("t = t + 1");
+        let program = tarsier_dsl::parse(&src, "strict_weakening.trs").expect("parse");
+        let err = strict_preflight_validate(&program, PipelineCommand::Verify)
+            .expect_err("strict preflight should reject resilience-weakening reconfigure");
+        let msg = err.to_string();
+        assert!(msg.contains("may weaken resilience"));
+        assert!(msg.contains("t = (t + 1)") || msg.contains("t = t + 1"));
+    }
+
+    #[test]
+    fn strict_preflight_allows_resilience_strengthening_reconfigure_update() {
+        let src = strict_reconfigure_protocol("t = t - 1");
+        let program = tarsier_dsl::parse(&src, "strict_strengthening.trs").expect("parse");
+        strict_preflight_validate(&program, PipelineCommand::Verify)
+            .expect("strict preflight should allow resilience-strengthening updates");
+    }
+
+    #[test]
+    fn strict_preflight_ignores_reconfigure_updates_outside_resilience_expression() {
+        let src = strict_reconfigure_protocol("f = f + 1");
+        let program = tarsier_dsl::parse(&src, "strict_unrelated.trs").expect("parse");
+        strict_preflight_validate(&program, PipelineCommand::Verify)
+            .expect("strict preflight should ignore updates to unrelated parameters");
     }
 
     #[test]

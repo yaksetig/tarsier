@@ -55,6 +55,48 @@ print("fixture contract ok")
 PY
 }
 
+assert_live_cometbft_contract() {
+  local endpoint="$1"
+  python3 - "$endpoint" <<'PY'
+import json
+import sys
+import time
+import urllib.request
+
+endpoint = sys.argv[1].rstrip("/")
+
+def get_json(path: str):
+    with urllib.request.urlopen(f"{endpoint}{path}", timeout=5) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+status_before = get_json("/status")
+result_before = status_before.get("result", {})
+sync_before = result_before.get("sync_info", {})
+height_before = int(sync_before.get("latest_block_height", "0"))
+node_info = result_before.get("node_info", {})
+node_id = node_info.get("id", "")
+network = node_info.get("network", "")
+
+assert node_id, "cometbft status missing node_info.id"
+assert network, "cometbft status missing node_info.network"
+
+time.sleep(2)
+status_after = get_json("/status")
+height_after = int(
+    status_after.get("result", {})
+    .get("sync_info", {})
+    .get("latest_block_height", "0")
+)
+assert height_after >= height_before, (
+    f"cometbft height regressed: before={height_before} after={height_after}"
+)
+print(
+    f"cometbft rpc contract ok: node_id={node_id} network={network} "
+    f"height_before={height_before} height_after={height_after}"
+)
+PY
+}
+
 start_mock_live_endpoint() {
   python3 -u - "$SERVER_PORT" "$EVENTS_FILE" <<'PY' >"$SERVER_LOG" 2>&1 &
 import http.server
@@ -134,6 +176,7 @@ run_smoke() {
   "$HARNESS_SCRIPT" start
   COMET_ENDPOINT="$("$HARNESS_SCRIPT" endpoint)"
   curl -fsS "${COMET_ENDPOINT}/health" >/dev/null
+  assert_live_cometbft_contract "$COMET_ENDPOINT"
 
   start_mock_live_endpoint
   wait_for_mock_endpoint

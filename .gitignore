@@ -23,6 +23,10 @@ benchmarks/results/
 
 # Temporary files
 *.tmp
+.cache/
+.cargo/
+.local_backups/
+.worktrees/
 
 # Z3 trace files
 .z3-trace

@@ -220,6 +220,7 @@ The smoke script verifies:
 
 - adapter is `cometbft`;
 - schema version and seed are stable;
+- live CometBFT RPC contract (`/status`) is valid and non-regressing;
 - expected fault/tick counts are deterministic;
 - live contract metadata is `tarsier.active.v1`;
 - endpoint receives the exact deterministic `start -> tick/fault* -> stop` sequence.
@@ -280,6 +281,7 @@ The smoke script verifies:
 
 - adapter is `etcd-raft`;
 - schema version and seed are stable;
+- live etcd HTTP contract (`/version` and `/health`) is valid;
 - expected fault/tick counts are deterministic;
 - live contract metadata is `tarsier.active.v1`;
 - endpoint receives the exact deterministic `start -> tick/fault* -> stop` sequence.
