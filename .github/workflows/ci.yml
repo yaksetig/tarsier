@@ -43,6 +43,9 @@ jobs:
       - name: Enforce Clean Worktree Contract
         run: ./scripts/check-clean-worktree.sh
 
+      - name: Enforce Engine No-Panic Policy
+        run: ./scripts/check-engine-no-panic.sh
+
       - name: Enforce Trust/Docs Consistency
         run: python3 ./.github/scripts/check_trust_doc_consistency.py
 
