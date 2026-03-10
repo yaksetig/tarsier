@@ -54,6 +54,13 @@ See [Building from Source](#building-from-source) below.
   - Ubuntu/Debian: `sudo apt install cmake`
   - Fedora: `sudo dnf install cmake`
 
+Optional but recommended for multi-solver workflows:
+- **cvc5**: alternate SMT backend for portfolio/cross-check runs
+- **ByMC tooling**: for cross-tool parity benchmarking
+
+See [`MULTI_SOLVER_OPERATIONS.md`](MULTI_SOLVER_OPERATIONS.md) for environment
+setup and troubleshooting.
+
 ### Step 1: Install Tarsier
 
 ```bash

@@ -1,0 +1,32 @@
+services:
+  playground:
+    image: tarsier/playground:local
+    build:
+      context: ../..
+      dockerfile: playground/deploy/Dockerfile
+    env_file:
+      - .env
+    environment:
+      TARSIER_PLAYGROUND_HOST: 0.0.0.0
+      TARSIER_PLAYGROUND_PORT: 7878
+    ports:
+      - "${PLAYGROUND_HOST_PORT:-7878}:7878"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7878/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  proxy:
+    image: caddy:2.9-alpine
+    profiles: ["proxy"]
+    depends_on:
+      playground:
+        condition: service_healthy
+    ports:
+      - "${PROXY_HTTP_PORT:-8080}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    restart: unless-stopped

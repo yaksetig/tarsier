@@ -2,6 +2,9 @@
 
 This document covers CI integration, governance pipelines, proof certificates, CEGAR refinement, benchmarks, and other advanced Tarsier features. For getting started, see the [README](../README.md) or [Getting Started guide](GETTING_STARTED.md).
 
+For solver setup and cross-tool parity operations, see
+[`MULTI_SOLVER_OPERATIONS.md`](MULTI_SOLVER_OPERATIONS.md).
+
 ## Analysis Modes
 
 Use `analyze` for deterministic CI/governance pipelines:
@@ -47,6 +50,9 @@ Use these when you need targeted diagnostics beyond the default `analyze` flow:
 | `tarsier refinement-check concrete.trs --abstract-file abstract.trs --depth 12` | Directional refinement/simulation diagnostics |
 | `tarsier equivalence-check a.trs --other b.trs --depth 12` | Bidirectional bounded equivalence diagnostics |
 | `tarsier conformance-replay <file> --check verify --export-trace replay.json` | Concretize/replay traces for conformance workflows |
+
+For stalled unbounded proofs, see the invariant troubleshooting playbook:
+[`docs/INVARIANT_INFERENCE_DEBUGGING.md`](INVARIANT_INFERENCE_DEBUGGING.md).
 
 ### Scale Guardrails by Mode
 

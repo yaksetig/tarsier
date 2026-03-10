@@ -1105,6 +1105,7 @@ All commands are invoked as `tarsier <command> [args] [flags]`. The 40 commands 
 #### Invariant Inference
 
 - `infer-invariants <file>` — Mine candidate invariant predicates and score inductiveness. `--solver z3|cvc5`, `--depth 10`, `--format text|json`
+- Troubleshooting guide: [`INVARIANT_INFERENCE_DEBUGGING.md`](INVARIANT_INFERENCE_DEBUGGING.md)
 
 #### Relational Checking
 
