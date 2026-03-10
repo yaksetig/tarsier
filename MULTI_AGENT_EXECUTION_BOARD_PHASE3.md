@@ -289,3 +289,8 @@ PY`
 `2026-03-10T21:26:27Z | AGENT_1 | CI-02 | PR_OPEN | branch=codex/agent1-ci-02-v1 pr=local summary=add PR-targeted real ByMC parity workflow and nightly full-manifest parity run`
 `2026-03-10T21:26:27Z | AGENT_1 | CI-02 | DONE | commit=pending tests=python3 - <<"PY" ... ByMC workflow contract assertions ... PY; python3 .github/scripts/check_doc_consistency.py`
 `2026-03-10T21:26:38Z | AGENT_1 | CI-02 | CHANGE | done_commit=02cb1fe`
+`2026-03-10T21:27:10Z | AGENT_1 | CI-03 | CLAIM | taking task`
+`2026-03-10T21:27:10Z | AGENT_1 | CI-03 | START | implementation started`
+`2026-03-10T21:28:10Z | AGENT_1 | CI-03 | PR_OPEN | branch=codex/agent1-ci-03-v1 pr=local summary=align branch-protection required-check guidance across testing and multi-solver docs`
+`2026-03-10T21:28:10Z | AGENT_1 | CI-03 | DONE | commit=pending tests=python3 - <<"PY" ... branch-protection doc assertions ... PY; python3 .github/scripts/check_doc_consistency.py`
+`2026-03-10T21:28:21Z | AGENT_1 | CI-03 | CHANGE | done_commit=6733342`

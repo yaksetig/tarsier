@@ -109,3 +109,12 @@ When opening a solver-related issue, include:
 - solver versions (`z3 --version`, `cvc5 --version`)
 - JSON artifact output (`--format json` / report files)
 - whether issue reproduces in both single-solver and portfolio modes
+
+## 7) Branch Protection Alignment
+
+For merges into `main`, treat solver and parity checks as required status checks:
+- `CI / build-test`
+- `Mutation Testing (PR Targeted) / mutation-test-pr`
+- `ByMC Parity (PR Targeted) / bymc-parity-pr`
+
+Nightly workflows (`mutation-testing.yml`, `bymc-verification.yml`) should remain non-required and be used for broad drift detection plus artifact triage.
