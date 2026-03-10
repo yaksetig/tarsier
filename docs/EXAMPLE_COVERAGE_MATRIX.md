@@ -46,6 +46,25 @@ tracked in this matrix as metadata-only coverage.
 | `crash_recovery_amnesia_buggy.trs` | Crash-recovery | Unsafe |
 | `pacemaker_stuck_buggy.trs` | Pacemaker | Unsafe |
 
+## Fast Regression Runner (EXAMPLE-03)
+
+Run the fast matrix regression locally:
+
+```bash
+./scripts/example-matrix-fast.sh --manifest examples/example_matrix_fast.json
+```
+
+Write a machine-readable report artifact:
+
+```bash
+./scripts/example-matrix-fast.sh \
+  --manifest examples/example_matrix_fast.json \
+  --report-out artifacts/example-matrix-fast/report.json
+```
+
+CI integration is provided by `.github/workflows/example-matrix-fast.yml`
+and runs this same command set on relevant PR changes.
+
 ## Verdict Distribution
 
 | Category | Count | Percentage |

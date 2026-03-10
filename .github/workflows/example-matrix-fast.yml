@@ -1,0 +1,41 @@
+name: Example Matrix Fast
+
+on:
+  pull_request:
+    paths:
+      - "examples/**"
+      - "scripts/example-matrix-fast.sh"
+      - "examples/example_matrix_fast.json"
+      - "docs/EXAMPLE_COVERAGE_MATRIX.md"
+      - ".github/workflows/example-matrix-fast.yml"
+  workflow_dispatch:
+
+jobs:
+  example-matrix-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Run fast example matrix
+        run: |
+          mkdir -p artifacts/example-matrix-fast
+          ./scripts/example-matrix-fast.sh \
+            --manifest examples/example_matrix_fast.json \
+            --report-out artifacts/example-matrix-fast/report.json
+
+      - name: Upload matrix artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: example-matrix-fast
+          path: artifacts/example-matrix-fast
