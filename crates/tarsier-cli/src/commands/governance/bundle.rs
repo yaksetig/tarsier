@@ -414,3 +414,211 @@ pub(crate) fn build_governance_bundle(
     bundle.signature = sign_governance_bundle(&bundle)?;
     Ok(bundle)
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- hex_encode --
+
+    #[test]
+    fn hex_encode_empty() {
+        assert_eq!(hex_encode(&[]), "");
+    }
+
+    #[test]
+    fn hex_encode_known_bytes() {
+        assert_eq!(hex_encode(&[0x00, 0xff, 0xab]), "00ffab");
+    }
+
+    #[test]
+    fn hex_encode_single() {
+        assert_eq!(hex_encode(&[0x42]), "42");
+    }
+
+    // -- hex_decode --
+
+    #[test]
+    fn hex_decode_empty() {
+        assert_eq!(hex_decode("").unwrap(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn hex_decode_known_bytes() {
+        assert_eq!(hex_decode("00ffab").unwrap(), vec![0x00, 0xff, 0xab]);
+    }
+
+    #[test]
+    fn hex_decode_odd_length() {
+        assert!(hex_decode("abc").is_err());
+    }
+
+    #[test]
+    fn hex_decode_invalid_chars() {
+        assert!(hex_decode("zzzz").is_err());
+    }
+
+    #[test]
+    fn hex_decode_with_whitespace() {
+        assert_eq!(hex_decode("  00ff  ").unwrap(), vec![0x00, 0xff]);
+    }
+
+    // -- hex round-trip --
+
+    #[test]
+    fn hex_round_trip() {
+        let bytes = vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef];
+        let encoded = hex_encode(&bytes);
+        let decoded = hex_decode(&encoded).unwrap();
+        assert_eq!(bytes, decoded);
+    }
+
+    // -- resolve_bundle_relative_path --
+
+    #[test]
+    fn resolve_relative_path() {
+        let path = resolve_bundle_relative_path(
+            Path::new("/home/user/bundle.json"),
+            "artifacts/report.json",
+        );
+        assert_eq!(
+            path,
+            PathBuf::from("/home/user/artifacts/report.json")
+        );
+    }
+
+    #[test]
+    fn resolve_absolute_path() {
+        let path = resolve_bundle_relative_path(
+            Path::new("/home/user/bundle.json"),
+            "/absolute/report.json",
+        );
+        assert_eq!(path, PathBuf::from("/absolute/report.json"));
+    }
+
+    // -- verify_governance_schema --
+
+    fn make_test_bundle() -> GovernanceBundle {
+        GovernanceBundle {
+            schema_version: "v1".into(),
+            tarsier_version: "0.1.0".into(),
+            environment: EnvironmentInfo {
+                os: "linux".into(),
+                arch: "x86_64".into(),
+            },
+            model_source_sha256: "a".repeat(64),
+            analysis_report: json!({
+                "schema_version": "v1",
+                "mode": "quick",
+                "file": "x.trs",
+                "layers": [],
+                "overall": "pass",
+                "overall_verdict": "SAFE"
+            }),
+            certificates: vec![],
+            artifacts: vec![],
+            signature: GovernanceBundleSignature {
+                algorithm: "ed25519".into(),
+                public_key_hex: "abcd".into(),
+                signature_hex: "1234".into(),
+                signed_payload_sha256: "b".repeat(64),
+            },
+        }
+    }
+
+    #[test]
+    fn verify_schema_valid() {
+        let bundle = make_test_bundle();
+        assert!(verify_governance_schema(&bundle).is_ok());
+    }
+
+    #[test]
+    fn verify_schema_wrong_version() {
+        let mut bundle = make_test_bundle();
+        bundle.schema_version = "v2".into();
+        assert!(verify_governance_schema(&bundle).is_err());
+    }
+
+    #[test]
+    fn verify_schema_empty_tarsier_version() {
+        let mut bundle = make_test_bundle();
+        bundle.tarsier_version = "".into();
+        assert!(verify_governance_schema(&bundle).is_err());
+    }
+
+    #[test]
+    fn verify_schema_bad_sha() {
+        let mut bundle = make_test_bundle();
+        bundle.model_source_sha256 = "short".into();
+        assert!(verify_governance_schema(&bundle).is_err());
+    }
+
+    #[test]
+    fn verify_schema_missing_analysis_field() {
+        let mut bundle = make_test_bundle();
+        bundle.analysis_report = json!({"schema_version": "v1"});
+        assert!(verify_governance_schema(&bundle).is_err());
+    }
+
+    #[test]
+    fn verify_schema_non_object_analysis() {
+        let mut bundle = make_test_bundle();
+        bundle.analysis_report = json!("string");
+        assert!(verify_governance_schema(&bundle).is_err());
+    }
+
+    #[test]
+    fn verify_schema_empty_signature_fields() {
+        let mut bundle = make_test_bundle();
+        bundle.signature.public_key_hex = "".into();
+        assert!(verify_governance_schema(&bundle).is_err());
+    }
+
+    // -- verify_governance_completeness --
+
+    #[test]
+    fn verify_completeness_empty_artifacts() {
+        let bundle = make_test_bundle();
+        let result = verify_governance_completeness(&bundle, Path::new("/tmp/bundle.json"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("non-empty"));
+    }
+
+    // -- verify_governance_signature --
+
+    #[test]
+    fn verify_signature_unsupported_algorithm() {
+        let mut bundle = make_test_bundle();
+        bundle.signature.algorithm = "rsa".into();
+        assert!(verify_governance_signature(&bundle).is_err());
+    }
+
+    // -- governance_bundle_payload_json --
+
+    #[test]
+    fn payload_json_excludes_signature() {
+        let bundle = make_test_bundle();
+        let payload = governance_bundle_payload_json(&bundle).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+        assert!(!parsed.as_object().unwrap().contains_key("signature"));
+    }
+
+    #[test]
+    fn payload_json_includes_required_fields() {
+        let bundle = make_test_bundle();
+        let payload = governance_bundle_payload_json(&bundle).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+        let obj = parsed.as_object().unwrap();
+        assert!(obj.contains_key("schema_version"));
+        assert!(obj.contains_key("tarsier_version"));
+        assert!(obj.contains_key("environment"));
+        assert!(obj.contains_key("model_source_sha256"));
+        assert!(obj.contains_key("analysis_report"));
+        assert!(obj.contains_key("certificates"));
+        assert!(obj.contains_key("artifacts"));
+    }
+}

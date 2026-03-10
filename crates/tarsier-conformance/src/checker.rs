@@ -474,8 +474,14 @@ mod tests {
     /// L0 (Init) --[trivial]--> L2 (Abort)
     fn make_test_automaton() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
-        let _n = ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
-        let t = ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
+        let _n = ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
+        let t = ta.add_parameter(Parameter {
+            name: "t".into(),
+            time_varying: false,
+        });
 
         // L0: Init
         ta.add_location(Location {

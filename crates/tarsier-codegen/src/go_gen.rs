@@ -679,9 +679,12 @@ fn write_actions_go(
             Action::Reconfigure { updates } => {
                 writeln!(out, "{indent}// reconfigure (dynamic membership)")?;
                 for upd in updates {
-                    writeln!(out, "{indent}// TODO: {param} = {val}",
+                    writeln!(
+                        out,
+                        "{indent}// TODO: {param} = {val}",
                         param = upd.param,
-                        val = upd.value)?;
+                        val = upd.value
+                    )?;
                 }
             }
             Action::ResetClock { clock } => {

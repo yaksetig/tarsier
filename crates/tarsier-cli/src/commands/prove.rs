@@ -4,15 +4,12 @@
 // for safety and fair-liveness properties, including portfolio mode, CEGAR
 // refinement, round-erasure over-approximation, and certificate bundle output.
 
-use std::{collections::BTreeSet, path::PathBuf};
+use std::path::PathBuf;
 
 use miette::IntoDiagnostic;
 use serde_json::{json, Value};
 
-use tarsier_engine::pipeline::{
-    assist_provider_from_kind, prove_failure_prompt_payload, AssistProviderKind, FairnessMode,
-    PipelineOptions, ProofEngine, SolverChoice,
-};
+use tarsier_engine::pipeline::{FairnessMode, PipelineOptions, ProofEngine, SolverChoice};
 use tarsier_engine::result::{UnboundedFairLivenessResult, UnboundedSafetyResult};
 
 use crate::{
@@ -55,9 +52,6 @@ pub(crate) struct ProveCommandArgs {
     pub(crate) cegar_report_out: Option<PathBuf>,
     pub(crate) portfolio: bool,
     pub(crate) auto_strengthen: bool,
-    pub(crate) assist: bool,
-    pub(crate) assist_max_suggestions: usize,
-    pub(crate) assist_payload_out: Option<PathBuf>,
     pub(crate) format: String,
     pub(crate) cli_network_mode: CliNetworkSemanticsMode,
 }
@@ -114,24 +108,6 @@ struct ProveExecutionConfig {
     cegar_report_out: Option<PathBuf>,
     timeout: u64,
     output_format: OutputFormat,
-}
-
-#[derive(Debug, Clone)]
-struct ProveAssistConfig {
-    provider: AssistProviderKind,
-    max_suggestions: usize,
-    payload_out: Option<PathBuf>,
-}
-
-#[derive(Debug, Clone)]
-struct AssistSuggestionReport {
-    provider: AssistProviderKind,
-    payload_out: Option<PathBuf>,
-    raw_count: usize,
-    validated: Vec<String>,
-    rejected: Vec<(String, String)>,
-    rerun_results: Vec<(String, UnboundedSafetyResult)>,
-    rerun_errors: Vec<(String, String)>,
 }
 
 // ---------------------------------------------------------------------------
@@ -333,28 +309,14 @@ pub(crate) fn run_prove_command(args: ProveCommandArgs) -> miette::Result<()> {
         timeout: args.timeout,
         output_format,
     };
-    let assist = if args.assist {
-        Some(ProveAssistConfig {
-            provider: AssistProviderKind::Mock,
-            max_suggestions: args.assist_max_suggestions.max(1),
-            payload_out: args.assist_payload_out,
-        })
-    } else {
-        None
-    };
     let prove_target = detect_prove_auto_target(&source, &filename)?;
 
     if prove_target == ProveAutoTarget::FairLiveness {
-        if assist.is_some() && matches!(output_format, OutputFormat::Text) {
-            eprintln!(
-                "Assist note: `--assist` currently applies to safety `prove` only; skipping for fair-liveness auto-dispatch."
-            );
-        }
         run_prove_fair_liveness_branch(&source, &filename, &options, args.portfolio, exec)?;
     } else if args.auto_strengthen {
         run_prove_safety_auto_strengthen(&source, &filename, &options, exec.output_format)?;
     } else if args.portfolio {
-        run_prove_safety_portfolio(&source, &filename, &options, exec, assist.as_ref())?;
+        run_prove_safety_portfolio(&source, &filename, &options, exec)?;
     } else {
         run_prove_safety_single(
             &source,
@@ -364,7 +326,6 @@ pub(crate) fn run_prove_command(args: ProveCommandArgs) -> miette::Result<()> {
             exec.cegar_iters,
             exec.cegar_report_out,
             exec.output_format,
-            assist.as_ref(),
         )?;
     }
     Ok(())
@@ -787,364 +748,12 @@ fn run_prove_fair_liveness_branch(
     Ok(())
 }
 
-fn strip_suggestion_list_prefix_once(raw: &str) -> &str {
-    let trimmed = raw.trim_start();
-    for prefix in ["- ", "* ", "+ "] {
-        if let Some(rest) = trimmed.strip_prefix(prefix) {
-            return rest;
-        }
-    }
-
-    let numeric_prefix_len = trimmed
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .map(char::len_utf8)
-        .sum::<usize>();
-    if numeric_prefix_len > 0 {
-        let remainder = &trimmed[numeric_prefix_len..];
-        if let Some(rest) = remainder.strip_prefix(". ") {
-            return rest;
-        }
-        if let Some(rest) = remainder.strip_prefix(") ") {
-            return rest;
-        }
-    }
-
-    trimmed
-}
-
-fn extract_invariant_body_from_wrapper(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    let lowered = trimmed.to_ascii_lowercase();
-    if !lowered.starts_with("invariant") && !lowered.starts_with("property ") {
-        return None;
-    }
-
-    let invariant_offset = lowered.find("invariant")?;
-    let after_invariant = trimmed[(invariant_offset + "invariant".len())..].trim_start();
-
-    if after_invariant.starts_with('{') {
-        let close = after_invariant.rfind('}')?;
-        return Some(after_invariant[1..close].trim().to_string());
-    }
-
-    let without_delimiter = after_invariant
-        .strip_prefix(':')
-        .or_else(|| after_invariant.strip_prefix('='))
-        .unwrap_or(after_invariant)
-        .trim();
-    if without_delimiter.is_empty() {
-        None
-    } else {
-        Some(without_delimiter.to_string())
-    }
-}
-
-fn sanitize_assist_formula(raw: &str) -> Option<String> {
-    let mut cleaned = raw.trim().to_string();
-    if cleaned.is_empty() {
-        return None;
-    }
-
-    if cleaned.starts_with("```") && cleaned.ends_with("```") {
-        let mut lines: Vec<&str> = cleaned.lines().collect();
-        if !lines.is_empty() {
-            lines.remove(0);
-        }
-        if lines
-            .last()
-            .is_some_and(|line| line.trim_start().starts_with("```"))
-        {
-            lines.pop();
-        }
-        cleaned = lines.join("\n");
-    }
-
-    cleaned = strip_suggestion_list_prefix_once(cleaned.trim())
-        .trim()
-        .to_string();
-
-    if cleaned.starts_with('"') && cleaned.ends_with('"') && cleaned.len() > 1 {
-        cleaned = cleaned[1..cleaned.len() - 1].trim().to_string();
-    }
-    if cleaned.starts_with('`') && cleaned.ends_with('`') && cleaned.len() > 1 {
-        cleaned = cleaned[1..cleaned.len() - 1].trim().to_string();
-    }
-
-    if let Some(inner) = extract_invariant_body_from_wrapper(&cleaned) {
-        cleaned = inner;
-    }
-
-    while cleaned.ends_with(';') {
-        cleaned.pop();
-        cleaned = cleaned.trim_end().to_string();
-    }
-
-    if cleaned.is_empty() {
-        None
-    } else {
-        Some(cleaned)
-    }
-}
-
-fn parse_assist_formula_expr(
-    formula: &str,
-) -> Result<tarsier_dsl::ast::QuantifiedFormula, tarsier_dsl::errors::ParseError> {
-    let wrapped = format!(
-        "protocol AssistSuggestionParse {{
-  parameters {{ n: nat; t: nat; }}
-  resilience {{ n > 3*t; }}
-  message M;
-  role Node {{
-    var ok: bool = true;
-    init Init;
-    phase Init {{}}
-  }}
-  property assist_candidate: invariant {{ {formula} }}
-}}"
-    );
-    let parsed = tarsier_dsl::parse(&wrapped, "<assist_suggestion>")?;
-    Ok(parsed.protocol.node.properties[0].node.formula.clone())
-}
-
-fn build_assist_candidate_program(
-    base_program: &tarsier_dsl::ast::Program,
-    formula: &str,
-    candidate_idx: usize,
-) -> Result<tarsier_dsl::ast::Program, String> {
-    let parsed_formula =
-        parse_assist_formula_expr(formula).map_err(|e| format!("parse failed: {e}"))?;
-    let mut candidate_program = base_program.clone();
-    let candidate_property = tarsier_dsl::ast::PropertyDecl {
-        name: format!("assist_candidate_{candidate_idx}"),
-        kind: tarsier_dsl::ast::PropertyKind::Invariant,
-        formula: parsed_formula,
-    };
-    candidate_program.protocol.node.properties = vec![tarsier_dsl::ast::Spanned::new(
-        candidate_property,
-        tarsier_dsl::ast::Span::new(0, 0),
-    )];
-    Ok(candidate_program)
-}
-
-fn run_assist_candidate_proof(
-    base_program: &tarsier_dsl::ast::Program,
-    options: &PipelineOptions,
-    formula: &str,
-    candidate_idx: usize,
-    timeout_cap_secs: Option<u64>,
-) -> Result<UnboundedSafetyResult, String> {
-    let candidate_program = build_assist_candidate_program(base_program, formula, candidate_idx)?;
-    let mut candidate_options = options.clone();
-    candidate_options.dump_smt = None;
-    if let Some(cap) = timeout_cap_secs {
-        candidate_options.timeout_secs = candidate_options.timeout_secs.clamp(1, cap);
-    }
-    tarsier_engine::pipeline::prove_safety_program_ast(&candidate_program, &candidate_options)
-        .map_err(|e| e.to_string())
-}
-
-fn validate_assist_formula_with_smt(
-    base_program: &tarsier_dsl::ast::Program,
-    options: &PipelineOptions,
-    formula: &str,
-    candidate_idx: usize,
-) -> Result<(), String> {
-    let validation =
-        run_assist_candidate_proof(base_program, options, formula, candidate_idx, Some(15))?;
-    match validation {
-        UnboundedSafetyResult::Safe { .. }
-        | UnboundedSafetyResult::ProbabilisticallySafe { .. } => Ok(()),
-        UnboundedSafetyResult::Unsafe { .. } => {
-            Err("SMT refuted candidate with a concrete counterexample".to_string())
-        }
-        UnboundedSafetyResult::NotProved { max_k, .. } => {
-            Err(format!("candidate not proved inductive up to k={max_k}"))
-        }
-        UnboundedSafetyResult::Unknown { reason } => {
-            Err(format!("candidate validation inconclusive: {reason}"))
-        }
-    }
-}
-
-fn collect_assist_suggestions_report(
-    source: &str,
-    filename: &str,
-    options: &PipelineOptions,
-    result: &UnboundedSafetyResult,
-    assist: Option<&ProveAssistConfig>,
-) -> miette::Result<Option<AssistSuggestionReport>> {
-    let Some(assist) = assist else {
-        return Ok(None);
-    };
-
-    let payload = match prove_failure_prompt_payload(source, filename, options, result)
-        .map_err(|e| miette::miette!("Assist payload generation failed: {e}"))?
-    {
-        Some(payload) => payload,
-        None => return Ok(None),
-    };
-
-    let mut payload_out_path = None;
-    if let Some(path) = &assist.payload_out {
-        let value = serde_json::to_value(&payload).into_diagnostic()?;
-        write_json_artifact(path, &value)?;
-        payload_out_path = Some(path.clone());
-    }
-
-    let provider = assist_provider_from_kind(assist.provider);
-    let suggestions = match provider.suggest_invariants(&payload, assist.max_suggestions) {
-        Ok(suggestions) => suggestions,
-        Err(reason) => {
-            return Ok(Some(AssistSuggestionReport {
-                provider: assist.provider,
-                payload_out: payload_out_path,
-                raw_count: 0,
-                validated: Vec::new(),
-                rejected: vec![(
-                    format!("provider:{}", assist.provider.as_str()),
-                    format!("provider failed: {reason}"),
-                )],
-                rerun_results: Vec::new(),
-                rerun_errors: Vec::new(),
-            }));
-        }
-    };
-
-    let base_program = match tarsier_dsl::parse(source, filename) {
-        Ok(program) => program,
-        Err(e) => {
-            return Ok(Some(AssistSuggestionReport {
-                provider: assist.provider,
-                payload_out: payload_out_path,
-                raw_count: suggestions.len(),
-                validated: Vec::new(),
-                rejected: vec![(
-                    "<protocol>".to_string(),
-                    format!("assist validation skipped: failed to parse base protocol: {e}"),
-                )],
-                rerun_results: Vec::new(),
-                rerun_errors: Vec::new(),
-            }));
-        }
-    };
-
-    let mut validated: Vec<String> = Vec::new();
-    let mut rejected: Vec<(String, String)> = Vec::new();
-    let mut seen = BTreeSet::<String>::new();
-
-    for (idx, raw) in suggestions.iter().enumerate() {
-        let Some(sanitized) = sanitize_assist_formula(raw) else {
-            rejected.push((raw.clone(), "empty after sanitization".to_string()));
-            continue;
-        };
-
-        if !seen.insert(sanitized.clone()) {
-            rejected.push((raw.clone(), "duplicate after sanitization".to_string()));
-            continue;
-        }
-
-        match validate_assist_formula_with_smt(&base_program, options, &sanitized, idx + 1) {
-            Ok(()) => validated.push(sanitized),
-            Err(reason) => {
-                rejected.push((raw.clone(), format!("{reason}; normalized={sanitized}")))
-            }
-        }
-    }
-
-    let mut rerun_results = Vec::new();
-    let mut rerun_errors = Vec::new();
-    for (idx, formula) in validated.iter().enumerate() {
-        match run_assist_candidate_proof(&base_program, options, formula, idx + 1, None) {
-            Ok(result) => rerun_results.push((formula.clone(), result)),
-            Err(reason) => rerun_errors.push((formula.clone(), reason)),
-        }
-    }
-
-    Ok(Some(AssistSuggestionReport {
-        provider: assist.provider,
-        payload_out: payload_out_path,
-        raw_count: suggestions.len(),
-        validated,
-        rejected,
-        rerun_results,
-        rerun_errors,
-    }))
-}
-
-fn assist_suggestion_report_json(report: &AssistSuggestionReport) -> Value {
-    json!({
-        "provider": report.provider.as_str(),
-        "payload_out": report.payload_out.as_ref().map(|p| p.display().to_string()),
-        "raw_count": report.raw_count,
-        "validated_count": report.validated.len(),
-        "validated": report.validated,
-        "rejected": report
-            .rejected
-            .iter()
-            .map(|(raw, reason)| json!({"raw": raw, "reason": reason}))
-            .collect::<Vec<_>>(),
-        "rerun": {
-            "attempted": !report.validated.is_empty(),
-            "results": report
-                .rerun_results
-                .iter()
-                .map(|(formula, result)| {
-                    json!({
-                        "formula": formula,
-                        "result": unbounded_safety_result_kind(result),
-                        "details": unbounded_safety_result_details(result),
-                    })
-                })
-                .collect::<Vec<_>>(),
-            "errors": report
-                .rerun_errors
-                .iter()
-                .map(|(formula, reason)| json!({"formula": formula, "reason": reason}))
-                .collect::<Vec<_>>(),
-        }
-    })
-}
-
-fn emit_assist_report_text(report: &AssistSuggestionReport) {
-    if let Some(path) = &report.payload_out {
-        eprintln!("Assist payload written to {}", path.display());
-    }
-    eprintln!(
-        "Assist suggestions (provider={}, raw_count={}, validated={}):",
-        report.provider.as_str(),
-        report.raw_count,
-        report.validated.len()
-    );
-    for (idx, formula) in report.validated.iter().enumerate() {
-        eprintln!("  [VALID] {}. {}", idx + 1, formula);
-    }
-    for (idx, (raw, reason)) in report.rejected.iter().enumerate() {
-        eprintln!("  [REJECTED] {}. {} ({reason})", idx + 1, raw);
-    }
-    if !report.rerun_results.is_empty() || !report.rerun_errors.is_empty() {
-        eprintln!("Assist rerun outcomes:");
-    }
-    for (idx, (formula, result)) in report.rerun_results.iter().enumerate() {
-        eprintln!(
-            "  [RERUN] {}. {} => {}",
-            idx + 1,
-            formula,
-            unbounded_safety_result_kind(result)
-        );
-    }
-    for (idx, (formula, reason)) in report.rerun_errors.iter().enumerate() {
-        eprintln!("  [RERUN_ERROR] {}. {} ({reason})", idx + 1, formula);
-    }
-}
-
 /// Run `tarsier prove` in safety portfolio mode (parallel Z3 + cvc5).
 fn run_prove_safety_portfolio(
     source: &str,
     filename: &str,
     options: &PipelineOptions,
     config: ProveExecutionConfig,
-    assist: Option<&ProveAssistConfig>,
 ) -> miette::Result<()> {
     let ProveExecutionConfig {
         fairness,
@@ -1200,11 +809,9 @@ fn run_prove_safety_portfolio(
         Err(_) => Err("thread panicked".into()),
     };
     let (result, details) = merge_portfolio_prove_results(z3_result, cvc5_result);
-    let assist_report =
-        collect_assist_suggestions_report(source, filename, options, &result, assist)?;
     match output_format {
         OutputFormat::Json => {
-            let mut artifact = json!({
+            let artifact = json!({
                 "schema_version": 1,
                 "file": filename,
                 "mode": "prove",
@@ -1214,9 +821,6 @@ fn run_prove_safety_portfolio(
                 "output": format!("{result}"),
                 "portfolio": details,
             });
-            if let Some(report) = assist_report.as_ref() {
-                artifact["assist"] = assist_suggestion_report_json(report);
-            }
             println!(
                 "{}",
                 serde_json::to_string_pretty(&artifact).into_diagnostic()?
@@ -1229,14 +833,11 @@ fn run_prove_safety_portfolio(
                 serde_json::to_string_pretty(&json!({"portfolio": details.clone()}))
                     .into_diagnostic()?
             );
-            if let Some(report) = assist_report.as_ref() {
-                emit_assist_report_text(report);
-            }
         }
     }
 
     if let Some(out) = cegar_report_out.clone() {
-        let mut artifact = json!({
+        let artifact = json!({
             "schema_version": 1,
             "file": filename,
             "mode": "prove",
@@ -1253,9 +854,6 @@ fn run_prove_safety_portfolio(
             },
             "portfolio": details,
         });
-        if let Some(report) = assist_report.as_ref() {
-            artifact["assist"] = assist_suggestion_report_json(report);
-        }
         write_json_artifact(&out, &artifact)?;
         if matches!(output_format, OutputFormat::Text) {
             println!("CEGAR proof report written to {}", out.display());
@@ -1279,7 +877,6 @@ fn run_prove_safety_single(
     cegar_iters: usize,
     cegar_report_out: Option<PathBuf>,
     output_format: OutputFormat,
-    assist: Option<&ProveAssistConfig>,
 ) -> miette::Result<()> {
     let mut cegar_artifact: Option<Value> = None;
     let result = if let Some(_report_path) = cegar_report_out.clone() {
@@ -1318,11 +915,9 @@ fn run_prove_safety_single(
         };
         run.map_err(|e| miette::miette!("Error: {e}"))?
     };
-    let assist_report =
-        collect_assist_suggestions_report(source, filename, options, &result, assist)?;
     match output_format {
         OutputFormat::Json => {
-            let mut artifact = json!({
+            let artifact = json!({
                 "schema_version": 1,
                 "file": filename,
                 "mode": "prove",
@@ -1331,9 +926,6 @@ fn run_prove_safety_single(
                 "details": unbounded_safety_result_details(&result),
                 "output": format!("{result}"),
             });
-            if let Some(report) = assist_report.as_ref() {
-                artifact["assist"] = assist_suggestion_report_json(report);
-            }
             println!(
                 "{}",
                 serde_json::to_string_pretty(&artifact).into_diagnostic()?
@@ -1351,13 +943,10 @@ fn run_prove_safety_single(
             if let Some(pp) = render_phase_profile_summary(&prove_diag) {
                 eprintln!("{pp}");
             }
-            if let Some(report) = assist_report.as_ref() {
-                emit_assist_report_text(report);
-            }
         }
     }
     if let Some(path) = cegar_report_out.as_ref() {
-        let mut artifact = cegar_artifact.unwrap_or_else(|| {
+        let artifact = cegar_artifact.unwrap_or_else(|| {
             json!({
                 "schema_version": 1,
                 "file": filename,
@@ -1374,9 +963,6 @@ fn run_prove_safety_single(
                 },
             })
         });
-        if let Some(report) = assist_report.as_ref() {
-            artifact["assist"] = assist_suggestion_report_json(report);
-        }
         write_json_artifact(path, &artifact)?;
         if matches!(output_format, OutputFormat::Text) {
             println!("CEGAR proof report written to {}", path.display());
@@ -1410,11 +996,10 @@ fn run_prove_safety_auto_strengthen(
     options: &PipelineOptions,
     output_format: OutputFormat,
 ) -> miette::Result<()> {
-    let result =
-        tarsier_engine::pipeline::verification::prove_safety_with_auto_strengthen(
-            source, filename, options,
-        )
-        .map_err(|e| miette::miette!("Error: {e}"))?;
+    let result = tarsier_engine::pipeline::verification::prove_safety_with_auto_strengthen(
+        source, filename, options,
+    )
+    .map_err(|e| miette::miette!("Error: {e}"))?;
     match output_format {
         OutputFormat::Json => {
             let artifact = json!({
@@ -1685,120 +1270,260 @@ fn run_prove_fair_single(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tarsier_engine::result::{CtiClassification, InductionCtiSummary};
 
-    fn sample_assist_source() -> &'static str {
-        r#"
-protocol AssistDemo {
-parameters { n: nat; t: nat; }
-resilience { n > 3*t; }
-message Vote;
-role Node {
-    var decided: bool = false;
-    init Init;
-    phase Init {}
-}
-property agreement: agreement {
-    forall p: Node. forall q: Node. p.decided == q.decided
-}
-}
-"#
+    // -- ProveAutoTarget --
+
+    #[test]
+    fn prove_auto_target_debug() {
+        assert_eq!(format!("{:?}", ProveAutoTarget::Safety), "Safety");
+        assert_eq!(format!("{:?}", ProveAutoTarget::FairLiveness), "FairLiveness");
     }
 
-    fn sample_not_proved_result() -> UnboundedSafetyResult {
-        UnboundedSafetyResult::NotProved {
-            max_k: 3,
-            cti: Some(InductionCtiSummary {
-                k: 3,
-                params: vec![("n".to_string(), 4), ("t".to_string(), 1)],
-                hypothesis_locations: vec![("Node::Init".to_string(), 4)],
-                hypothesis_shared: vec![],
-                violating_locations: vec![("Node::Bad".to_string(), 1)],
-                violating_shared: vec![],
-                final_step_rules: vec![("Node::Init -> Node::Init".to_string(), 1)],
-                violated_condition: "agreement violated".to_string(),
-                classification: CtiClassification::LikelySpurious,
-                classification_evidence: vec!["inductive step SAT".to_string()],
-                rationale: "needs auxiliary invariants".to_string(),
+    #[test]
+    fn prove_auto_target_eq() {
+        assert_eq!(ProveAutoTarget::Safety, ProveAutoTarget::Safety);
+        assert_ne!(ProveAutoTarget::Safety, ProveAutoTarget::FairLiveness);
+    }
+
+    #[test]
+    fn prove_auto_target_copy() {
+        let t = ProveAutoTarget::FairLiveness;
+        let t2 = t;
+        assert_eq!(t, t2);
+    }
+
+    // -- ProveCommandArgs --
+
+    #[test]
+    fn prove_command_args_clone() {
+        let args = ProveCommandArgs {
+            file: PathBuf::from("test.trs"),
+            solver: "z3".into(),
+            k: 12,
+            timeout: 60,
+            soundness: "strict".into(),
+            engine: "pdr".into(),
+            fairness: "weak".into(),
+            cert_out: None,
+            cegar_iters: 0,
+            cegar_report_out: None,
+            portfolio: false,
+            auto_strengthen: false,
+            format: "text".into(),
+            cli_network_mode: CliNetworkSemanticsMode::Dsl,
+        };
+        let cloned = args.clone();
+        assert_eq!(cloned.file, PathBuf::from("test.trs"));
+        assert_eq!(cloned.solver, "z3");
+        assert_eq!(cloned.k, 12);
+        assert!(!cloned.portfolio);
+    }
+
+    #[test]
+    fn prove_command_args_debug() {
+        let args = ProveCommandArgs {
+            file: PathBuf::from("t.trs"),
+            solver: "z3".into(),
+            k: 1,
+            timeout: 1,
+            soundness: "strict".into(),
+            engine: "pdr".into(),
+            fairness: "weak".into(),
+            cert_out: None,
+            cegar_iters: 0,
+            cegar_report_out: None,
+            portfolio: false,
+            auto_strengthen: false,
+            format: "text".into(),
+            cli_network_mode: CliNetworkSemanticsMode::Dsl,
+        };
+        let debug = format!("{:?}", args);
+        assert!(debug.contains("ProveCommandArgs"));
+        assert!(debug.contains("t.trs"));
+    }
+
+    // -- ProveFairCommandArgs --
+
+    #[test]
+    fn prove_fair_args_clone() {
+        let args = ProveFairCommandArgs {
+            file: PathBuf::from("fair.trs"),
+            solver: "cvc5".into(),
+            k: 24,
+            timeout: 120,
+            soundness: "permissive".into(),
+            fairness: "strong".into(),
+            cert_out: Some(PathBuf::from("cert/")),
+            cegar_iters: 3,
+            cegar_report_out: None,
+            portfolio: true,
+            format: "json".into(),
+            cli_network_mode: CliNetworkSemanticsMode::Faithful,
+        };
+        let cloned = args.clone();
+        assert_eq!(cloned.fairness, "strong");
+        assert!(cloned.portfolio);
+        assert_eq!(cloned.cert_out.as_deref(), Some(std::path::Path::new("cert/")));
+    }
+
+    // -- ProveRoundCommandArgs --
+
+    #[test]
+    fn prove_round_args_clone() {
+        let args = ProveRoundCommandArgs {
+            file: PathBuf::from("round.trs"),
+            solver: "z3".into(),
+            k: 8,
+            timeout: 30,
+            soundness: "strict".into(),
+            engine: "kinduction".into(),
+            round_vars: vec!["r".into(), "v".into()],
+            format: "text".into(),
+            out: None,
+            cli_network_mode: CliNetworkSemanticsMode::Dsl,
+        };
+        let cloned = args.clone();
+        assert_eq!(cloned.round_vars, vec!["r", "v"]);
+    }
+
+    // -- ProveFairRoundCommandArgs --
+
+    #[test]
+    fn prove_fair_round_args_clone() {
+        let args = ProveFairRoundCommandArgs {
+            file: PathBuf::from("fr.trs"),
+            solver: "z3".into(),
+            k: 4,
+            timeout: 10,
+            soundness: "strict".into(),
+            fairness: "weak".into(),
+            round_vars: vec![],
+            format: "json".into(),
+            out: Some(PathBuf::from("out.json")),
+            cli_network_mode: CliNetworkSemanticsMode::Dsl,
+        };
+        let cloned = args.clone();
+        assert!(cloned.round_vars.is_empty());
+        assert!(cloned.out.is_some());
+    }
+
+    // -- is_safety_property_kind --
+
+    #[test]
+    fn safety_property_kinds() {
+        use tarsier_dsl::ast::PropertyKind;
+        assert!(is_safety_property_kind(PropertyKind::Agreement));
+        assert!(is_safety_property_kind(PropertyKind::Validity));
+        assert!(is_safety_property_kind(PropertyKind::Safety));
+        assert!(is_safety_property_kind(PropertyKind::Invariant));
+    }
+
+    #[test]
+    fn liveness_is_not_safety_kind() {
+        use tarsier_dsl::ast::PropertyKind;
+        assert!(!is_safety_property_kind(PropertyKind::Liveness));
+    }
+
+    // -- fairness_name --
+
+    #[test]
+    fn fairness_name_weak() {
+        assert_eq!(fairness_name(FairnessMode::Weak), "weak");
+    }
+
+    #[test]
+    fn fairness_name_strong() {
+        assert_eq!(fairness_name(FairnessMode::Strong), "strong");
+    }
+
+    // -- fairness_semantics_json --
+
+    #[test]
+    fn fairness_semantics_json_has_fields() {
+        let val = fairness_semantics_json(FairnessMode::Weak);
+        assert!(val.get("mode").is_some());
+        assert!(val.get("formal_name").is_some());
+        assert!(val.get("definition").is_some());
+        assert!(val.get("verdict_interpretation").is_some());
+    }
+
+    #[test]
+    fn fairness_semantics_json_strong_has_fields() {
+        let val = fairness_semantics_json(FairnessMode::Strong);
+        assert!(val.get("mode").is_some());
+    }
+
+    // -- fair_liveness_obligation_entries --
+
+    #[test]
+    fn fair_liveness_obligation_entries_empty_layers() {
+        let entries = fair_liveness_obligation_entries(&[]);
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn fair_liveness_obligation_entries_filters_non_fair() {
+        let layers = vec![AnalysisLayerReport {
+            layer: "verify".into(),
+            status: "pass".into(),
+            verdict: "SAFE".into(),
+            summary: "safe".into(),
+            details: serde_json::json!({}),
+            output: String::new(),
+        }];
+        let entries = fair_liveness_obligation_entries(&layers);
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn fair_liveness_obligation_entries_captures_matching_layers() {
+        let layers = vec![AnalysisLayerReport {
+            layer: "certify[fair_liveness]_0".into(),
+            status: "pass".into(),
+            verdict: "LIVE_PROVED".into(),
+            summary: "live".into(),
+            details: serde_json::json!({
+                "obligations_checked": ["init", "step"],
+                "obligation_count": 2,
+                "integrity_ok": true,
             }),
-        }
+            output: String::new(),
+        }];
+        let entries = fair_liveness_obligation_entries(&layers);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["obligation_count"], 2);
     }
 
+    // -- parse_manifest_fairness_mode (governance only) --
+
+    #[cfg(feature = "governance")]
     #[test]
-    fn sanitize_assist_formula_strips_fence_and_wrapper() {
-        let raw = "```trs\nproperty ai: invariant { forall p: Node. p.decided == true; }\n```";
-        let normalized = sanitize_assist_formula(raw).expect("formula should sanitize");
-        assert_eq!(normalized, "forall p: Node. p.decided == true");
+    fn parse_manifest_fairness_mode_weak() {
+        assert_eq!(
+            parse_manifest_fairness_mode("weak").unwrap(),
+            FairnessMode::Weak
+        );
     }
 
+    #[cfg(feature = "governance")]
     #[test]
-    fn sanitize_assist_formula_strips_list_and_quotes() {
-        let raw = "1. \"invariant: forall p: Node. p.decided == false;\"";
-        let normalized = sanitize_assist_formula(raw).expect("formula should sanitize");
-        assert_eq!(normalized, "forall p: Node. p.decided == false");
+    fn parse_manifest_fairness_mode_strong() {
+        assert_eq!(
+            parse_manifest_fairness_mode("strong").unwrap(),
+            FairnessMode::Strong
+        );
     }
 
+    #[cfg(feature = "governance")]
     #[test]
-    fn parse_assist_formula_expr_accepts_quantified_invariant() {
-        let parsed = parse_assist_formula_expr("forall p: Node. p.ok == true")
-            .expect("wrapped formula should parse");
-        assert_eq!(parsed.quantifiers.len(), 1);
-        assert_eq!(parsed.quantifiers[0].var, "p");
+    fn parse_manifest_fairness_mode_invalid() {
+        assert!(parse_manifest_fairness_mode("none").is_err());
     }
-
-    #[test]
-    fn assist_report_json_contains_rerun_results_and_errors() {
-        let report = AssistSuggestionReport {
-            provider: AssistProviderKind::Mock,
-            payload_out: Some(PathBuf::from("artifacts/assist_payload.json")),
-            raw_count: 3,
-            validated: vec!["forall p: Node. p.ok == true".to_string()],
-            rejected: vec![("bad".to_string(), "parse failed".to_string())],
-            rerun_results: vec![(
-                "forall p: Node. p.ok == true".to_string(),
-                UnboundedSafetyResult::Safe { induction_k: 2 },
-            )],
-            rerun_errors: vec![(
-                "forall p: Node. p.ok == false".to_string(),
-                "timeout".to_string(),
-            )],
-        };
-
-        let value = assist_suggestion_report_json(&report);
-        assert_eq!(value["provider"], "mock");
-        assert_eq!(value["validated_count"], 1);
-        assert_eq!(value["rerun"]["attempted"], true);
-        assert_eq!(value["rerun"]["results"][0]["result"], "safe");
-        assert_eq!(value["rerun"]["errors"][0]["reason"], "timeout");
-    }
-
-    #[test]
-    fn collect_assist_report_with_mock_provider_rejects_unparseable_candidates() {
-        let options = PipelineOptions::default();
-        let assist = ProveAssistConfig {
-            provider: AssistProviderKind::Mock,
-            max_suggestions: 2,
-            payload_out: None,
-        };
-
-        let report = collect_assist_suggestions_report(
-            sample_assist_source(),
-            "assist_mock.trs",
-            &options,
-            &sample_not_proved_result(),
-            Some(&assist),
-        )
-        .expect("assist report should be collected")
-        .expect("report should be present");
-
-        assert_eq!(report.provider, AssistProviderKind::Mock);
-        assert!(report.raw_count > 0);
-        assert!(report.validated.is_empty());
-        assert!(!report.rejected.is_empty());
-        assert!(report.rerun_results.is_empty());
-    }
-
 }

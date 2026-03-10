@@ -224,18 +224,6 @@ pub(crate) enum Commands {
         #[arg(long, default_value_t = false)]
         auto_strengthen: bool,
 
-        /// Enable AI-assisted invariant suggestions on failed proofs
-        #[arg(long, default_value_t = false)]
-        assist: bool,
-
-        /// Maximum number of raw suggestions requested from the assist provider
-        #[arg(long, default_value_t = 5)]
-        assist_max_suggestions: usize,
-
-        /// Optional path to write the serialized failed-proof assist payload (JSON)
-        #[arg(long)]
-        assist_payload_out: Option<PathBuf>,
-
         /// Output format: text | json
         #[arg(long, default_value = "text")]
         format: String,

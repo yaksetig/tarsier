@@ -61,14 +61,14 @@ pub fn build_equivalence_products(
     // Forward: A (concrete) refines B (abstract)
     let forward_mapping = build_name_mapping(ta_a, ta_b, "B");
     let forward_rel = RefinementRelation::new(forward_mapping);
-    let forward = build_product(ta_a, ta_b, &forward_rel)
-        .map_err(EquivalenceError::ForwardProductError)?;
+    let forward =
+        build_product(ta_a, ta_b, &forward_rel).map_err(EquivalenceError::ForwardProductError)?;
 
     // Backward: B (concrete) refines A (abstract)
     let backward_mapping = build_name_mapping(ta_b, ta_a, "A");
     let backward_rel = RefinementRelation::new(backward_mapping);
-    let backward = build_product(ta_b, ta_a, &backward_rel)
-        .map_err(EquivalenceError::BackwardProductError)?;
+    let backward =
+        build_product(ta_b, ta_a, &backward_rel).map_err(EquivalenceError::BackwardProductError)?;
 
     Ok(EquivalenceProducts { forward, backward })
 }

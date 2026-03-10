@@ -246,9 +246,7 @@ impl<'a> BmcEncoderBuilder<'a> {
         for &i in &self.context.time_varying_param_ids {
             enc.declare(param_var_at_step(0, i), SmtSort::Int);
             // p_i_0 = p_i (initial value)
-            enc.assert_term(
-                SmtTerm::var(param_var_at_step(0, i)).eq(SmtTerm::var(param_var(i))),
-            );
+            enc.assert_term(SmtTerm::var(param_var_at_step(0, i)).eq(SmtTerm::var(param_var(i))));
         }
 
         // 2. Encode resilience condition
@@ -526,7 +524,8 @@ impl<'a> BmcEncoderBuilder<'a> {
                 enc.assert_term(SmtTerm::var(next.clone()).ge(SmtTerm::var(curr)));
                 for parent_id in parents {
                     enc.assert_term(
-                        SmtTerm::var(next.clone()).le(SmtTerm::var(dag_round_active_var(k, *parent_id))),
+                        SmtTerm::var(next.clone())
+                            .le(SmtTerm::var(dag_round_active_var(k, *parent_id))),
                     );
                 }
             }
@@ -1017,8 +1016,10 @@ impl<'a> BmcEncoderBuilder<'a> {
                     }
 
                     // head <= tail (can't dequeue more than enqueued)
-                    enc.assert_term(SmtTerm::var(queue_head_var(k + 1, cid))
-                        .le(SmtTerm::var(queue_tail_var(k + 1, cid))));
+                    enc.assert_term(
+                        SmtTerm::var(queue_head_var(k + 1, cid))
+                            .le(SmtTerm::var(queue_tail_var(k + 1, cid))),
+                    );
 
                     // Occupancy = tail - head = collection length
                     let occupancy = SmtTerm::var(queue_tail_var(k + 1, cid))
@@ -1055,9 +1056,7 @@ impl<'a> BmcEncoderBuilder<'a> {
                 // Declare step k+1 parameter variables
                 for &i in time_varying_param_ids {
                     enc.declare(param_var_at_step(k + 1, i), SmtSort::Int);
-                    enc.assert_term(
-                        SmtTerm::var(param_var_at_step(k + 1, i)).ge(SmtTerm::int(0)),
-                    );
+                    enc.assert_term(SmtTerm::var(param_var_at_step(k + 1, i)).ge(SmtTerm::int(0)));
                 }
 
                 // For each time-varying param, collect rules that update it
@@ -1296,8 +1295,7 @@ impl<'a> BmcEncoderBuilder<'a> {
                             .map(|&l| SmtTerm::var(kappa_var(k + 1, l)))
                             .collect();
                         enc.assert_term(
-                            sum_terms_balanced(dead_sum)
-                                .le(SmtTerm::var(param_var(adv_param))),
+                            sum_terms_balanced(dead_sum).le(SmtTerm::var(param_var(adv_param))),
                         );
                     }
                 }
@@ -1503,8 +1501,14 @@ mod tests {
         let mut ta = ThresholdAutomaton::new();
 
         // Parameters: n, t
-        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "t".into(),
+            time_varying: false,
+        });
 
         // Resilience: n > 3*t
         ta.constraints.resilience_condition = Some(LinearConstraint {
@@ -1566,9 +1570,18 @@ mod tests {
     fn make_signer_set_threshold_ta() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
 
-        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "t".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -1876,8 +1889,14 @@ mod tests {
     #[test]
     fn omission_partial_sync_encodes_drop_and_post_gst_delivery() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "gst".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "gst".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Omission;
         ta.semantics.timing_model = TimingModel::PartialSynchrony;
@@ -1908,7 +1927,10 @@ mod tests {
     #[test]
     fn message_network_flow_is_explicitly_modeled_per_edge() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
 
@@ -1943,7 +1965,10 @@ mod tests {
     #[test]
     fn byzantine_model_does_not_declare_drop_variables() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         let cs = ta;
@@ -1960,7 +1985,10 @@ mod tests {
     #[test]
     fn byzantine_identity_selective_declares_drop_and_advsend_variables() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.network_semantics = NetworkSemantics::IdentitySelective;
@@ -1993,7 +2021,10 @@ mod tests {
     #[test]
     fn byzantine_cohort_selective_couples_lane_variants_with_sender_budget() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.network_semantics = NetworkSemantics::CohortSelective;
@@ -2024,7 +2055,10 @@ mod tests {
     #[test]
     fn fault_scope_per_recipient_adds_recipient_aggregate_bounds() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.network_semantics = NetworkSemantics::IdentitySelective;
@@ -2058,7 +2092,10 @@ mod tests {
     #[test]
     fn omission_selective_adds_per_message_per_recipient_drop_bounds() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Omission;
         ta.semantics.network_semantics = NetworkSemantics::IdentitySelective;
@@ -2091,7 +2128,10 @@ mod tests {
     #[test]
     fn fault_scope_global_adds_global_aggregate_bound() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.network_semantics = NetworkSemantics::IdentitySelective;
@@ -2124,7 +2164,10 @@ mod tests {
     #[test]
     fn delivery_control_global_couples_variant_injections_across_recipients() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.network_semantics = NetworkSemantics::IdentitySelective;
@@ -2149,7 +2192,10 @@ mod tests {
     #[test]
     fn process_selective_adds_pid_bucket_uniqueness_constraints() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.network_semantics = NetworkSemantics::ProcessSelective;
@@ -2200,7 +2246,10 @@ mod tests {
     #[test]
     fn process_selective_uses_declared_identity_variable_for_uniqueness() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.network_semantics = NetworkSemantics::ProcessSelective;
@@ -2259,7 +2308,10 @@ mod tests {
     #[test]
     fn byzantine_identity_selective_couples_variant_delivery_across_recipients() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.network_semantics = NetworkSemantics::IdentitySelective;
@@ -2304,7 +2356,10 @@ mod tests {
     #[test]
     fn byzantine_equivocation_none_bounds_family_sum() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.equivocation_mode = EquivocationMode::None;
@@ -2329,7 +2384,10 @@ mod tests {
     #[test]
     fn byzantine_equivocation_none_bounds_family_sum_per_recipient() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.equivocation_mode = EquivocationMode::None;
@@ -2372,7 +2430,10 @@ mod tests {
     #[test]
     fn byzantine_signed_auth_bounds_family_sum_even_with_full_equivocation() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.equivocation_mode = EquivocationMode::Full;
@@ -2416,7 +2477,10 @@ mod tests {
     #[test]
     fn message_auth_policy_authenticated_enforces_identity_cap() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.equivocation_mode = EquivocationMode::Full;
@@ -2452,7 +2516,10 @@ mod tests {
     #[test]
     fn signed_senderless_messages_forbid_adversary_injection() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -2470,7 +2537,10 @@ mod tests {
     #[test]
     fn signed_sender_scoped_messages_require_byzantine_sender_activation() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -2510,7 +2580,10 @@ mod tests {
     #[test]
     fn byzantine_sender_set_is_static_and_step_activation_is_subset() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -2548,8 +2621,14 @@ mod tests {
     #[test]
     fn partial_synchrony_faithful_channels_force_honest_post_gst_delivery() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "gst".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "gst".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -2575,7 +2654,10 @@ mod tests {
     #[test]
     fn compromised_signing_key_allows_sender_channel_forge_without_byzsender_gate() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -2607,7 +2689,10 @@ mod tests {
     #[test]
     fn compromised_key_allows_signed_forge_sat() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -2688,7 +2773,10 @@ mod tests {
     #[test]
     fn forging_signed_message_without_compromise_and_without_byzantine_sender_is_unsat() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -2741,7 +2829,10 @@ mod tests {
     #[test]
     fn forging_crypto_object_family_is_unsat_even_with_byzantine_budget() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -2788,8 +2879,14 @@ mod tests {
     #[test]
     fn valid_crypto_object_formation_path_is_sat() {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "t".into(),
+            time_varying: false,
+        });
         ta.add_location(Location {
             name: "waiting".into(),
             role: "P".into(),
@@ -2891,8 +2988,14 @@ mod tests {
     fn exclusive_crypto_policy_blocks_conflicting_variants_in_same_state() {
         let build_ta = |policy: CryptoConflictPolicy| {
             let mut ta = ThresholdAutomaton::new();
-            ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
-            ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
+            ta.add_parameter(Parameter {
+                name: "n".into(),
+                time_varying: false,
+            });
+            ta.add_parameter(Parameter {
+                name: "t".into(),
+                time_varying: false,
+            });
             ta.add_location(Location {
                 name: "s".into(),
                 role: "P".into(),
@@ -2990,7 +3093,10 @@ mod tests {
     #[test]
     fn full_equivocation_can_split_byzantine_payloads_across_recipients_sat() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -3050,7 +3156,10 @@ mod tests {
     #[test]
     fn equivocation_none_enforces_sender_scoped_variant_exclusivity() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -3091,7 +3200,10 @@ mod tests {
     #[test]
     fn equivocation_full_allows_sender_scoped_split_variants() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         ta.semantics.authentication_mode = AuthenticationMode::Signed;
@@ -3130,7 +3242,10 @@ mod tests {
     #[test]
     fn crash_model_uses_crash_counter_not_drop_variables() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         let crash_counter = ta.add_shared_var(SharedVar {
             name: "__crashed_count".into(),
             kind: SharedVarKind::Shared,
@@ -3166,7 +3281,10 @@ mod tests {
     #[test]
     fn adversary_bound_is_capped_by_t_in_bmc_and_kinduction() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Byzantine;
         let cs = ta;
@@ -3227,8 +3345,14 @@ mod tests {
     #[test]
     fn kinduction_omission_partial_sync_encodes_drop_bound_and_post_gst_delivery() {
         let mut ta = make_simple_ta();
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "gst".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "gst".into(),
+            time_varying: false,
+        });
         ta.constraints.adversary_bound_param = Some(2.into());
         ta.semantics.fault_model = FaultModel::Omission;
         ta.semantics.timing_model = TimingModel::PartialSynchrony;
@@ -4270,16 +4394,16 @@ protocol BuggyBroadcast {
         });
 
         let cs: CounterSystem = ta.into();
-        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
         let encoding = encode_bmc(&cs, &property, 2);
-        let assertions: Vec<String> = encoding
-            .assertions
-            .iter()
-            .map(|t| to_smtlib(t))
-            .collect();
+        let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
 
         // Check collection length var at step 0 is declared and initialized to 0
-        let has_len_init = assertions.iter().any(|a| a.contains("clen_0_0") && a.contains("0"));
+        let has_len_init = assertions
+            .iter()
+            .any(|a| a.contains("clen_0_0") && a.contains("0"));
         assert!(has_len_init, "Collection length should be initialized to 0");
 
         // Check collection length var at step 1 is declared
@@ -4290,7 +4414,10 @@ protocol BuggyBroadcast {
         let has_cap_bound = assertions
             .iter()
             .any(|a| a.contains("clen_") && a.contains("p_0"));
-        assert!(has_cap_bound, "Collection length should be bounded by capacity");
+        assert!(
+            has_cap_bound,
+            "Collection length should be bounded by capacity"
+        );
     }
 
     #[test]
@@ -4313,25 +4440,25 @@ protocol BuggyBroadcast {
         });
 
         let cs: CounterSystem = ta.into();
-        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
         let encoding = encode_bmc(&cs, &property, 1);
-        let assertions: Vec<String> = encoding
-            .assertions
-            .iter()
-            .map(|t| to_smtlib(t))
-            .collect();
+        let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
 
         // Length at step 1 should reference delta from rule 0 and clen_0_0
-        let has_len_update = assertions.iter().any(|a| {
-            a.contains("clen_1_0") && (a.contains("clen_0_0") || a.contains("delta_0_"))
-        });
+        let has_len_update = assertions
+            .iter()
+            .any(|a| a.contains("clen_1_0") && (a.contains("clen_0_0") || a.contains("delta_0_")));
         assert!(
             has_len_update,
             "Step 1 length should be updated based on step 0 length + deltas"
         );
 
         // Capacity bound of 5 should appear
-        let has_const_cap = assertions.iter().any(|a| a.contains("clen_") && a.contains("5"));
+        let has_const_cap = assertions
+            .iter()
+            .any(|a| a.contains("clen_") && a.contains("5"));
         assert!(has_const_cap, "Constant capacity 5 should appear in bounds");
     }
 
@@ -4349,19 +4476,27 @@ protocol BuggyBroadcast {
         });
 
         let cs: CounterSystem = ta.into();
-        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
         let encoding = encode_bmc(&cs, &property, 2);
-        let assertions: Vec<String> = encoding
-            .assertions
-            .iter()
-            .map(|t| to_smtlib(t))
-            .collect();
+        let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
 
         // Length should be preserved across all steps (= equality constraints)
-        let step0_eq = assertions.iter().any(|a| a.contains("clen_1_0") && a.contains("clen_0_0"));
-        let step1_eq = assertions.iter().any(|a| a.contains("clen_2_0") && a.contains("clen_1_0"));
-        assert!(step0_eq, "Unused collection length should be preserved step 0→1");
-        assert!(step1_eq, "Unused collection length should be preserved step 1→2");
+        let step0_eq = assertions
+            .iter()
+            .any(|a| a.contains("clen_1_0") && a.contains("clen_0_0"));
+        let step1_eq = assertions
+            .iter()
+            .any(|a| a.contains("clen_2_0") && a.contains("clen_1_0"));
+        assert!(
+            step0_eq,
+            "Unused collection length should be preserved step 0→1"
+        );
+        assert!(
+            step1_eq,
+            "Unused collection length should be preserved step 1→2"
+        );
     }
 
     #[test]
@@ -4399,9 +4534,7 @@ protocol BuggyBroadcast {
         let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
 
         assert!(
-            assertions
-                .iter()
-                .any(|a| a.contains("(= clk_0_0 0)")),
+            assertions.iter().any(|a| a.contains("(= clk_0_0 0)")),
             "clock must be initialized at step 0"
         );
         assert!(
@@ -4437,7 +4570,9 @@ protocol BuggyBroadcast {
         });
 
         let cs: CounterSystem = ta.into();
-        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
         let encoding = encode_bmc(&cs, &property, 2);
 
         let declarations: std::collections::HashSet<_> = encoding
@@ -4493,17 +4628,19 @@ protocol BuggyBroadcast {
         });
 
         let cs: CounterSystem = ta.into();
-        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
         let encoding = encode_bmc(&cs, &property, 2);
-        let assertions: Vec<String> = encoding
-            .assertions
-            .iter()
-            .map(|t| to_smtlib(t))
-            .collect();
+        let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
 
         // Check head and tail variables are declared at step 0
-        let has_head_init = assertions.iter().any(|a| a.contains("qhead_0_0") && a.contains("0"));
-        let has_tail_init = assertions.iter().any(|a| a.contains("qtail_0_0") && a.contains("0"));
+        let has_head_init = assertions
+            .iter()
+            .any(|a| a.contains("qhead_0_0") && a.contains("0"));
+        let has_tail_init = assertions
+            .iter()
+            .any(|a| a.contains("qtail_0_0") && a.contains("0"));
         assert!(has_head_init, "Queue head should be initialized to 0");
         assert!(has_tail_init, "Queue tail should be initialized to 0");
 
@@ -4514,16 +4651,22 @@ protocol BuggyBroadcast {
         assert!(has_tail_1, "Queue tail at step 1 should exist");
 
         // Check head <= tail constraint
-        let has_ordering = assertions.iter().any(|a| {
-            a.contains("qhead_1_0") && a.contains("qtail_1_0") && a.contains("<=")
-        });
-        assert!(has_ordering, "head <= tail ordering constraint should exist");
+        let has_ordering = assertions
+            .iter()
+            .any(|a| a.contains("qhead_1_0") && a.contains("qtail_1_0") && a.contains("<="));
+        assert!(
+            has_ordering,
+            "head <= tail ordering constraint should exist"
+        );
 
         // Check occupancy = tail - head = length
-        let has_occupancy = assertions.iter().any(|a| {
-            a.contains("clen_1_0") && a.contains("qtail_1_0") && a.contains("qhead_1_0")
-        });
-        assert!(has_occupancy, "Occupancy (tail - head) should equal collection length");
+        let has_occupancy = assertions
+            .iter()
+            .any(|a| a.contains("clen_1_0") && a.contains("qtail_1_0") && a.contains("qhead_1_0"));
+        assert!(
+            has_occupancy,
+            "Occupancy (tail - head) should equal collection length"
+        );
     }
 
     #[test]
@@ -4545,13 +4688,11 @@ protocol BuggyBroadcast {
         });
 
         let cs: CounterSystem = ta.into();
-        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
         let encoding = encode_bmc(&cs, &property, 1);
-        let assertions: Vec<String> = encoding
-            .assertions
-            .iter()
-            .map(|t| to_smtlib(t))
-            .collect();
+        let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
 
         // head_1 should reference head_0 and delta (dequeue delta)
         let has_head_update = assertions.iter().any(|a| {
@@ -4595,7 +4736,9 @@ protocol BuggyBroadcast {
         ta.rules.push(dequeue_rule);
 
         let cs: CounterSystem = ta.into();
-        let property = SafetyProperty::Agreement { conflicting_pairs: vec![] };
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
         let encoding = encode_bmc(&cs, &property, 2);
         let declarations: Vec<String> = encoding
             .declarations
@@ -4616,12 +4759,10 @@ protocol BuggyBroadcast {
         }
 
         // Verify capacity bound (5) appears in assertions
-        let assertions: Vec<String> = encoding
-            .assertions
+        let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+        let has_cap = assertions
             .iter()
-            .map(|t| to_smtlib(t))
-            .collect();
-        let has_cap = assertions.iter().any(|a| a.contains("clen_") && a.contains("5"));
+            .any(|a| a.contains("clen_") && a.contains("5"));
         assert!(has_cap, "Capacity bound of 5 should appear");
     }
 

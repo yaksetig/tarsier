@@ -2891,7 +2891,9 @@ protocol Reconfig {
     let program = parse(src, "reconfig.trs").expect("should parse reconfigure");
     let role = &program.protocol.node.roles[0].node;
     let transition = &role.phases[0].node.transitions[0].node;
-    assert!(matches!(&transition.actions[0], Action::Reconfigure { updates } if updates.len() == 2));
+    assert!(
+        matches!(&transition.actions[0], Action::Reconfigure { updates } if updates.len() == 2)
+    );
     if let Action::Reconfigure { updates } = &transition.actions[0] {
         assert_eq!(updates[0].param, "n");
         assert!(matches!(updates[0].value, Expr::IntLit(10)));
@@ -2922,7 +2924,9 @@ protocol Reconfig {
     let program = parse(src, "reconfig_empty.trs").expect("should parse empty reconfigure");
     let role = &program.protocol.node.roles[0].node;
     let transition = &role.phases[0].node.transitions[0].node;
-    assert!(matches!(&transition.actions[0], Action::Reconfigure { updates } if updates.is_empty()));
+    assert!(
+        matches!(&transition.actions[0], Action::Reconfigure { updates } if updates.is_empty())
+    );
 }
 
 #[test]

@@ -925,12 +925,13 @@ pub enum ValidationError {
         param_id: ParamId,
         max: usize,
     },
-    #[error("Rule {rule_id} param_update targets fixed (non-time-varying) parameter '{param_name}'")]
-    ParamUpdateOnFixedParam {
-        rule_id: RuleId,
-        param_name: String,
-    },
-    #[error("Rule {rule_id} param_update value references invalid parameter {param_id} (max: {max})")]
+    #[error(
+        "Rule {rule_id} param_update targets fixed (non-time-varying) parameter '{param_name}'"
+    )]
+    ParamUpdateOnFixedParam { rule_id: RuleId, param_name: String },
+    #[error(
+        "Rule {rule_id} param_update value references invalid parameter {param_id} (max: {max})"
+    )]
     InvalidParamUpdateValue {
         rule_id: RuleId,
         param_id: ParamId,
@@ -1109,12 +1110,7 @@ impl fmt::Display for ThresholdAutomaton {
                 if round.parent_rounds.is_empty() {
                     writeln!(f, "    {}: (root)", round.name)?;
                 } else {
-                    writeln!(
-                        f,
-                        "    {}: {}",
-                        round.name,
-                        round.parent_rounds.join(", ")
-                    )?;
+                    writeln!(f, "    {}: {}", round.name, round.parent_rounds.join(", "))?;
                 }
             }
         }
@@ -1644,9 +1640,18 @@ mod tests {
     /// Helper to build a minimal valid TA for validation tests.
     fn minimal_ta() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "t".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "f".into(),
+            time_varying: false,
+        });
         let loc0 = ta.add_location(Location {
             name: "Init".into(),
             role: "R".into(),
@@ -2120,7 +2125,10 @@ mod tests {
             value: LinearCombination::constant(10),
         });
         let err = ta.validate().unwrap_err();
-        assert!(matches!(err, ValidationError::ParamUpdateOnFixedParam { .. }));
+        assert!(matches!(
+            err,
+            ValidationError::ParamUpdateOnFixedParam { .. }
+        ));
     }
 
     #[test]

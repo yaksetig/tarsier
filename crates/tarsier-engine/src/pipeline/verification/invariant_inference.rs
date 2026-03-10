@@ -72,26 +72,20 @@ impl CandidatePredicate {
         }
     }
 
-    fn kappa_sum_le_param(
-        locs: &[(usize, &str)],
-        param_id: usize,
-        param_name: &str,
-    ) -> Self {
+    fn kappa_sum_le_param(locs: &[(usize, &str)], param_id: usize, param_name: &str) -> Self {
         let label_parts: Vec<String> = locs.iter().map(|(_, n)| format!("kappa_{n}")).collect();
         Self {
             label: format!("{} <= {param_name}", label_parts.join(" + ")),
-            lhs: locs.iter().map(|(id, _)| (1, LinearTerm::Kappa(*id))).collect(),
+            lhs: locs
+                .iter()
+                .map(|(id, _)| (1, LinearTerm::Kappa(*id)))
+                .collect(),
             op: PredicateOp::Le,
             rhs: vec![(1, LinearTerm::Param(param_id))],
         }
     }
 
-    fn gamma_le_param(
-        var_id: usize,
-        var_name: &str,
-        param_id: usize,
-        param_name: &str,
-    ) -> Self {
+    fn gamma_le_param(var_id: usize, var_name: &str, param_id: usize, param_name: &str) -> Self {
         Self {
             label: format!("gamma_{var_name} <= {param_name}"),
             lhs: vec![(1, LinearTerm::Gamma(var_id))],
@@ -112,14 +106,18 @@ impl CandidatePredicate {
     /// Evaluate this predicate on a concrete configuration.
     pub fn evaluate(&self, config: &Configuration) -> bool {
         let eval_side = |terms: &[(i64, LinearTerm)]| -> i64 {
-            terms.iter().map(|(coeff, term)| {
-                coeff * match term {
-                    LinearTerm::Kappa(id) => config.kappa.get(*id).copied().unwrap_or(0),
-                    LinearTerm::Gamma(id) => config.gamma.get(*id).copied().unwrap_or(0),
-                    LinearTerm::Param(id) => config.params.get(*id).copied().unwrap_or(0),
-                    LinearTerm::Const(v) => *v,
-                }
-            }).sum()
+            terms
+                .iter()
+                .map(|(coeff, term)| {
+                    coeff
+                        * match term {
+                            LinearTerm::Kappa(id) => config.kappa.get(*id).copied().unwrap_or(0),
+                            LinearTerm::Gamma(id) => config.gamma.get(*id).copied().unwrap_or(0),
+                            LinearTerm::Param(id) => config.params.get(*id).copied().unwrap_or(0),
+                            LinearTerm::Const(v) => *v,
+                        }
+                })
+                .sum()
         };
         let l = eval_side(&self.lhs);
         let r = eval_side(&self.rhs);
@@ -199,7 +197,9 @@ pub fn generate_linear_predicate_candidates(
     if let Some(n_id) = n_param {
         let n_name = &ta.parameters[n_id].name;
         for (id, loc) in ta.locations.iter().enumerate() {
-            candidates.push(CandidatePredicate::kappa_le_param(id, &loc.name, n_id, n_name));
+            candidates.push(CandidatePredicate::kappa_le_param(
+                id, &loc.name, n_id, n_name,
+            ));
         }
     }
 
@@ -236,7 +236,9 @@ pub fn generate_linear_predicate_candidates(
         candidates.push(CandidatePredicate::gamma_ge_zero(id, &var.name));
         if let Some(n_id) = n_param {
             let n_name = &ta.parameters[n_id].name;
-            candidates.push(CandidatePredicate::gamma_le_param(id, &var.name, n_id, n_name));
+            candidates.push(CandidatePredicate::gamma_le_param(
+                id, &var.name, n_id, n_name,
+            ));
         }
     }
 
@@ -605,9 +607,7 @@ pub fn predicate_assertions_for_depth(
 
 /// Convert inductive predicates into step-relation assertions (steps 0 and 1)
 /// for PDR-style encoding.
-pub fn predicate_assertions_for_step_relation(
-    predicates: &[CandidatePredicate],
-) -> Vec<SmtTerm> {
+pub fn predicate_assertions_for_step_relation(predicates: &[CandidatePredicate]) -> Vec<SmtTerm> {
     let mut assertions = Vec::with_capacity(predicates.len() * 2);
     for pred in predicates {
         assertions.push(pred.to_smt_term(0));
@@ -1008,18 +1008,25 @@ mod tests {
                 },
             ],
             initial_locations: vec![0.into()],
-            shared_vars: vec![
-                SharedVar {
-                    name: "msgs".into(),
-                    kind: SharedVarKind::MessageCounter,
-                    distinct: false,
-                    distinct_role: None,
-                },
-            ],
+            shared_vars: vec![SharedVar {
+                name: "msgs".into(),
+                kind: SharedVarKind::MessageCounter,
+                distinct: false,
+                distinct_role: None,
+            }],
             parameters: vec![
-                tarsier_ir::threshold_automaton::Parameter { name: "n".into(), time_varying: false },
-                tarsier_ir::threshold_automaton::Parameter { name: "t".into(), time_varying: false },
-                tarsier_ir::threshold_automaton::Parameter { name: "f".into(), time_varying: false },
+                tarsier_ir::threshold_automaton::Parameter {
+                    name: "n".into(),
+                    time_varying: false,
+                },
+                tarsier_ir::threshold_automaton::Parameter {
+                    name: "t".into(),
+                    time_varying: false,
+                },
+                tarsier_ir::threshold_automaton::Parameter {
+                    name: "f".into(),
+                    time_varying: false,
+                },
             ],
             ..ThresholdAutomaton::default()
         }
@@ -1035,7 +1042,9 @@ mod tests {
         // Should have zero-location candidates for Sent and Decided (not Init).
         let zero_labels: Vec<&str> = candidates
             .iter()
-            .filter(|c| c.op == PredicateOp::Eq && matches!(c.rhs.as_slice(), [(1, LinearTerm::Const(0))]))
+            .filter(|c| {
+                c.op == PredicateOp::Eq && matches!(c.rhs.as_slice(), [(1, LinearTerm::Const(0))])
+            })
             .map(|c| c.label.as_str())
             .collect();
         assert!(zero_labels.contains(&"kappa_Sent = 0"));
@@ -1072,7 +1081,9 @@ mod tests {
             conflicting_pairs: vec![(1.into(), 2.into())],
         };
         let candidates = generate_linear_predicate_candidates(&ta, &prop, None);
-        assert!(candidates.iter().any(|c| c.label == "kappa_Sent + kappa_Decided <= n"));
+        assert!(candidates
+            .iter()
+            .any(|c| c.label == "kappa_Sent + kappa_Decided <= n"));
     }
 
     #[test]
@@ -1098,7 +1109,9 @@ mod tests {
         // Zero-location candidates for Sent and Decided should be excluded (CTI-occupied).
         let zero_labels: Vec<&str> = candidates
             .iter()
-            .filter(|c| c.op == PredicateOp::Eq && matches!(c.rhs.as_slice(), [(1, LinearTerm::Const(0))]))
+            .filter(|c| {
+                c.op == PredicateOp::Eq && matches!(c.rhs.as_slice(), [(1, LinearTerm::Const(0))])
+            })
             .map(|c| c.label.as_str())
             .collect();
         assert!(!zero_labels.contains(&"kappa_Sent = 0"));
@@ -1159,11 +1172,7 @@ mod tests {
 
     #[test]
     fn to_smt_term_pairwise_sum() {
-        let pred = CandidatePredicate::kappa_sum_le_param(
-            &[(1, "Sent"), (2, "Decided")],
-            0,
-            "n",
-        );
+        let pred = CandidatePredicate::kappa_sum_le_param(&[(1, "Sent"), (2, "Decided")], 0, "n");
         let term = pred.to_smt_term(0);
         // Should be: (kappa_0_1 + kappa_0_2) <= p_0
         let expected = SmtTerm::var("kappa_0_1")
@@ -1212,7 +1221,10 @@ mod tests {
                 clock_updates: vec![],
                 param_updates: vec![],
             }],
-            parameters: vec![Parameter { name: "n".into(), time_varying: false }],
+            parameters: vec![Parameter {
+                name: "n".into(),
+                time_varying: false,
+            }],
             constraints: ThresholdAutomatonConstraints {
                 resilience_condition: None,
                 adversary_bound_param: None,
@@ -1238,8 +1250,7 @@ mod tests {
         // kappa_Init = 0 should NOT hold at init when n >= 1
         // (processes start at Init, so kappa_Init = n >= 1).
         use tarsier_ir::threshold_automaton::{
-            LinearCombination, LinearConstraint, ParamId,
-            CmpOp as IrCmpOp,
+            CmpOp as IrCmpOp, LinearCombination, LinearConstraint, ParamId,
         };
         let mut ta = make_solver_test_ta();
         // Add resilience condition: n >= 1 (so there's at least one process).
@@ -1258,7 +1269,10 @@ mod tests {
         let pred = CandidatePredicate::zero_location(0, "Init");
         let mut solver = Z3Solver::with_timeout_secs(10);
         let result = check_predicate_init(&mut solver, &cs, &pred, &[]).unwrap();
-        assert!(!result, "kappa_Init = 0 should NOT hold at init when n >= 1");
+        assert!(
+            !result,
+            "kappa_Init = 0 should NOT hold at init when n >= 1"
+        );
     }
 
     #[test]
@@ -1266,7 +1280,7 @@ mod tests {
         let ta = make_solver_test_ta();
         let cs = tarsier_ir::abstraction::abstract_to_counter_system(ta);
         let candidates = vec![
-            CandidatePredicate::zero_location(0, "Init"),   // fails init
+            CandidatePredicate::zero_location(0, "Init"), // fails init
             CandidatePredicate::kappa_le_param(0, "Init", 0, "n"), // kappa_Init <= n: should be inductive
         ];
         let mut solver = Z3Solver::with_timeout_secs(10);
@@ -1327,9 +1341,7 @@ mod tests {
 
     #[test]
     fn predicate_assertions_for_step_relation_generates_pairs() {
-        let preds = vec![
-            CandidatePredicate::zero_location(1, "Sent"),
-        ];
+        let preds = vec![CandidatePredicate::zero_location(1, "Sent")];
         let assertions = predicate_assertions_for_step_relation(&preds);
         // 1 predicate × 2 steps (0, 1)
         assert_eq!(assertions.len(), 2);
@@ -1374,9 +1386,7 @@ mod tests {
             conflicting_pairs: vec![],
         };
         // kappa_Done <= n is inductive for this system.
-        let invariants = vec![
-            CandidatePredicate::kappa_le_param(1, "Done", 0, "n"),
-        ];
+        let invariants = vec![CandidatePredicate::kappa_le_param(1, "Done", 0, "n")];
         let mut solver = Z3Solver::with_timeout_secs(10);
         let result = run_k_induction_with_predicate_invariants(
             &mut solver,

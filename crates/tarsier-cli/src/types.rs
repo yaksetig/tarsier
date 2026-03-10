@@ -194,3 +194,215 @@ impl std::fmt::Display for CanonicalVerdict {
         f.write_str(self.as_str())
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- CertificateKind --
+
+    #[test]
+    fn certificate_kind_safety_proof() {
+        assert_eq!(CertificateKind::SafetyProof.as_str(), "safety_proof");
+    }
+
+    #[test]
+    fn certificate_kind_fair_liveness_proof() {
+        assert_eq!(
+            CertificateKind::FairLivenessProof.as_str(),
+            "fair_liveness_proof"
+        );
+    }
+
+    #[test]
+    fn certificate_kind_is_copy() {
+        let k = CertificateKind::SafetyProof;
+        let k2 = k;
+        assert_eq!(k.as_str(), k2.as_str());
+    }
+
+    // -- CanonicalVerdict --
+
+    #[test]
+    fn canonical_verdict_as_str() {
+        assert_eq!(CanonicalVerdict::Safe.as_str(), "SAFE");
+        assert_eq!(CanonicalVerdict::Unsafe.as_str(), "UNSAFE");
+        assert_eq!(CanonicalVerdict::LiveProved.as_str(), "LIVE_PROVED");
+        assert_eq!(CanonicalVerdict::LiveCex.as_str(), "LIVE_CEX");
+        assert_eq!(CanonicalVerdict::Inconclusive.as_str(), "INCONCLUSIVE");
+        assert_eq!(CanonicalVerdict::Unknown.as_str(), "UNKNOWN");
+    }
+
+    #[test]
+    fn canonical_verdict_display() {
+        assert_eq!(format!("{}", CanonicalVerdict::Safe), "SAFE");
+        assert_eq!(format!("{}", CanonicalVerdict::Unsafe), "UNSAFE");
+    }
+
+    #[test]
+    fn canonical_verdict_eq() {
+        assert_eq!(CanonicalVerdict::Safe, CanonicalVerdict::Safe);
+        assert_ne!(CanonicalVerdict::Safe, CanonicalVerdict::Unsafe);
+    }
+
+    #[test]
+    fn canonical_verdict_debug() {
+        let debug = format!("{:?}", CanonicalVerdict::Safe);
+        assert_eq!(debug, "Safe");
+    }
+
+    #[test]
+    fn canonical_verdict_serializes_screaming_snake_case() {
+        let json = serde_json::to_string(&CanonicalVerdict::LiveProved).unwrap();
+        assert_eq!(json, "\"LIVE_PROVED\"");
+    }
+
+    #[test]
+    fn canonical_verdict_copy() {
+        let v = CanonicalVerdict::Inconclusive;
+        let v2 = v;
+        assert_eq!(v, v2);
+    }
+
+    // -- CertificateBundleObligation --
+
+    #[test]
+    fn certificate_bundle_obligation_clone() {
+        let obl = CertificateBundleObligation {
+            name: "init".into(),
+            expected: "unsat".into(),
+            smt2: "(assert true)".into(),
+        };
+        let cloned = obl.clone();
+        assert_eq!(cloned.name, "init");
+        assert_eq!(cloned.expected, "unsat");
+        assert_eq!(cloned.smt2, "(assert true)");
+    }
+
+    // -- CertificateBundleInput --
+
+    #[test]
+    fn certificate_bundle_input_clone() {
+        let input = CertificateBundleInput {
+            kind: CertificateKind::SafetyProof,
+            protocol_file: "proto.trs".into(),
+            proof_engine: "pdr".into(),
+            induction_k: Some(12),
+            solver_used: "z3".into(),
+            soundness: "strict".into(),
+            fairness: None,
+            committee_bounds: vec![("f".into(), 1)],
+            obligations: vec![],
+        };
+        let cloned = input.clone();
+        assert_eq!(cloned.protocol_file, "proto.trs");
+        assert_eq!(cloned.induction_k, Some(12));
+        assert!(cloned.fairness.is_none());
+        assert_eq!(cloned.committee_bounds.len(), 1);
+    }
+
+    // -- AnalysisReport serialization --
+
+    #[test]
+    fn analysis_report_serializes() {
+        let report = AnalysisReport {
+            schema_version: "v1".into(),
+            mode: "quick".into(),
+            file: "test.trs".into(),
+            config: AnalysisConfig {
+                solver: "z3".into(),
+                depth: 10,
+                k: 12,
+                timeout_secs: 60,
+                soundness: "strict".into(),
+                fairness: "weak".into(),
+                portfolio: false,
+                por_mode: "full".into(),
+            },
+            network_faithfulness: serde_json::json!({}),
+            liveness_governance: None,
+            layers: vec![],
+            overall: "pass".into(),
+            overall_verdict: "SAFE".into(),
+            interpretation: AnalysisInterpretation {
+                safety: "safe".into(),
+                liveness: "unknown".into(),
+                summary: "Protocol is safe.".into(),
+                overall_status_meaning: "passed".into(),
+            },
+            claim: None,
+            next_action: None,
+            confidence_tier: "standard".into(),
+            preflight_warnings: vec![],
+        };
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["schema_version"], "v1");
+        assert_eq!(json["mode"], "quick");
+        assert_eq!(json["overall"], "pass");
+        // liveness_governance should be skipped when None
+        assert!(!json.as_object().unwrap().contains_key("liveness_governance"));
+    }
+
+    // -- LayerRunCfg --
+
+    #[test]
+    fn layer_run_cfg_copy() {
+        let cfg = LayerRunCfg {
+            solver: SolverChoice::Z3,
+            depth: 10,
+            k: 12,
+            timeout: 60,
+            soundness: SoundnessMode::Strict,
+            fairness: FairnessMode::Weak,
+            cegar_iters: 2,
+            portfolio: true,
+        };
+        let copy = cfg;
+        assert_eq!(copy.depth, 10);
+        assert!(copy.portfolio);
+    }
+
+    // -- enum debug --
+
+    #[test]
+    fn analysis_mode_debug() {
+        assert_eq!(format!("{:?}", AnalysisMode::Quick), "Quick");
+        assert_eq!(format!("{:?}", AnalysisMode::Standard), "Standard");
+        assert_eq!(format!("{:?}", AnalysisMode::Proof), "Proof");
+        assert_eq!(format!("{:?}", AnalysisMode::Audit), "Audit");
+    }
+
+    #[test]
+    fn output_format_debug() {
+        assert_eq!(format!("{:?}", OutputFormat::Text), "Text");
+        assert_eq!(format!("{:?}", OutputFormat::Json), "Json");
+    }
+
+    #[test]
+    fn cli_network_semantics_mode_eq() {
+        assert_eq!(CliNetworkSemanticsMode::Dsl, CliNetworkSemanticsMode::Dsl);
+        assert_ne!(
+            CliNetworkSemanticsMode::Dsl,
+            CliNetworkSemanticsMode::Faithful
+        );
+    }
+
+    #[test]
+    fn visualize_check_debug() {
+        assert_eq!(format!("{:?}", VisualizeCheck::Verify), "Verify");
+        assert_eq!(
+            format!("{:?}", VisualizeCheck::FairLiveness),
+            "FairLiveness"
+        );
+    }
+
+    #[test]
+    fn visualize_format_debug() {
+        assert_eq!(format!("{:?}", VisualizeFormat::Timeline), "Timeline");
+        assert_eq!(format!("{:?}", VisualizeFormat::Mermaid), "Mermaid");
+    }
+}

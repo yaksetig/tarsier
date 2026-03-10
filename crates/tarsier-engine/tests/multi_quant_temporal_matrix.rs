@@ -166,3 +166,126 @@ fn matrix_multi_quant_temporal_bug_case_finds_fair_cycle() {
         ),
     }
 }
+
+/// Single-quantifier temporal liveness (simpler case) should also work.
+const SINGLE_QUANT_PROTOCOL: &str = r#"
+protocol SingleQuantTemporalMatrix {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    role R {
+        var done: bool = true;
+        init s;
+        phase s {}
+    }
+
+    property progress: liveness {
+        forall p: R. [] (p.done == true)
+    }
+}
+"#;
+
+#[test]
+fn matrix_single_quant_temporal_live_has_no_fair_cycle() {
+    let opts = matrix_pipeline_options();
+    let fairness = matrix_fairness_mode();
+
+    let result = pipeline::check_fair_liveness_with_mode(
+        SINGLE_QUANT_PROTOCOL,
+        "single_quant_temporal_matrix.trs",
+        &opts,
+        fairness,
+    )
+    .expect("single-quant temporal matrix check should complete");
+
+    match result {
+        FairLivenessResult::NoFairCycleUpTo { depth_checked } => {
+            assert_eq!(depth_checked, opts.max_depth);
+        }
+        other => panic!("expected no fair cycle for single-quant live protocol, got: {other}"),
+    }
+}
+
+/// Protocol where `done` is always false -- liveness violation expected.
+const ALWAYS_FALSE_PROTOCOL: &str = r#"
+protocol AlwaysFalseTemporalMatrix {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    role R {
+        var done: bool = false;
+        init s;
+        phase s {}
+    }
+
+    property progress: liveness {
+        forall p: R. <> (p.done == true)
+    }
+}
+"#;
+
+#[test]
+fn matrix_always_false_finds_fair_cycle() {
+    let opts = matrix_pipeline_options();
+    let fairness = matrix_fairness_mode();
+
+    let result = pipeline::check_fair_liveness_with_mode(
+        ALWAYS_FALSE_PROTOCOL,
+        "always_false_temporal_matrix.trs",
+        &opts,
+        fairness,
+    )
+    .expect("always-false temporal matrix check should complete");
+
+    match result {
+        FairLivenessResult::FairCycleFound {
+            depth, loop_start, ..
+        } => {
+            assert!(depth >= 1);
+            assert!(loop_start < depth);
+        }
+        other => panic!("expected fair-cycle witness for always-false protocol, got: {other}"),
+    }
+}
+
+/// Multi-quant with extra unused universal quantifier should still classify correctly.
+const EXTRA_FORALL_PROTOCOL: &str = r#"
+protocol ExtraForallTemporalMatrix {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    role R {
+        var done: bool = true;
+        init s;
+        phase s {}
+    }
+
+    property progress: liveness {
+        forall p: R. forall q: R. [] (p.done == true)
+    }
+}
+"#;
+
+#[test]
+fn matrix_extra_forall_has_no_fair_cycle() {
+    let opts = matrix_pipeline_options();
+    let fairness = matrix_fairness_mode();
+
+    let result = pipeline::check_fair_liveness_with_mode(
+        EXTRA_FORALL_PROTOCOL,
+        "extra_forall_temporal_matrix.trs",
+        &opts,
+        fairness,
+    )
+    .expect("extra-forall temporal matrix check should complete");
+
+    match result {
+        FairLivenessResult::NoFairCycleUpTo { depth_checked } => {
+            assert_eq!(depth_checked, opts.max_depth);
+        }
+        other => panic!("expected no fair cycle for extra-forall protocol, got: {other}"),
+    }
+}

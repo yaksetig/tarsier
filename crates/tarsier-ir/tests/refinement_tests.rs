@@ -143,7 +143,7 @@ fn product_two_by_two_identity_mapping() {
     let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
 
     assert_eq!(product.num_locations(), 4); // 2×2
-    // Off-diagonal are mismatches: (0,1) and (1,0)
+                                            // Off-diagonal are mismatches: (0,1) and (1,0)
     assert_eq!(product.mismatch_locations.len(), 2);
     assert!(product.has_mismatches());
 }
@@ -164,7 +164,7 @@ fn product_three_concrete_two_abstract_with_merge() {
     let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
 
     assert_eq!(product.num_locations(), 6); // 3×2
-    // Initial: (Init, Init) only
+                                            // Initial: (Init, Init) only
     assert_eq!(product.initial_locations.len(), 1);
 }
 
@@ -182,7 +182,7 @@ fn product_all_internal_concrete_locations() {
     let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
 
     assert_eq!(product.num_locations(), 2); // 2×1
-    // Internal locations have no expected abstract, so no mismatches.
+                                            // Internal locations have no expected abstract, so no mismatches.
     assert!(!product.has_mismatches());
 }
 
@@ -262,7 +262,10 @@ fn product_synchronized_rule_requires_matching_abstract_rule() {
         .iter()
         .filter(|r| r.abstract_rule.is_some())
         .collect();
-    assert!(!synced.is_empty(), "should have at least one synchronized rule");
+    assert!(
+        !synced.is_empty(),
+        "should have at least one synchronized rule"
+    );
 }
 
 #[test]
@@ -283,7 +286,10 @@ fn product_no_abstract_rule_means_no_synchronized_rule() {
         .iter()
         .filter(|r| r.abstract_rule.is_some())
         .collect();
-    assert!(synced.is_empty(), "no abstract rules means no synchronized rules");
+    assert!(
+        synced.is_empty(),
+        "no abstract rules means no synchronized rules"
+    );
 }
 
 #[test]
@@ -304,7 +310,10 @@ fn product_self_loop_generates_stutter() {
         .iter()
         .filter(|r| r.abstract_rule.is_none())
         .collect();
-    assert!(!stutter.is_empty(), "self-loop should generate stutter rule");
+    assert!(
+        !stutter.is_empty(),
+        "self-loop should generate stutter rule"
+    );
 }
 
 #[test]
@@ -447,8 +456,8 @@ fn product_linear_chain_concrete_refines_shorter_abstract() {
     let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
 
     assert_eq!(product.num_locations(), 8); // 4×2
-    // Internal locations have no expected abstract, so mismatches only from mapped.
-    // Mapped: (A,D)=mismatch, (D,A)=mismatch → 2 mismatches from mapped locs.
+                                            // Internal locations have no expected abstract, so mismatches only from mapped.
+                                            // Mapped: (A,D)=mismatch, (D,A)=mismatch → 2 mismatches from mapped locs.
     assert!(product.has_mismatches());
 }
 
@@ -475,13 +484,16 @@ fn product_diamond_topology() {
     let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
 
     assert_eq!(product.num_locations(), 8); // 4×2
-    // Should have stutter rules for internal transitions.
+                                            // Should have stutter rules for internal transitions.
     let stutter: Vec<_> = product
         .rules
         .iter()
         .filter(|r| r.abstract_rule.is_none())
         .collect();
-    assert!(stutter.len() >= 2, "diamond should have stutter rules for internal paths");
+    assert!(
+        stutter.len() >= 2,
+        "diamond should have stutter rules for internal paths"
+    );
 }
 
 #[test]
@@ -516,9 +528,9 @@ fn self_refinement_identity_no_mismatches() {
     let product = build_product(&ta, &ta, &rel).unwrap();
 
     assert_eq!(product.num_locations(), 9); // 3×3
-    // Off-diagonal product locations are mismatches (e.g., (Init,Done)).
-    // For N=3, diagonal has 3 locations, off-diagonal has 6 mismatches.
-    // This is expected: the simulation check verifies these are unreachable.
+                                            // Off-diagonal product locations are mismatches (e.g., (Init,Done)).
+                                            // For N=3, diagonal has 3 locations, off-diagonal has 6 mismatches.
+                                            // This is expected: the simulation check verifies these are unreachable.
     assert_eq!(
         product.mismatch_locations.len(),
         6,
@@ -553,7 +565,7 @@ fn product_star_topology_with_shared_vars() {
     let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
 
     assert_eq!(product.num_locations(), 8); // 4×2
-    // Check that parameters were merged correctly
+                                            // Check that parameters were merged correctly
     assert_eq!(product.parameters.len(), 2); // conc_n + abs_n
 }
 
@@ -580,8 +592,15 @@ fn product_scaling_10_concrete_2_abstract() {
     assert_eq!(product.num_locations(), 20); // 10×2
     assert!(product.has_mismatches());
     // Stutter rules for the 8 internal locations
-    let stutter_count = product.rules.iter().filter(|r| r.abstract_rule.is_none()).count();
-    assert!(stutter_count >= 8, "should have stutter rules for internal transitions");
+    let stutter_count = product
+        .rules
+        .iter()
+        .filter(|r| r.abstract_rule.is_none())
+        .count();
+    assert!(
+        stutter_count >= 8,
+        "should have stutter rules for internal transitions"
+    );
 }
 
 // ── Multiple initial locations in both automata ──
@@ -600,8 +619,8 @@ fn product_multiple_initials_both_automata() {
     let product = build_product(&concrete, &abstract_ta, &rel).unwrap();
 
     assert_eq!(product.num_locations(), 6); // 3×2
-    // Initial locations should be product states where concrete is initial
-    // and abstract matches the mapping
+                                            // Initial locations should be product states where concrete is initial
+                                            // and abstract matches the mapping
     assert!(!product.initial_locations.is_empty());
 }
 
@@ -743,6 +762,13 @@ protocol Abstract {
     assert!(product.num_rules() > 0);
 
     // Should have some internal (stutter) rules for validating transitions
-    let stutter_count = product.rules.iter().filter(|r| r.abstract_rule.is_none()).count();
-    assert!(stutter_count > 0, "extra validating phase should produce stutter rules");
+    let stutter_count = product
+        .rules
+        .iter()
+        .filter(|r| r.abstract_rule.is_none())
+        .count();
+    assert!(
+        stutter_count > 0,
+        "extra validating phase should produce stutter rules"
+    );
 }

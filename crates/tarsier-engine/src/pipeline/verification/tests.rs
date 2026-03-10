@@ -13,7 +13,10 @@ use tarsier_smt::terms::SmtTerm;
 
 fn report_ta() -> ThresholdAutomaton {
     let mut ta = ThresholdAutomaton::new();
-    ta.parameters.push(Parameter { name: "n".into(), time_varying: false });
+    ta.parameters.push(Parameter {
+        name: "n".into(),
+        time_varying: false,
+    });
     ta.locations.push(Location {
         name: "Init".into(),
         role: "R".into(),
@@ -800,7 +803,10 @@ fn is_pure_stutter_rule_detection() {
 fn make_por_ta() -> ThresholdAutomaton {
     let mut ta = ThresholdAutomaton::new();
     ta.parameters
-        .push(tarsier_ir::threshold_automaton::Parameter { name: "n".into(), time_varying: false });
+        .push(tarsier_ir::threshold_automaton::Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
     // Location 0: Init (role A)
     ta.locations.push(Location {
         name: "Init".into(),

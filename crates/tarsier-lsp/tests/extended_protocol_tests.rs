@@ -238,10 +238,7 @@ async fn hover_on_protocol_keyword_returns_docs() {
 
     // "protocol" at line 0, col 0
     let result = hover_at(&mut service, uri, 0, 3).await;
-    assert!(
-        !result.is_null(),
-        "hover on 'protocol' should not be null"
-    );
+    assert!(!result.is_null(), "hover on 'protocol' should not be null");
     let content = result["contents"]["value"].as_str().unwrap_or("");
     assert!(
         content.contains("protocol") || content.contains("Protocol"),
@@ -476,7 +473,9 @@ async fn diagnostics_for_missing_init_phase() {
 
     let result = &resp["result"];
     if !result.is_null() {
-        let actions = result.as_array().expect("codeAction result should be an array");
+        let actions = result
+            .as_array()
+            .expect("codeAction result should be an array");
         if !actions.is_empty() {
             let first_title = actions[0]["title"].as_str().unwrap_or("");
             assert!(
@@ -513,7 +512,9 @@ async fn completion_inside_role_body() {
     .expect("completion should return a response");
 
     let result = &resp["result"];
-    let items = result.as_array().expect("completion should return an array");
+    let items = result
+        .as_array()
+        .expect("completion should return an array");
     let labels: Vec<&str> = items
         .iter()
         .filter_map(|item| item["label"].as_str())
@@ -556,7 +557,9 @@ async fn completion_inside_phase_body() {
     .expect("completion should return a response");
 
     let result = &resp["result"];
-    let items = result.as_array().expect("completion should return an array");
+    let items = result
+        .as_array()
+        .expect("completion should return an array");
     let labels: Vec<&str> = items
         .iter()
         .filter_map(|item| item["label"].as_str())
@@ -590,7 +593,9 @@ async fn completion_after_property_colon() {
     .expect("completion should return a response");
 
     let result = &resp["result"];
-    let items = result.as_array().expect("completion should return an array");
+    let items = result
+        .as_array()
+        .expect("completion should return an array");
     let labels: Vec<&str> = items
         .iter()
         .filter_map(|item| item["label"].as_str())
@@ -615,7 +620,8 @@ async fn completion_after_var_type_colon() {
     let mut service = build_service();
     initialize(&mut service).await;
 
-    let source = "protocol T {\n    role R {\n        var x:\n        init s;\n        phase s {}\n    }\n}";
+    let source =
+        "protocol T {\n    role R {\n        var x:\n        init s;\n        phase s {}\n    }\n}";
     let uri = "file:///test/comp_type.trs";
     open_document(&mut service, uri, source).await;
 
@@ -632,7 +638,9 @@ async fn completion_after_var_type_colon() {
     .expect("completion should return a response");
 
     let result = &resp["result"];
-    let items = result.as_array().expect("completion should return an array");
+    let items = result
+        .as_array()
+        .expect("completion should return an array");
     let labels: Vec<&str> = items
         .iter()
         .filter_map(|item| item["label"].as_str())
@@ -704,7 +712,8 @@ async fn server_handles_multiple_documents() {
     initialize(&mut service).await;
 
     let source_a = "protocol A {\n    role R {\n        init s;\n        phase s {}\n    }\n}";
-    let source_b = "protocol B {\n    message M;\n    role S {\n        init s;\n        phase s {}\n    }\n}";
+    let source_b =
+        "protocol B {\n    message M;\n    role S {\n        init s;\n        phase s {}\n    }\n}";
 
     let uri_a = "file:///test/multi_a.trs";
     let uri_b = "file:///test/multi_b.trs";
@@ -733,8 +742,14 @@ async fn server_handles_multiple_documents() {
     let symbols_a = resp_a["result"].as_array().unwrap();
     let symbols_b = resp_b["result"].as_array().unwrap();
 
-    let names_a: Vec<&str> = symbols_a.iter().filter_map(|s| s["name"].as_str()).collect();
-    let names_b: Vec<&str> = symbols_b.iter().filter_map(|s| s["name"].as_str()).collect();
+    let names_a: Vec<&str> = symbols_a
+        .iter()
+        .filter_map(|s| s["name"].as_str())
+        .collect();
+    let names_b: Vec<&str> = symbols_b
+        .iter()
+        .filter_map(|s| s["name"].as_str())
+        .collect();
 
     assert!(names_a.contains(&"A"), "doc A should contain protocol A");
     assert!(names_b.contains(&"B"), "doc B should contain protocol B");
@@ -772,7 +787,10 @@ async fn server_handles_did_change() {
     .expect("documentSymbol should work after didChange");
 
     let symbols = resp["result"].as_array().unwrap();
-    assert!(!symbols.is_empty(), "symbols should not be empty after update");
+    assert!(
+        !symbols.is_empty(),
+        "symbols should not be empty after update"
+    );
 }
 
 // -------------------------------------------------------------------------

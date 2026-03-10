@@ -48,9 +48,18 @@ pub fn arb_threshold_automaton() -> impl Strategy<Value = ThresholdAutomaton> {
             let mut ta = ThresholdAutomaton::new();
 
             // Add standard parameters: n, t, f
-            let _n_id = ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
-            let t_id = ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
-            let f_id = ta.add_parameter(Parameter { name: "f".into(), time_varying: false });
+            let _n_id = ta.add_parameter(Parameter {
+                name: "n".into(),
+                time_varying: false,
+            });
+            let t_id = ta.add_parameter(Parameter {
+                name: "t".into(),
+                time_varying: false,
+            });
+            let f_id = ta.add_parameter(Parameter {
+                name: "f".into(),
+                time_varying: false,
+            });
 
             // Resilience condition: n > 3*t
             ta.constraints.resilience_condition = Some(LinearConstraint {

@@ -2558,7 +2558,10 @@ mod tests {
     #[test]
     fn confidence_quick() {
         let layers = vec![make_layer("verify", "pass", "SAFE")];
-        assert_eq!(compute_confidence_tier(AnalysisMode::Quick, &layers), "quick");
+        assert_eq!(
+            compute_confidence_tier(AnalysisMode::Quick, &layers),
+            "quick"
+        );
     }
 
     #[test]
@@ -2614,10 +2617,7 @@ mod tests {
         let claim = build_claim_statement(&layers, &nf, "proof", &[]);
         assert!(claim.proven.iter().any(|p| p.contains("Safety")));
         assert!(claim.proven.iter().any(|p| p.contains("unbounded")));
-        assert!(claim
-            .assumptions
-            .iter()
-            .any(|a| a.contains("faithful")));
+        assert!(claim.assumptions.iter().any(|a| a.contains("faithful")));
     }
 
     #[test]

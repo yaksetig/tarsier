@@ -162,3 +162,121 @@ pub(crate) fn generate_trust_report(
         ],
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_trust_report_standard_profile() {
+        let report = generate_trust_report("standard", Some("test.trs"), &["z3"], "pdr", "strict");
+        assert_eq!(report.schema_version, TRUST_REPORT_SCHEMA_VERSION);
+        assert_eq!(report.governance_profile, "standard");
+        assert!(report.generator.contains("tarsier-cli"));
+        assert_eq!(
+            report.verification_scope.protocol_file.as_deref(),
+            Some("test.trs")
+        );
+        assert_eq!(report.verification_scope.solvers, vec!["z3"]);
+        assert_eq!(report.verification_scope.proof_engine, "pdr");
+        assert_eq!(report.verification_scope.soundness, "strict");
+    }
+
+    #[test]
+    fn generate_trust_report_no_protocol_file() {
+        let report = generate_trust_report("standard", None, &["z3"], "pdr", "strict");
+        assert!(report.verification_scope.protocol_file.is_none());
+    }
+
+    #[test]
+    fn generate_trust_report_multi_solver_enforces_layer() {
+        let report =
+            generate_trust_report("standard", None, &["z3", "cvc5"], "kinduction", "strict");
+        let multi_solver_layer = report
+            .trust_boundary
+            .claim_layers
+            .iter()
+            .find(|l| l.name == "multi_solver_replay")
+            .unwrap();
+        assert_eq!(multi_solver_layer.status, "enforced");
+    }
+
+    #[test]
+    fn generate_trust_report_single_solver_not_applicable() {
+        let report = generate_trust_report("standard", None, &["z3"], "kinduction", "strict");
+        let multi_solver_layer = report
+            .trust_boundary
+            .claim_layers
+            .iter()
+            .find(|l| l.name == "multi_solver_replay")
+            .unwrap();
+        assert_eq!(multi_solver_layer.status, "not_applicable");
+    }
+
+    #[test]
+    fn generate_trust_report_high_assurance_proof_object() {
+        let report =
+            generate_trust_report("high-assurance", None, &["z3", "cvc5"], "pdr", "strict");
+        let proof_layer = report
+            .trust_boundary
+            .claim_layers
+            .iter()
+            .find(|l| l.name == "proof_object_path")
+            .unwrap();
+        assert_eq!(proof_layer.status, "enforced");
+    }
+
+    #[test]
+    fn generate_trust_report_non_high_assurance_proof_optional() {
+        let report = generate_trust_report("standard", None, &["z3"], "pdr", "strict");
+        let proof_layer = report
+            .trust_boundary
+            .claim_layers
+            .iter()
+            .find(|l| l.name == "proof_object_path")
+            .unwrap();
+        assert_eq!(proof_layer.status, "optional");
+    }
+
+    #[test]
+    fn generate_trust_report_has_claim_layers() {
+        let report = generate_trust_report("standard", None, &["z3"], "pdr", "strict");
+        assert!(!report.trust_boundary.claim_layers.is_empty());
+        assert!(report.trust_boundary.claim_layers.len() >= 4);
+    }
+
+    #[test]
+    fn generate_trust_report_has_threat_model() {
+        let report = generate_trust_report("standard", None, &["z3"], "pdr", "strict");
+        assert!(!report.trust_boundary.threat_model.is_empty());
+    }
+
+    #[test]
+    fn generate_trust_report_has_residual_assumptions() {
+        let report = generate_trust_report("standard", None, &["z3"], "pdr", "strict");
+        assert!(!report.residual_assumptions.is_empty());
+        assert!(report
+            .residual_assumptions
+            .iter()
+            .any(|a| a.name == "solver_correctness"));
+    }
+
+    #[test]
+    fn generate_trust_report_timestamp_format() {
+        let report = generate_trust_report("standard", None, &["z3"], "pdr", "strict");
+        assert!(report.generated_at.ends_with('Z'));
+        assert_eq!(report.generated_at.len(), 20);
+    }
+
+    #[test]
+    fn generate_trust_report_serializes() {
+        let report = generate_trust_report("standard", Some("x.trs"), &["z3"], "pdr", "strict");
+        let json = serde_json::to_string_pretty(&report).unwrap();
+        assert!(json.contains("schema_version"));
+        assert!(json.contains("trust_boundary"));
+    }
+}

@@ -246,6 +246,260 @@ pub(crate) struct CertSuiteDefaults {
 }
 
 // ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // -- GovernanceBundle serde --
+
+    #[test]
+    fn governance_bundle_round_trip_serde() {
+        let bundle = GovernanceBundle {
+            schema_version: "v1".into(),
+            tarsier_version: "0.1.0".into(),
+            environment: EnvironmentInfo {
+                os: "linux".into(),
+                arch: "x86_64".into(),
+            },
+            model_source_sha256: "a".repeat(64),
+            analysis_report: json!({"schema_version": "v1", "mode": "quick", "file": "x.trs", "layers": [], "overall": "pass", "overall_verdict": "SAFE"}),
+            certificates: vec![],
+            artifacts: vec![],
+            signature: GovernanceBundleSignature {
+                algorithm: "ed25519".into(),
+                public_key_hex: "abcd".into(),
+                signature_hex: "1234".into(),
+                signed_payload_sha256: "b".repeat(64),
+            },
+        };
+        let json = serde_json::to_string(&bundle).unwrap();
+        let parsed: GovernanceBundle = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.schema_version, "v1");
+        assert_eq!(parsed.tarsier_version, "0.1.0");
+        assert_eq!(parsed.environment.os, "linux");
+        assert_eq!(parsed.environment.arch, "x86_64");
+    }
+
+    // -- EnvironmentInfo --
+
+    #[test]
+    fn environment_info_clone() {
+        let info = EnvironmentInfo {
+            os: "macos".into(),
+            arch: "arm64".into(),
+        };
+        let cloned = info.clone();
+        assert_eq!(cloned.os, "macos");
+        assert_eq!(cloned.arch, "arm64");
+    }
+
+    // -- CertificateReference --
+
+    #[test]
+    fn certificate_reference_optional_sha() {
+        let cr = CertificateReference {
+            kind: "safety".into(),
+            bundle_dir: "/tmp".into(),
+            bundle_sha256: None,
+            integrity_ok: true,
+        };
+        let json = serde_json::to_value(&cr).unwrap();
+        assert!(json["bundle_sha256"].is_null());
+    }
+
+    // -- GovernanceArtifactReference --
+
+    #[test]
+    fn governance_artifact_reference_serde() {
+        let gar = GovernanceArtifactReference {
+            name: "report".into(),
+            kind: "report".into(),
+            path: "/tmp/report.json".into(),
+            sha256: "c".repeat(64),
+        };
+        let json = serde_json::to_string(&gar).unwrap();
+        let parsed: GovernanceArtifactReference = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "report");
+    }
+
+    // -- GovernanceBundleVerificationCheck --
+
+    #[test]
+    fn verification_check_skips_none_error() {
+        let check = GovernanceBundleVerificationCheck {
+            check: "schema".into(),
+            status: "pass".into(),
+            details: json!({}),
+            error: None,
+        };
+        let json = serde_json::to_value(&check).unwrap();
+        assert!(!json.as_object().unwrap().contains_key("error"));
+    }
+
+    // -- GovernancePipelineReport --
+
+    #[test]
+    fn governance_pipeline_report_serializes() {
+        let report = GovernancePipelineReport {
+            schema_version: "v1".into(),
+            tarsier_version: "0.1.0".into(),
+            gates: vec![],
+            overall: "pass".into(),
+            elapsed_ms: 100,
+        };
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["overall"], "pass");
+        assert_eq!(json["elapsed_ms"], 100);
+    }
+
+    // -- GovernanceGateResult --
+
+    #[test]
+    fn governance_gate_result_clone() {
+        let gate = GovernanceGateResult {
+            gate: "proof".into(),
+            status: "pass".into(),
+            elapsed_ms: 50,
+            details: json!({"key": "val"}),
+            error: None,
+        };
+        let cloned = gate.clone();
+        assert_eq!(cloned.gate, "proof");
+        assert_eq!(cloned.elapsed_ms, 50);
+    }
+
+    // -- CertSuiteManifest --
+
+    #[test]
+    fn cert_suite_manifest_deserializes_minimal() {
+        let json = r#"{"schema_version": 2, "entries": []}"#;
+        let manifest: CertSuiteManifest = serde_json::from_str(json).unwrap();
+        assert_eq!(manifest.schema_version, 2);
+        assert!(manifest.entries.is_empty());
+        assert!(!manifest.enforce_library_coverage);
+        assert!(!manifest.enforce_corpus_breadth);
+    }
+
+    // -- CertSuiteEntry --
+
+    #[test]
+    fn cert_suite_entry_defaults() {
+        let json = r#"{"file": "test.trs"}"#;
+        let entry: CertSuiteEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.file, "test.trs");
+        assert!(entry.verify.is_none());
+        assert!(entry.liveness.is_none());
+        assert!(entry.depth.is_none());
+        assert!(entry.family.is_none());
+    }
+
+    // -- CertSuiteAssumptions --
+
+    #[test]
+    fn cert_suite_assumptions_clone() {
+        let assumptions = CertSuiteAssumptions {
+            solver: "z3".into(),
+            proof_engine: "pdr".into(),
+            soundness: "strict".into(),
+            fairness: "weak".into(),
+            network_semantics: "dsl".into(),
+            depth: 10,
+            k: 12,
+            timeout_secs: 60,
+            cegar_iters: 2,
+        };
+        let cloned = assumptions.clone();
+        assert_eq!(cloned.solver, "z3");
+        assert_eq!(cloned.depth, 10);
+    }
+
+    // -- CertSuiteBucketSummary --
+
+    #[test]
+    fn cert_suite_bucket_summary_default() {
+        let bucket = CertSuiteBucketSummary::default();
+        assert_eq!(bucket.total, 0);
+        assert_eq!(bucket.passed, 0);
+        assert_eq!(bucket.failed, 0);
+        assert_eq!(bucket.errors, 0);
+    }
+
+    // -- CertSuiteDefaults --
+
+    #[test]
+    fn cert_suite_defaults_copy() {
+        let defaults = CertSuiteDefaults {
+            solver: SolverChoice::Z3,
+            depth: 10,
+            k: 12,
+            timeout_secs: 60,
+            soundness: SoundnessMode::Strict,
+            fairness: FairnessMode::Weak,
+            proof_engine: ProofEngine::KInduction,
+        };
+        let copy = defaults;
+        assert_eq!(copy.depth, 10);
+        assert_eq!(copy.k, 12);
+    }
+
+    // -- TrustReport types --
+
+    #[test]
+    fn trust_report_claim_layer_serde() {
+        let layer = TrustReportClaimLayer {
+            name: "test".into(),
+            what_is_verified: "something".into(),
+            what_is_trusted: "other".into(),
+            status: "enforced".into(),
+        };
+        let json = serde_json::to_string(&layer).unwrap();
+        let parsed: TrustReportClaimLayer = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "test");
+    }
+
+    #[test]
+    fn trust_report_threat_entry_serde() {
+        let entry = TrustReportThreatEntry {
+            category: "tampering".into(),
+            vector: "modify files".into(),
+            countermeasure: "sha256".into(),
+            status: "enforced".into(),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        let parsed: TrustReportThreatEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.category, "tampering");
+    }
+
+    #[test]
+    fn trust_report_verification_scope_optional_protocol_file() {
+        let scope = TrustReportVerificationScope {
+            protocol_file: None,
+            solvers: vec!["z3".into()],
+            proof_engine: "pdr".into(),
+            soundness: "strict".into(),
+            certificate_schema_version: 2,
+        };
+        let json = serde_json::to_value(&scope).unwrap();
+        assert!(!json.as_object().unwrap().contains_key("protocol_file"));
+    }
+
+    #[test]
+    fn trust_report_residual_assumption_optional_mitigation() {
+        let assumption = TrustReportResidualAssumption {
+            name: "test".into(),
+            description: "desc".into(),
+            mitigation: None,
+        };
+        let json = serde_json::to_value(&assumption).unwrap();
+        assert!(!json.as_object().unwrap().contains_key("mitigation"));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Trust Report Types
 // ---------------------------------------------------------------------------
 

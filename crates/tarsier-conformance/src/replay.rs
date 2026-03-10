@@ -212,8 +212,14 @@ mod tests {
 
     fn make_test_automaton() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
-        ta.add_parameter(Parameter { name: "t".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
+        ta.add_parameter(Parameter {
+            name: "t".into(),
+            time_varying: false,
+        });
 
         // L0: Init
         ta.add_location(Location {
@@ -258,7 +264,10 @@ mod tests {
 
     fn make_set_update_automaton() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
 
         ta.add_location(Location {
             name: "Worker_Init".into(),

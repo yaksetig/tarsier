@@ -71,7 +71,13 @@ fn identical_two_locations_has_off_diagonal_mismatches() {
 
 #[test]
 fn extra_location_in_a_becomes_internal() {
-    let a = make_ta(&["Init", "Extra", "Done"], &[0], &[(0, 1), (1, 2)], &[], &[]);
+    let a = make_ta(
+        &["Init", "Extra", "Done"],
+        &[0],
+        &[(0, 1), (1, 2)],
+        &[],
+        &[],
+    );
     let b = make_ta(&["Init", "Done"], &[0], &[(0, 1)], &[], &[]);
     let p = build_equivalence_products(&a, &b).unwrap();
     // Forward: 3×2=6 product locs. "Extra" is internal in A.
@@ -117,7 +123,10 @@ fn symmetric_products_have_same_location_counts() {
     let b = make_ta(&["Init", "Mid", "Done"], &[0], &[(0, 1), (1, 2)], &[], &[]);
     let p = build_equivalence_products(&a, &b).unwrap();
     assert_eq!(p.forward.num_locations(), p.backward.num_locations());
-    assert_eq!(p.forward.mismatch_locations.len(), p.backward.mismatch_locations.len());
+    assert_eq!(
+        p.forward.mismatch_locations.len(),
+        p.backward.mismatch_locations.len()
+    );
 }
 
 #[test]
@@ -148,7 +157,13 @@ fn diamond_topology_equivalence() {
 #[test]
 fn linear_chain_different_lengths() {
     // A: 4 locations, B: 3 locations. "C" is only in A.
-    let a = make_ta(&["A", "B", "C", "D"], &[0], &[(0, 1), (1, 2), (2, 3)], &[], &[]);
+    let a = make_ta(
+        &["A", "B", "C", "D"],
+        &[0],
+        &[(0, 1), (1, 2), (2, 3)],
+        &[],
+        &[],
+    );
     let b = make_ta(&["A", "B", "D"], &[0], &[(0, 1), (1, 2)], &[], &[]);
     let p = build_equivalence_products(&a, &b).unwrap();
     // Forward: 4×3 = 12 product locs.
@@ -165,7 +180,10 @@ fn initial_locations_paired_correctly() {
     // Forward initial: (Init_a=0, Init_b=0)
     assert_eq!(p.forward.initial_locations.len(), 1);
     assert_eq!(p.forward.initial_locations[0].concrete, LocationId::from(0));
-    assert_eq!(p.forward.initial_locations[0].abstract_loc, LocationId::from(0));
+    assert_eq!(
+        p.forward.initial_locations[0].abstract_loc,
+        LocationId::from(0)
+    );
 }
 
 #[test]

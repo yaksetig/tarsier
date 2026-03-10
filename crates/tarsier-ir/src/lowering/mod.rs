@@ -1037,11 +1037,12 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             decide_value = Some(value.clone());
                         }
                         ast::Action::Append { collection, value } => {
-                            let coll_id = ta.find_collection_by_name(collection).ok_or_else(|| {
-                                LoweringError::Unsupported(format!(
-                                    "Unknown collection '{collection}' in append action"
-                                ))
-                            })?;
+                            let coll_id =
+                                ta.find_collection_by_name(collection).ok_or_else(|| {
+                                    LoweringError::Unsupported(format!(
+                                        "Unknown collection '{collection}' in append action"
+                                    ))
+                                })?;
                             let lc = helpers::lower_expr_to_lc(value, &param_ids)?;
                             pending_collection_updates.push(CollectionUpdate {
                                 collection: coll_id,
@@ -1049,11 +1050,12 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             });
                         }
                         ast::Action::Enqueue { collection, value } => {
-                            let coll_id = ta.find_collection_by_name(collection).ok_or_else(|| {
-                                LoweringError::Unsupported(format!(
-                                    "Unknown collection '{collection}' in enqueue action"
-                                ))
-                            })?;
+                            let coll_id =
+                                ta.find_collection_by_name(collection).ok_or_else(|| {
+                                    LoweringError::Unsupported(format!(
+                                        "Unknown collection '{collection}' in enqueue action"
+                                    ))
+                                })?;
                             let lc = helpers::lower_expr_to_lc(value, &param_ids)?;
                             pending_collection_updates.push(CollectionUpdate {
                                 collection: coll_id,
@@ -1061,11 +1063,12 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                             });
                         }
                         ast::Action::Dequeue { collection } => {
-                            let coll_id = ta.find_collection_by_name(collection).ok_or_else(|| {
-                                LoweringError::Unsupported(format!(
-                                    "Unknown collection '{collection}' in dequeue action"
-                                ))
-                            })?;
+                            let coll_id =
+                                ta.find_collection_by_name(collection).ok_or_else(|| {
+                                    LoweringError::Unsupported(format!(
+                                        "Unknown collection '{collection}' in dequeue action"
+                                    ))
+                                })?;
                             pending_collection_updates.push(CollectionUpdate {
                                 collection: coll_id,
                                 kind: CollectionUpdateKind::Dequeue,
@@ -1077,10 +1080,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                                     LoweringError::UnknownParameter(upd.param.clone())
                                 })?;
                                 let value = helpers::lower_expr_to_lc(&upd.value, &param_ids)?;
-                                pending_param_updates.push(ParamUpdate {
-                                    param: pid,
-                                    value,
-                                });
+                                pending_param_updates.push(ParamUpdate { param: pid, value });
                             }
                         }
                         ast::Action::ResetClock { clock } => {

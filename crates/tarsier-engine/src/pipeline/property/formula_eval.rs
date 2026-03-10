@@ -329,26 +329,34 @@ mod tests {
 
     #[test]
     fn comparison_int_eq() {
-        assert!(
-            eval_formula_comparison(ast::CmpOp::Eq, FormulaValue::Int(5), FormulaValue::Int(5))
-                .unwrap()
-        );
-        assert!(
-            !eval_formula_comparison(ast::CmpOp::Eq, FormulaValue::Int(5), FormulaValue::Int(6))
-                .unwrap()
-        );
+        assert!(eval_formula_comparison(
+            ast::CmpOp::Eq,
+            FormulaValue::Int(5),
+            FormulaValue::Int(5)
+        )
+        .unwrap());
+        assert!(!eval_formula_comparison(
+            ast::CmpOp::Eq,
+            FormulaValue::Int(5),
+            FormulaValue::Int(6)
+        )
+        .unwrap());
     }
 
     #[test]
     fn comparison_int_ordering() {
-        assert!(
-            eval_formula_comparison(ast::CmpOp::Ge, FormulaValue::Int(5), FormulaValue::Int(3))
-                .unwrap()
-        );
-        assert!(
-            !eval_formula_comparison(ast::CmpOp::Lt, FormulaValue::Int(5), FormulaValue::Int(3))
-                .unwrap()
-        );
+        assert!(eval_formula_comparison(
+            ast::CmpOp::Ge,
+            FormulaValue::Int(5),
+            FormulaValue::Int(3)
+        )
+        .unwrap());
+        assert!(!eval_formula_comparison(
+            ast::CmpOp::Lt,
+            FormulaValue::Int(5),
+            FormulaValue::Int(3)
+        )
+        .unwrap());
     }
 
     #[test]
@@ -497,21 +505,14 @@ mod tests {
 
     #[test]
     fn temporal_detection_always() {
-        let expr = ast::FormulaExpr::Always(Box::new(cmp(
-            int_lit(1),
-            ast::CmpOp::Eq,
-            int_lit(1),
-        )));
+        let expr = ast::FormulaExpr::Always(Box::new(cmp(int_lit(1), ast::CmpOp::Eq, int_lit(1))));
         assert!(formula_contains_temporal(&expr));
     }
 
     #[test]
     fn temporal_detection_nested_in_and() {
-        let temporal = ast::FormulaExpr::Eventually(Box::new(cmp(
-            int_lit(1),
-            ast::CmpOp::Eq,
-            int_lit(1),
-        )));
+        let temporal =
+            ast::FormulaExpr::Eventually(Box::new(cmp(int_lit(1), ast::CmpOp::Eq, int_lit(1))));
         let non_temporal = cmp(int_lit(2), ast::CmpOp::Eq, int_lit(2));
         let expr = ast::FormulaExpr::And(Box::new(non_temporal), Box::new(temporal));
         assert!(formula_contains_temporal(&expr));

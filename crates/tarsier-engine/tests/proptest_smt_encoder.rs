@@ -4,7 +4,9 @@
 //! encoder for randomly generated ThresholdAutomata.
 
 use proptest::prelude::*;
-use proptest::test_runner::{Config as ProptestConfig, FileFailurePersistence, RngAlgorithm, RngSeed};
+use proptest::test_runner::{
+    Config as ProptestConfig, FileFailurePersistence, RngAlgorithm, RngSeed,
+};
 
 use tarsier_engine::pipeline::{self, SoundnessMode};
 use tarsier_smt::backends::smtlib_printer::{sort_to_smtlib, to_smtlib};
@@ -389,7 +391,10 @@ fn single_location_ta_depth_0_satisfiable() {
     let cs = pipeline::abstract_to_cs(ta);
 
     // The TA should have at least 1 location
-    assert!(!cs.locations.is_empty(), "TA should have at least 1 location");
+    assert!(
+        !cs.locations.is_empty(),
+        "TA should have at least 1 location"
+    );
 
     let mut solver = Z3Solver::with_timeout_secs(5);
     let result = run_bmc_at_depth(&mut solver, &cs, &property, 0).expect("bmc");

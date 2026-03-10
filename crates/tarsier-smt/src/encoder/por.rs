@@ -897,7 +897,13 @@ mod tests {
 
     #[test]
     fn guard_implies_empty_rhs_always_true() {
-        let lhs = make_guard_t(vec![make_guard_atom_t(vec![0], CmpOp::Ge, 5, vec![], false)]);
+        let lhs = make_guard_t(vec![make_guard_atom_t(
+            vec![0],
+            CmpOp::Ge,
+            5,
+            vec![],
+            false,
+        )]);
         let rhs = make_guard_t(vec![]);
         assert!(guard_implies(&lhs, &rhs));
     }
@@ -907,7 +913,13 @@ mod tests {
         let a1 = make_guard_atom_t(vec![0], CmpOp::Ge, 5, vec![], false);
         let a2 = make_guard_atom_t(vec![1], CmpOp::Le, 3, vec![], false);
         let lhs = make_guard_t(vec![a1, a2]);
-        let rhs = make_guard_t(vec![make_guard_atom_t(vec![0], CmpOp::Ge, 3, vec![], false)]);
+        let rhs = make_guard_t(vec![make_guard_atom_t(
+            vec![0],
+            CmpOp::Ge,
+            3,
+            vec![],
+            false,
+        )]);
         assert!(guard_implies(&lhs, &rhs));
     }
 

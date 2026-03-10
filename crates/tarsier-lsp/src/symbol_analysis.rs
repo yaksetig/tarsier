@@ -1064,7 +1064,11 @@ mod tests {
             .iter()
             .filter(|o| o.name == "Echo" && o.kind == DefinitionKind::Message)
             .collect();
-        assert!(echo_occs.len() >= 2, "Echo should appear multiple times, got {}", echo_occs.len());
+        assert!(
+            echo_occs.len() >= 2,
+            "Echo should appear multiple times, got {}",
+            echo_occs.len()
+        );
     }
 
     #[test]
@@ -1075,7 +1079,11 @@ mod tests {
             .iter()
             .filter(|o| o.name == "done" && o.kind == DefinitionKind::Phase)
             .collect();
-        assert!(done_occs.len() >= 2, "phase done should have decl + goto ref, got {}", done_occs.len());
+        assert!(
+            done_occs.len() >= 2,
+            "phase done should have decl + goto ref, got {}",
+            done_occs.len()
+        );
     }
 
     #[test]
@@ -1108,7 +1116,11 @@ mod tests {
     fn collect_references_finds_echo() {
         let program = parse(EXAMPLE_SRC);
         let refs = collect_references(EXAMPLE_SRC, &program, "Echo");
-        assert!(refs.len() >= 2, "should find Echo at least twice, got {}", refs.len());
+        assert!(
+            refs.len() >= 2,
+            "should find Echo at least twice, got {}",
+            refs.len()
+        );
     }
 
     #[test]
@@ -1130,7 +1142,10 @@ mod tests {
         let refs = collect_references(src, &program, "Echo");
         for (start, end) in &refs {
             let matched = &src[*start..*end];
-            assert_eq!(matched, "Echo", "word boundary check failed: got '{matched}'");
+            assert_eq!(
+                matched, "Echo",
+                "word boundary check failed: got '{matched}'"
+            );
         }
     }
 
@@ -1146,7 +1161,10 @@ mod tests {
         let program = parse(EXAMPLE_SRC);
         let tables = build_symbol_tables(&program);
         let result = classify_runtime_identifier("decided", &tables, Some("Node"));
-        assert_eq!(result, Some((DefinitionKind::Var, Some("Node".to_string()))));
+        assert_eq!(
+            result,
+            Some((DefinitionKind::Var, Some("Node".to_string())))
+        );
     }
 
     #[test]

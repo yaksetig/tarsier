@@ -12,8 +12,8 @@ use std::collections::HashMap;
 
 use crate::refinement::{RefinementMapping, RefinementRelation, SimulationKind};
 use crate::threshold_automaton::{
-    Guard, GuardAtom, LinearCombination, LocationId, ParamId, Parameter, RuleId,
-    SharedVar, SharedVarId, ThresholdAutomaton, Update, UpdateKind,
+    Guard, GuardAtom, LinearCombination, LocationId, ParamId, Parameter, RuleId, SharedVar,
+    SharedVarId, ThresholdAutomaton, Update, UpdateKind,
 };
 
 /// A location in the product automaton, pairing a concrete and abstract location.
@@ -224,7 +224,11 @@ pub fn build_product(
 fn merge_parameters(
     concrete: &ThresholdAutomaton,
     abstract_ta: &ThresholdAutomaton,
-) -> (Vec<Parameter>, HashMap<ParamId, ParamId>, HashMap<ParamId, ParamId>) {
+) -> (
+    Vec<Parameter>,
+    HashMap<ParamId, ParamId>,
+    HashMap<ParamId, ParamId>,
+) {
     let mut parameters = Vec::new();
     let mut concrete_map = HashMap::new();
     let mut abstract_map = HashMap::new();
@@ -318,10 +322,7 @@ fn remap_guard(
                     bound,
                     distinct,
                 } => GuardAtom::Threshold {
-                    vars: vars
-                        .iter()
-                        .map(|v| *var_map.get(v).unwrap_or(v))
-                        .collect(),
+                    vars: vars.iter().map(|v| *var_map.get(v).unwrap_or(v)).collect(),
                     op: *op,
                     bound: remap_lc(bound, param_map),
                     distinct: *distinct,
@@ -380,7 +381,8 @@ fn build_product_rules(
         };
 
         let remapped_c_guard = remap_guard(&c_rule.guard, concrete_var_map, concrete_param_map);
-        let remapped_c_updates = remap_updates(&c_rule.updates, concrete_var_map, concrete_param_map);
+        let remapped_c_updates =
+            remap_updates(&c_rule.updates, concrete_var_map, concrete_param_map);
 
         match (c_from_abs, c_to_abs) {
             // Both mapped to specific abstract locations — synchronized step.
@@ -683,11 +685,20 @@ mod tests {
     #[test]
     fn product_merged_parameters() {
         let mut concrete = minimal_ta(2, &[0], vec![(0, 1)]);
-        concrete.add_parameter(Parameter { name: "n".into(), time_varying: false });
-        concrete.add_parameter(Parameter { name: "t".into(), time_varying: false });
+        concrete.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
+        concrete.add_parameter(Parameter {
+            name: "t".into(),
+            time_varying: false,
+        });
 
         let mut abstract_ta = minimal_ta(2, &[0], vec![(0, 1)]);
-        abstract_ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        abstract_ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
 
         let mut mapping = RefinementMapping::new("abstract.trs".into());
         mapping.map_location(LocationId::from(0), LocationId::from(0));

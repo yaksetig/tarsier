@@ -379,7 +379,11 @@ mod tests {
     #[test]
     fn extract_agreement_wrong_quantifier_count_errors() {
         let ta = agreement_ta();
-        let body = cmp(qvar("p", "phase"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+        let body = cmp(
+            qvar("p", "phase"),
+            ast::CmpOp::Eq,
+            ast::FormulaAtom::BoolLit(true),
+        );
         let prop = make_prop(
             "agr",
             ast::PropertyKind::Agreement,
@@ -411,20 +415,18 @@ mod tests {
             name: "n".into(),
             time_varying: false,
         });
-        ta.locations.push(mk_loc(
-            "Good",
-            "R",
-            vec![("valid", LocalValue::Bool(true))],
-        ));
-        ta.locations.push(mk_loc(
-            "Bad",
-            "R",
-            vec![("valid", LocalValue::Bool(false))],
-        ));
+        ta.locations
+            .push(mk_loc("Good", "R", vec![("valid", LocalValue::Bool(true))]));
+        ta.locations
+            .push(mk_loc("Bad", "R", vec![("valid", LocalValue::Bool(false))]));
         ta.initial_locations = vec![0.into()];
         ta.rules.push(mk_rule(0, 1));
 
-        let body = cmp(qvar("p", "valid"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+        let body = cmp(
+            qvar("p", "valid"),
+            ast::CmpOp::Eq,
+            ast::FormulaAtom::BoolLit(true),
+        );
         let prop = make_prop(
             "inv",
             ast::PropertyKind::Invariant,
@@ -448,7 +450,11 @@ mod tests {
     #[test]
     fn extract_liveness_property_errors() {
         let ta = agreement_ta();
-        let body = cmp(qvar("p", "phase"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+        let body = cmp(
+            qvar("p", "phase"),
+            ast::CmpOp::Eq,
+            ast::FormulaAtom::BoolLit(true),
+        );
         let prop = make_prop(
             "live",
             ast::PropertyKind::Liveness,

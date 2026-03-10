@@ -218,9 +218,10 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     let prev = dag_round_active_var(step - 1, rid);
                     enc.assert_term(SmtTerm::var(active.clone()).ge(SmtTerm::var(prev)));
                     for parent_id in parents {
-                        enc.assert_term(SmtTerm::var(active.clone()).le(SmtTerm::var(
-                            dag_round_active_var(step - 1, *parent_id),
-                        )));
+                        enc.assert_term(
+                            SmtTerm::var(active.clone())
+                                .le(SmtTerm::var(dag_round_active_var(step - 1, *parent_id))),
+                        );
                     }
                 }
             }
@@ -932,8 +933,7 @@ impl<'a> KInductionEncoderBuilder<'a> {
                             .map(|&l| SmtTerm::var(kappa_var(step + 1, l)))
                             .collect();
                         enc.assert_term(
-                            sum_terms_balanced(dead_sum)
-                                .le(SmtTerm::var(param_var(adv_param))),
+                            sum_terms_balanced(dead_sum).le(SmtTerm::var(param_var(adv_param))),
                         );
                     }
                 }

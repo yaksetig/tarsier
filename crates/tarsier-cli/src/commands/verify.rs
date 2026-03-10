@@ -2318,8 +2318,8 @@ pub(crate) fn run_comm_command(
 mod tests {
     use super::*;
     use tarsier_ir::counter_system::{
-        Configuration, MessageAuthMetadata, MessageDeliveryEvent, MessageIdentity,
-        MessageEventKind, MessagePayloadVariant, SignatureProvenance, Trace, TraceStep,
+        Configuration, MessageAuthMetadata, MessageDeliveryEvent, MessageEventKind,
+        MessageIdentity, MessagePayloadVariant, SignatureProvenance, Trace, TraceStep,
     };
     use tarsier_ir::threshold_automaton::RuleId;
 
@@ -2523,9 +2523,7 @@ mod tests {
             "safe"
         );
         assert_eq!(
-            unbounded_safety_result_kind(&UnboundedSafetyResult::Unknown {
-                reason: "x".into()
-            }),
+            unbounded_safety_result_kind(&UnboundedSafetyResult::Unknown { reason: "x".into() }),
             "unknown"
         );
         assert_eq!(
@@ -2548,9 +2546,7 @@ mod tests {
             "live"
         );
         assert_eq!(
-            liveness_result_kind(&LivenessResult::Unknown {
-                reason: "x".into()
-            }),
+            liveness_result_kind(&LivenessResult::Unknown { reason: "x".into() }),
             "unknown"
         );
     }
@@ -2562,9 +2558,7 @@ mod tests {
             "no_fair_cycle_up_to"
         );
         assert_eq!(
-            fair_liveness_result_kind(&FairLivenessResult::Unknown {
-                reason: "x".into()
-            }),
+            fair_liveness_result_kind(&FairLivenessResult::Unknown { reason: "x".into() }),
             "unknown"
         );
     }
@@ -2675,13 +2669,11 @@ mod tests {
             min_bound: 1,
             max_bound: 5,
             stable_window: 3,
-            points: vec![
-                RoundSweepPoint {
-                    upper_bound: 1,
-                    result: "safe".into(),
-                    details: json!({}),
-                },
-            ],
+            points: vec![RoundSweepPoint {
+                upper_bound: 1,
+                result: "safe".into(),
+                details: json!({}),
+            }],
             candidate_cutoff: Some(2),
             stabilized_result: Some("safe".into()),
             note: "test".into(),

@@ -150,7 +150,10 @@ mod tests {
         assert_eq!(r1, EquivalenceCheckResult::EquivalentUpTo { depth: 5 });
 
         let r2 = EquivalenceCheckResult::ForwardDivergence { depth: 3 };
-        assert!(matches!(r2, EquivalenceCheckResult::ForwardDivergence { .. }));
+        assert!(matches!(
+            r2,
+            EquivalenceCheckResult::ForwardDivergence { .. }
+        ));
 
         let r3 = EquivalenceCheckResult::TriviallyEquivalent;
         assert_eq!(r3, EquivalenceCheckResult::TriviallyEquivalent);

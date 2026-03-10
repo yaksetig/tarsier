@@ -139,7 +139,13 @@ fn shared_vars_declared_in_both_directions() {
 #[test]
 fn asymmetric_automata_different_mismatch_counts() {
     // A has extra location, so forward has different product shape than backward.
-    let a = make_ta(&["Init", "Extra", "Done"], &[0], &[(0, 1), (1, 2)], &[], &[]);
+    let a = make_ta(
+        &["Init", "Extra", "Done"],
+        &[0],
+        &[(0, 1), (1, 2)],
+        &[],
+        &[],
+    );
     let b = make_ta(&["Init", "Done"], &[0], &[(0, 1)], &[], &[]);
     let products = build_equivalence_products(&a, &b).unwrap();
     let enc = encode_equivalence_check(&products, 2);

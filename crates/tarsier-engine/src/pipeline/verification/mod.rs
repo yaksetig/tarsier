@@ -25,20 +25,12 @@ mod invariant_inference;
 pub(crate) use invariant_inference::*;
 pub use invariant_inference::{
     generate_linear_predicate_candidates, infer_inductive_predicates,
-    prove_safety_with_auto_strengthen, score_candidates, CandidatePredicate,
-    InductivenessResult, LinearTerm, PredicateOp,
+    prove_safety_with_auto_strengthen, score_candidates, CandidatePredicate, InductivenessResult,
+    LinearTerm, PredicateOp,
 };
 
 mod fair_pdr;
 pub(crate) use fair_pdr::*;
-
-mod assist;
-pub use assist::{prove_failure_prompt_payload, ProveFailurePromptPayload};
-
-mod assist_provider;
-pub use assist_provider::{
-    assist_provider_from_kind, AssistProviderKind, AssistSuggestionProvider,
-};
 
 mod orchestration;
 pub use orchestration::{
@@ -70,6 +62,6 @@ use super::property::{
     extract_liveness_spec, extract_liveness_spec_from_decl, extract_property,
     extract_property_from_decl, fair_liveness_target_from_spec, has_liveness_properties,
     has_safety_properties, is_safety_property_kind, select_single_safety_property_decl,
-    temporal_buchi_monitor_canonical, validate_property_fragments, FairLivenessTarget, LivenessSpec,
-    QuantifiedFragment, TemporalAtomLit, TemporalBuchiAutomaton,
+    temporal_buchi_monitor_canonical, validate_property_fragments, FairLivenessTarget,
+    LivenessSpec, QuantifiedFragment, TemporalAtomLit, TemporalBuchiAutomaton,
 };

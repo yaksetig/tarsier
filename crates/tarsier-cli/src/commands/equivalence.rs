@@ -18,10 +18,10 @@ pub(crate) fn run_equivalence_check(
     format: &str,
 ) -> miette::Result<()> {
     // 1. Parse both protocols.
-    let src_a = std::fs::read_to_string(file_a)
-        .map_err(|e| miette::miette!("read protocol A: {e}"))?;
-    let src_b = std::fs::read_to_string(file_b)
-        .map_err(|e| miette::miette!("read protocol B: {e}"))?;
+    let src_a =
+        std::fs::read_to_string(file_a).map_err(|e| miette::miette!("read protocol A: {e}"))?;
+    let src_b =
+        std::fs::read_to_string(file_b).map_err(|e| miette::miette!("read protocol B: {e}"))?;
 
     let name_a = file_a.display().to_string();
     let name_b = file_b.display().to_string();
@@ -34,8 +34,7 @@ pub(crate) fn run_equivalence_check(
     let ta_b = lower(&ast_b).map_err(|e| miette::miette!("lower B: {e}"))?;
 
     // 3. Build bidirectional products.
-    let products = build_equivalence_products(&ta_a, &ta_b)
-        .map_err(|e| miette::miette!("{e}"))?;
+    let products = build_equivalence_products(&ta_a, &ta_b).map_err(|e| miette::miette!("{e}"))?;
 
     // 4. Report.
     let trivial = products.is_trivially_equivalent();
@@ -84,7 +83,9 @@ pub(crate) fn run_equivalence_check(
             println!("  Mismatches:        {bwd_mismatches}");
             println!();
             if trivial {
-                println!("Result: TRIVIALLY EQUIVALENT (no mismatch locations in either direction)");
+                println!(
+                    "Result: TRIVIALLY EQUIVALENT (no mismatch locations in either direction)"
+                );
             } else {
                 println!(
                     "Result: ENCODING READY ({} total mismatches, depth {})",

@@ -491,8 +491,7 @@ mod tests {
     fn lower_linear_var() {
         let mut params: IndexMap<String, ParamId> = IndexMap::new();
         params.insert("n".into(), ParamId::from(0));
-        let lc =
-            lower_linear_expr_to_lc(&ast::LinearExpr::Var("n".into()), &params).unwrap();
+        let lc = lower_linear_expr_to_lc(&ast::LinearExpr::Var("n".into()), &params).unwrap();
         assert_eq!(lc.constant, 0);
         assert_eq!(lc.terms.len(), 1);
         assert_eq!(lc.terms[0], (1, ParamId::from(0)));
@@ -501,9 +500,7 @@ mod tests {
     #[test]
     fn lower_linear_unknown_param_error() {
         let params: IndexMap<String, ParamId> = IndexMap::new();
-        assert!(
-            lower_linear_expr_to_lc(&ast::LinearExpr::Var("x".into()), &params).is_err()
-        );
+        assert!(lower_linear_expr_to_lc(&ast::LinearExpr::Var("x".into()), &params).is_err());
     }
 
     #[test]
@@ -523,8 +520,7 @@ mod tests {
     fn lower_linear_mul() {
         let mut params: IndexMap<String, ParamId> = IndexMap::new();
         params.insert("t".into(), ParamId::from(0));
-        let expr =
-            ast::LinearExpr::Mul(3, Box::new(ast::LinearExpr::Var("t".into())));
+        let expr = ast::LinearExpr::Mul(3, Box::new(ast::LinearExpr::Var("t".into())));
         let lc = lower_linear_expr_to_lc(&expr, &params).unwrap();
         assert_eq!(lc.constant, 0);
         assert_eq!(lc.terms[0], (3, ParamId::from(0)));
@@ -662,8 +658,7 @@ mod tests {
     fn eval_enum_literal_valid() {
         let mut enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
         enum_defs.insert("Color".into(), vec!["red".into(), "blue".into()]);
-        let result =
-            eval_enum_literal(&ast::Expr::Var("red".into()), "Color", &enum_defs).unwrap();
+        let result = eval_enum_literal(&ast::Expr::Var("red".into()), "Color", &enum_defs).unwrap();
         assert_eq!(result, LocalValue::Enum("red".into()));
     }
 
@@ -671,26 +666,19 @@ mod tests {
     fn eval_enum_literal_unknown_variant_error() {
         let mut enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
         enum_defs.insert("Color".into(), vec!["red".into(), "blue".into()]);
-        assert!(
-            eval_enum_literal(&ast::Expr::Var("green".into()), "Color", &enum_defs).is_err()
-        );
+        assert!(eval_enum_literal(&ast::Expr::Var("green".into()), "Color", &enum_defs).is_err());
     }
 
     #[test]
     fn eval_enum_literal_unknown_enum_error() {
         let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
-        assert!(
-            eval_enum_literal(&ast::Expr::Var("x".into()), "Missing", &enum_defs).is_err()
-        );
+        assert!(eval_enum_literal(&ast::Expr::Var("x".into()), "Missing", &enum_defs).is_err());
     }
 
     #[test]
     fn enum_variant_index_valid() {
         let mut enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
-        enum_defs.insert(
-            "View".into(),
-            vec!["v0".into(), "v1".into(), "v2".into()],
-        );
+        enum_defs.insert("View".into(), vec!["v0".into(), "v1".into(), "v2".into()]);
         assert_eq!(enum_variant_index("View", "v0", &enum_defs).unwrap(), 0);
         assert_eq!(enum_variant_index("View", "v2", &enum_defs).unwrap(), 2);
     }
@@ -798,16 +786,13 @@ mod tests {
         let locals: IndexMap<String, LocalValue> = IndexMap::new();
         let types: IndexMap<String, LocalVarType> = IndexMap::new();
         let enums: IndexMap<String, Vec<String>> = IndexMap::new();
-        let domain =
-            FieldDomain::AbstractNatSign(vec!["zero".into(), "pos".into()]);
+        let domain = FieldDomain::AbstractNatSign(vec!["zero".into(), "pos".into()]);
         assert_eq!(
-            eval_field_expr(&ast::Expr::IntLit(0), &domain, &locals, &types, &enums)
-                .unwrap(),
+            eval_field_expr(&ast::Expr::IntLit(0), &domain, &locals, &types, &enums).unwrap(),
             "zero"
         );
         assert_eq!(
-            eval_field_expr(&ast::Expr::IntLit(5), &domain, &locals, &types, &enums)
-                .unwrap(),
+            eval_field_expr(&ast::Expr::IntLit(5), &domain, &locals, &types, &enums).unwrap(),
             "pos"
         );
     }
@@ -817,30 +802,17 @@ mod tests {
         let locals: IndexMap<String, LocalValue> = IndexMap::new();
         let types: IndexMap<String, LocalVarType> = IndexMap::new();
         let enums: IndexMap<String, Vec<String>> = IndexMap::new();
-        let domain = FieldDomain::AbstractIntSign(vec![
-            "neg".into(),
-            "zero".into(),
-            "pos".into(),
-        ]);
+        let domain = FieldDomain::AbstractIntSign(vec!["neg".into(), "zero".into(), "pos".into()]);
         assert_eq!(
-            eval_field_expr(
-                &ast::Expr::IntLit(-3),
-                &domain,
-                &locals,
-                &types,
-                &enums
-            )
-            .unwrap(),
+            eval_field_expr(&ast::Expr::IntLit(-3), &domain, &locals, &types, &enums).unwrap(),
             "neg"
         );
         assert_eq!(
-            eval_field_expr(&ast::Expr::IntLit(0), &domain, &locals, &types, &enums)
-                .unwrap(),
+            eval_field_expr(&ast::Expr::IntLit(0), &domain, &locals, &types, &enums).unwrap(),
             "zero"
         );
         assert_eq!(
-            eval_field_expr(&ast::Expr::IntLit(3), &domain, &locals, &types, &enums)
-                .unwrap(),
+            eval_field_expr(&ast::Expr::IntLit(3), &domain, &locals, &types, &enums).unwrap(),
             "pos"
         );
     }

@@ -607,20 +607,27 @@ mod tests {
     use super::*;
 
     fn parse(src: &str) -> Program {
-        tarsier_dsl::parse_with_diagnostics(src, "test.trs").unwrap().0
+        tarsier_dsl::parse_with_diagnostics(src, "test.trs")
+            .unwrap()
+            .0
     }
 
     fn diag_codes(diagnostics: &[Diagnostic]) -> Vec<String> {
-        diagnostics.iter().filter_map(|d| match &d.code {
-            Some(NumberOrString::String(s)) => Some(s.clone()),
-            _ => None,
-        }).collect()
+        diagnostics
+            .iter()
+            .filter_map(|d| match &d.code {
+                Some(NumberOrString::String(s)) => Some(s.clone()),
+                _ => None,
+            })
+            .collect()
     }
 
     #[test]
     fn test_diagnostic_has_code_positive() {
         let diag = Diagnostic {
-            code: Some(NumberOrString::String("tarsier::lower::unknown_phase".into())),
+            code: Some(NumberOrString::String(
+                "tarsier::lower::unknown_phase".into(),
+            )),
             ..Default::default()
         };
         assert!(diagnostic_has_code(&diag, "tarsier::lower::unknown_phase"));
@@ -629,23 +636,41 @@ mod tests {
     #[test]
     fn test_diagnostic_has_code_negative() {
         let diag = Diagnostic {
-            code: Some(NumberOrString::String("tarsier::lower::unknown_phase".into())),
+            code: Some(NumberOrString::String(
+                "tarsier::lower::unknown_phase".into(),
+            )),
             ..Default::default()
         };
-        assert!(!diagnostic_has_code(&diag, "tarsier::lower::unknown_message"));
+        assert!(!diagnostic_has_code(
+            &diag,
+            "tarsier::lower::unknown_message"
+        ));
     }
 
     #[test]
     fn test_diagnostic_has_code_number() {
-        let diag = Diagnostic { code: Some(NumberOrString::Number(42)), ..Default::default() };
+        let diag = Diagnostic {
+            code: Some(NumberOrString::Number(42)),
+            ..Default::default()
+        };
         assert!(!diagnostic_has_code(&diag, "42"));
     }
 
     #[test]
     fn test_has_diagnostic_code_in_list() {
         let diags = vec![
-            Diagnostic { code: Some(NumberOrString::String("tarsier::lower::unknown_phase".into())), ..Default::default() },
-            Diagnostic { code: Some(NumberOrString::String("tarsier::lower::no_init_phase".into())), ..Default::default() },
+            Diagnostic {
+                code: Some(NumberOrString::String(
+                    "tarsier::lower::unknown_phase".into(),
+                )),
+                ..Default::default()
+            },
+            Diagnostic {
+                code: Some(NumberOrString::String(
+                    "tarsier::lower::no_init_phase".into(),
+                )),
+                ..Default::default()
+            },
         ];
         assert!(has_diagnostic_code(&diags, "tarsier::lower::no_init_phase"));
         assert!(!has_diagnostic_code(&diags, "tarsier::lower::unknown_enum"));
@@ -656,7 +681,9 @@ mod tests {
         assert!(is_structural_lowering_code("tarsier::lower::no_init_phase"));
         assert!(is_structural_lowering_code("tarsier::lower::unknown_enum"));
         assert!(is_structural_lowering_code("tarsier::lower::unknown_phase"));
-        assert!(is_structural_lowering_code("tarsier::lower::unknown_message"));
+        assert!(is_structural_lowering_code(
+            "tarsier::lower::unknown_message"
+        ));
     }
 
     #[test]
@@ -669,7 +696,12 @@ mod tests {
     #[test]
     fn test_push_unique_diagnostic_deduplicates() {
         let mut diags = Vec::new();
-        let d = Diagnostic { range: Range::new(Position::new(0, 0), Position::new(0, 5)), code: Some(NumberOrString::String("test".into())), message: "test msg".into(), ..Default::default() };
+        let d = Diagnostic {
+            range: Range::new(Position::new(0, 0), Position::new(0, 5)),
+            code: Some(NumberOrString::String("test".into())),
+            message: "test msg".into(),
+            ..Default::default()
+        };
         push_unique_diagnostic(&mut diags, d.clone());
         push_unique_diagnostic(&mut diags, d.clone());
         assert_eq!(diags.len(), 1);
@@ -678,8 +710,20 @@ mod tests {
     #[test]
     fn test_push_unique_diagnostic_allows_different() {
         let mut diags = Vec::new();
-        push_unique_diagnostic(&mut diags, Diagnostic { message: "msg1".into(), ..Default::default() });
-        push_unique_diagnostic(&mut diags, Diagnostic { message: "msg2".into(), ..Default::default() });
+        push_unique_diagnostic(
+            &mut diags,
+            Diagnostic {
+                message: "msg1".into(),
+                ..Default::default()
+            },
+        );
+        push_unique_diagnostic(
+            &mut diags,
+            Diagnostic {
+                message: "msg2".into(),
+                ..Default::default()
+            },
+        );
         assert_eq!(diags.len(), 2);
     }
 

@@ -347,37 +347,55 @@ mod tests {
     #[test]
     fn test_context_top_level() {
         let src = "protocol Foo {\n    ";
-        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::TopLevel);
+        assert_eq!(
+            infer_cursor_context(src, src.len()),
+            CursorContext::TopLevel
+        );
     }
 
     #[test]
     fn test_context_role_level() {
         let src = "protocol P {\n    role Node {\n        ";
-        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::RoleLevel);
+        assert_eq!(
+            infer_cursor_context(src, src.len()),
+            CursorContext::RoleLevel
+        );
     }
 
     #[test]
     fn test_context_phase_level() {
         let src = "protocol P {\n    role Node {\n        phase waiting {\n            ";
-        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::PhaseLevel);
+        assert_eq!(
+            infer_cursor_context(src, src.len()),
+            CursorContext::PhaseLevel
+        );
     }
 
     #[test]
     fn test_context_action_level() {
         let src = "protocol P {\n    role Node {\n        phase w {\n            when true => {\n                ";
-        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::ActionLevel);
+        assert_eq!(
+            infer_cursor_context(src, src.len()),
+            CursorContext::ActionLevel
+        );
     }
 
     #[test]
     fn test_context_after_colon() {
         let src = "protocol P {\n    role Node {\n        var x:";
-        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::AfterColon);
+        assert_eq!(
+            infer_cursor_context(src, src.len()),
+            CursorContext::AfterColon
+        );
     }
 
     #[test]
     fn test_context_after_property_colon() {
         let src = "protocol P {\n    property agr:";
-        assert_eq!(infer_cursor_context(src, src.len()), CursorContext::AfterPropertyColon);
+        assert_eq!(
+            infer_cursor_context(src, src.len()),
+            CursorContext::AfterPropertyColon
+        );
     }
 
     #[test]

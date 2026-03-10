@@ -1962,9 +1962,18 @@ fn lower_interface_assumption_converts_parameter_constraint() {
 
     // Build a minimal TA with parameters n, t, f
     let mut ta = ThresholdAutomaton::new();
-    ta.parameters.push(Parameter { name: "n".into(), time_varying: false });
-    ta.parameters.push(Parameter { name: "t".into(), time_varying: false });
-    ta.parameters.push(Parameter { name: "f".into(), time_varying: false });
+    ta.parameters.push(Parameter {
+        name: "n".into(),
+        time_varying: false,
+    });
+    ta.parameters.push(Parameter {
+        name: "t".into(),
+        time_varying: false,
+    });
+    ta.parameters.push(Parameter {
+        name: "f".into(),
+        time_varying: false,
+    });
 
     // AST assumption: n > 3*t
     let assumption = ast::InterfaceAssumption {
@@ -2972,7 +2981,10 @@ protocol AppendTest {
     match &cu.kind {
         CollectionUpdateKind::Append(lc) => {
             assert_eq!(lc.constant, 1);
-            assert!(lc.terms.is_empty(), "Expected constant-only linear combination");
+            assert!(
+                lc.terms.is_empty(),
+                "Expected constant-only linear combination"
+            );
         }
         other => panic!("Expected Append, got {:?}", other),
     }
@@ -3057,7 +3069,11 @@ protocol CollPipeline {
     let ta = lower(&prog).unwrap();
 
     // Verify collections lowered correctly
-    assert_eq!(ta.collections.len(), 2, "Expected 2 collections (log + sequence)");
+    assert_eq!(
+        ta.collections.len(),
+        2,
+        "Expected 2 collections (log + sequence)"
+    );
     assert_eq!(ta.collections[0].name, "VoteLog");
     assert_eq!(ta.collections[0].kind, IrCollectionKind::Log);
     assert_eq!(ta.collections[1].name, "DecBuf");
@@ -3149,7 +3165,10 @@ protocol BadAppend {
 "#;
     let prog = parse(src, "bad_append.trs").unwrap();
     let result = lower(&prog);
-    assert!(result.is_err(), "Appending to nonexistent collection should fail");
+    assert!(
+        result.is_err(),
+        "Appending to nonexistent collection should fail"
+    );
     let msg = format!("{}", result.unwrap_err());
     assert!(
         msg.contains("NonExistent"),
@@ -3314,16 +3333,26 @@ protocol FifoE2E {
     assert_eq!(coll.queue_model, QueueModel::LinearFifo);
 
     // Verify enqueue rules exist
-    let enqueue_rules: Vec<_> = ta.rules.iter()
-        .filter(|r| r.collection_updates.iter()
-            .any(|cu| matches!(cu.kind, CollectionUpdateKind::Enqueue(_))))
+    let enqueue_rules: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| {
+            r.collection_updates
+                .iter()
+                .any(|cu| matches!(cu.kind, CollectionUpdateKind::Enqueue(_)))
+        })
         .collect();
     assert!(!enqueue_rules.is_empty(), "Should have enqueue rules");
 
     // Verify dequeue rules exist
-    let dequeue_rules: Vec<_> = ta.rules.iter()
-        .filter(|r| r.collection_updates.iter()
-            .any(|cu| matches!(cu.kind, CollectionUpdateKind::Dequeue)))
+    let dequeue_rules: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| {
+            r.collection_updates
+                .iter()
+                .any(|cu| matches!(cu.kind, CollectionUpdateKind::Dequeue))
+        })
         .collect();
     assert!(!dequeue_rules.is_empty(), "Should have dequeue rules");
 }
@@ -3396,8 +3425,15 @@ protocol Reconfig {
     let ta = lower(&prog).unwrap();
 
     // At least one rule should have param_updates
-    let reconf_rules: Vec<_> = ta.rules.iter().filter(|r| !r.param_updates.is_empty()).collect();
-    assert!(!reconf_rules.is_empty(), "should have rules with param_updates");
+    let reconf_rules: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| !r.param_updates.is_empty())
+        .collect();
+    assert!(
+        !reconf_rules.is_empty(),
+        "should have rules with param_updates"
+    );
 
     let rule = &reconf_rules[0];
     assert_eq!(rule.param_updates.len(), 2);
@@ -3444,7 +3480,11 @@ protocol Reconfig {
     let prog = parse(src, "reconfig_expr.trs").unwrap();
     let ta = lower(&prog).unwrap();
 
-    let reconf_rules: Vec<_> = ta.rules.iter().filter(|r| !r.param_updates.is_empty()).collect();
+    let reconf_rules: Vec<_> = ta
+        .rules
+        .iter()
+        .filter(|r| !r.param_updates.is_empty())
+        .collect();
     assert!(!reconf_rules.is_empty());
 
     let rule = &reconf_rules[0];

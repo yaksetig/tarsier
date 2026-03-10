@@ -210,9 +210,9 @@ fn collect_semantic_token_candidates(
                 | "exists" | "resilience" | "quorum" | "certificate" | "adversary"
                 | "pacemaker" | "enum" | "to" | "channel" | "identity" | "equivocation"
                 | "module" | "assumes" | "guarantees" | "committee" | "sign" | "lock"
-                | "justify" | "form" | "has" | "refines" | "dag_round" | "extends"
-                | "log" | "sequence" | "fifo_channel" | "append" | "enqueue"
-                | "dequeue" | "reconfigure" => SEMANTIC_TOKEN_KEYWORD,
+                | "justify" | "form" | "has" | "refines" | "dag_round" | "extends" | "log"
+                | "sequence" | "fifo_channel" | "append" | "enqueue" | "dequeue"
+                | "reconfigure" => SEMANTIC_TOKEN_KEYWORD,
                 _ => {
                     if let Some(&def_type) = def_types.get(word) {
                         def_type
@@ -302,7 +302,9 @@ mod tests {
     use super::*;
 
     fn parse(src: &str) -> Program {
-        tarsier_dsl::parse_with_diagnostics(src, "test.trs").unwrap().0
+        tarsier_dsl::parse_with_diagnostics(src, "test.trs")
+            .unwrap()
+            .0
     }
 
     #[test]
@@ -324,7 +326,10 @@ mod tests {
     #[test]
     fn test_multiple_keywords() {
         let candidates = collect_semantic_token_candidates("protocol role phase", None);
-        let keywords: Vec<_> = candidates.iter().filter(|c| c.token_type == SEMANTIC_TOKEN_KEYWORD).collect();
+        let keywords: Vec<_> = candidates
+            .iter()
+            .filter(|c| c.token_type == SEMANTIC_TOKEN_KEYWORD)
+            .collect();
         assert_eq!(keywords.len(), 3);
     }
 
@@ -354,7 +359,10 @@ mod tests {
         let src = "protocol P {\n    message Echo;\n    role Node {\n        init w;\n        phase w {\n            when received >= 1 Echo => { goto phase w; }\n        }\n    }\n}";
         let program = parse(src);
         let candidates = collect_semantic_token_candidates(src, Some(&program));
-        let echo_tokens: Vec<_> = candidates.iter().filter(|c| &src[c.start..c.end] == "Echo").collect();
+        let echo_tokens: Vec<_> = candidates
+            .iter()
+            .filter(|c| &src[c.start..c.end] == "Echo")
+            .collect();
         assert!(!echo_tokens.is_empty());
         for tok in &echo_tokens {
             assert_eq!(tok.token_type, SEMANTIC_TOKEN_TYPE);
@@ -364,14 +372,20 @@ mod tests {
     #[test]
     fn test_line_comment_skipped() {
         let candidates = collect_semantic_token_candidates("// comment\nprotocol", None);
-        let kw: Vec<_> = candidates.iter().filter(|c| c.token_type == SEMANTIC_TOKEN_KEYWORD).collect();
+        let kw: Vec<_> = candidates
+            .iter()
+            .filter(|c| c.token_type == SEMANTIC_TOKEN_KEYWORD)
+            .collect();
         assert_eq!(kw.len(), 1);
     }
 
     #[test]
     fn test_block_comment_skipped() {
         let candidates = collect_semantic_token_candidates("/* block */ protocol", None);
-        let kw: Vec<_> = candidates.iter().filter(|c| c.token_type == SEMANTIC_TOKEN_KEYWORD).collect();
+        let kw: Vec<_> = candidates
+            .iter()
+            .filter(|c| c.token_type == SEMANTIC_TOKEN_KEYWORD)
+            .collect();
         assert_eq!(kw.len(), 1);
     }
 
@@ -385,10 +399,22 @@ mod tests {
 
     #[test]
     fn test_semantic_token_type_for_definition_coverage() {
-        assert_eq!(semantic_token_type_for_definition(&DefinitionKind::Message), SEMANTIC_TOKEN_TYPE);
-        assert_eq!(semantic_token_type_for_definition(&DefinitionKind::Phase), SEMANTIC_TOKEN_FUNCTION);
-        assert_eq!(semantic_token_type_for_definition(&DefinitionKind::Param), SEMANTIC_TOKEN_PROPERTY);
-        assert_eq!(semantic_token_type_for_definition(&DefinitionKind::Var), SEMANTIC_TOKEN_VARIABLE);
+        assert_eq!(
+            semantic_token_type_for_definition(&DefinitionKind::Message),
+            SEMANTIC_TOKEN_TYPE
+        );
+        assert_eq!(
+            semantic_token_type_for_definition(&DefinitionKind::Phase),
+            SEMANTIC_TOKEN_FUNCTION
+        );
+        assert_eq!(
+            semantic_token_type_for_definition(&DefinitionKind::Param),
+            SEMANTIC_TOKEN_PROPERTY
+        );
+        assert_eq!(
+            semantic_token_type_for_definition(&DefinitionKind::Var),
+            SEMANTIC_TOKEN_VARIABLE
+        );
     }
 
     #[test]

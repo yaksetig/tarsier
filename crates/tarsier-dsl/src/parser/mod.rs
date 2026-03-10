@@ -1271,7 +1271,9 @@ fn parse_transition(pair: Pair<'_>) -> Result<Spanned<TransitionRule>, ParseErro
                 for upd_pair in item.into_inner() {
                     if upd_pair.as_rule() == Rule::reconfigure_update {
                         let mut si = upd_pair.into_inner();
-                        let param = next_child(&mut si, "reconfigure_update")?.as_str().to_string();
+                        let param = next_child(&mut si, "reconfigure_update")?
+                            .as_str()
+                            .to_string();
                         let value = parse_expr(next_child(&mut si, "reconfigure_update")?)?;
                         updates.push(crate::ast::ReconfigureUpdate { param, value });
                     }
@@ -1527,12 +1529,7 @@ fn parse_expr(pair: Pair<'_>) -> Result<Expr, ParseError> {
                 // inner.len() == 1 checked above; fallback to syntax error if somehow empty
                 match inner.into_iter().next() {
                     Some(child) => parse_expr(child),
-                    None => Err(ParseError::syntax(
-                        "Empty unary expression",
-                        span,
-                        "",
-                        "",
-                    )),
+                    None => Err(ParseError::syntax("Empty unary expression", span, "", "")),
                 }
             } else {
                 Err(ParseError::syntax(
@@ -1621,12 +1618,7 @@ fn parse_linear_expr(pair: Pair<'_>) -> Result<LinearExpr, ParseError> {
                 // inner.len() == 1 checked above; fallback to syntax error if somehow empty
                 match inner.into_iter().next() {
                     Some(child) => parse_linear_expr(child),
-                    None => Err(ParseError::syntax(
-                        "Empty linear term",
-                        span,
-                        "",
-                        "",
-                    )),
+                    None => Err(ParseError::syntax("Empty linear term", span, "", "")),
                 }
             } else {
                 Err(ParseError::syntax(

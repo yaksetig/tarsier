@@ -7,9 +7,9 @@
 //! and compositional verification data structures.
 
 pub mod abstraction;
-pub mod equivalence;
 pub mod composition;
 pub mod counter_system;
+pub mod equivalence;
 pub mod lowering;
 pub mod product;
 pub mod properties;

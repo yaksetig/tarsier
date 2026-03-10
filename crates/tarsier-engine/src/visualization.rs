@@ -700,7 +700,10 @@ mod tests {
 
     fn sample_ta_and_trace() -> (ThresholdAutomaton, Trace) {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
         ta.add_shared_var(SharedVar {
             name: "cnt_Prepare".into(),
             kind: SharedVarKind::MessageCounter,
@@ -791,7 +794,10 @@ mod tests {
 
     fn sample_crypto_ta_and_trace() -> (ThresholdAutomaton, Trace) {
         let mut ta = ThresholdAutomaton::new();
-        ta.add_parameter(Parameter { name: "n".into(), time_varying: false });
+        ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
         let vote_var = ta.add_shared_var(SharedVar {
             name: "cnt_Vote@Replica#1<-Replica#0[value=true]".into(),
             kind: SharedVarKind::MessageCounter,

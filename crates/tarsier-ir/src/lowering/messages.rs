@@ -232,10 +232,7 @@ mod tests {
 
     #[test]
     fn abstract_int_sign_all_three() {
-        assert_eq!(
-            abstract_int_values_sign(-3, 3),
-            vec!["neg", "zero", "pos"]
-        );
+        assert_eq!(abstract_int_values_sign(-3, 3), vec!["neg", "zero", "pos"]);
     }
 
     #[test]
@@ -278,10 +275,7 @@ mod tests {
     #[test]
     fn msg_key_with_sender_and_values() {
         let values = vec!["42".to_string()];
-        assert_eq!(
-            msg_key("Msg", "R", Some("S#1"), &values),
-            "Msg@R<-S#1|42"
-        );
+        assert_eq!(msg_key("Msg", "R", Some("S#1"), &values), "Msg@R<-S#1|42");
     }
 
     #[test]
@@ -377,12 +371,8 @@ mod tests {
             span: ast::Span { start: 0, end: 0 },
         }];
         let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
-        let infos = build_message_infos(
-            &messages,
-            &enum_defs,
-            ValueAbstractionMode::Exact,
-        )
-        .unwrap();
+        let infos =
+            build_message_infos(&messages, &enum_defs, ValueAbstractionMode::Exact).unwrap();
         assert_eq!(infos.len(), 1);
         assert!(infos["Echo"].fields.is_empty());
     }
@@ -399,12 +389,8 @@ mod tests {
             span: ast::Span { start: 0, end: 0 },
         }];
         let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
-        let infos = build_message_infos(
-            &messages,
-            &enum_defs,
-            ValueAbstractionMode::Exact,
-        )
-        .unwrap();
+        let infos =
+            build_message_infos(&messages, &enum_defs, ValueAbstractionMode::Exact).unwrap();
         assert_eq!(infos["Vote"].fields.len(), 1);
         assert!(matches!(infos["Vote"].fields[0].domain, FieldDomain::Bool));
     }
@@ -421,12 +407,7 @@ mod tests {
             span: ast::Span { start: 0, end: 0 },
         }];
         let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
-        assert!(build_message_infos(
-            &messages,
-            &enum_defs,
-            ValueAbstractionMode::Exact
-        )
-        .is_err());
+        assert!(build_message_infos(&messages, &enum_defs, ValueAbstractionMode::Exact).is_err());
     }
 
     #[test]
@@ -441,15 +422,10 @@ mod tests {
             span: ast::Span { start: 0, end: 0 },
         }];
         let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
-        let infos =
-            build_message_infos(&messages, &enum_defs, ValueAbstractionMode::Sign)
-                .unwrap();
+        let infos = build_message_infos(&messages, &enum_defs, ValueAbstractionMode::Sign).unwrap();
         match &infos["Msg"].fields[0].domain {
             FieldDomain::AbstractNatSign(vals) => {
-                assert_eq!(
-                    *vals,
-                    vec!["zero".to_string(), "pos".to_string()]
-                );
+                assert_eq!(*vals, vec!["zero".to_string(), "pos".to_string()]);
             }
             other => panic!("expected AbstractNatSign, got {:?}", other),
         }
@@ -468,18 +444,11 @@ mod tests {
         }];
         let mut enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
         enum_defs.insert("View".into(), vec!["v0".into(), "v1".into()]);
-        let infos = build_message_infos(
-            &messages,
-            &enum_defs,
-            ValueAbstractionMode::Exact,
-        )
-        .unwrap();
+        let infos =
+            build_message_infos(&messages, &enum_defs, ValueAbstractionMode::Exact).unwrap();
         match &infos["Msg"].fields[0].domain {
             FieldDomain::Enum(variants) => {
-                assert_eq!(
-                    *variants,
-                    vec!["v0".to_string(), "v1".to_string()]
-                );
+                assert_eq!(*variants, vec!["v0".to_string(), "v1".to_string()]);
             }
             other => panic!("expected Enum, got {:?}", other),
         }
@@ -497,11 +466,6 @@ mod tests {
             span: ast::Span { start: 0, end: 0 },
         }];
         let enum_defs: IndexMap<String, Vec<String>> = IndexMap::new();
-        assert!(build_message_infos(
-            &messages,
-            &enum_defs,
-            ValueAbstractionMode::Exact
-        )
-        .is_err());
+        assert!(build_message_infos(&messages, &enum_defs, ValueAbstractionMode::Exact).is_err());
     }
 }

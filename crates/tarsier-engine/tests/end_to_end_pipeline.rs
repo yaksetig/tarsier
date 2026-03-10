@@ -824,9 +824,8 @@ fn reconfig_safe_invariant_bmc() {
 #[test]
 fn reconfig_safe_invariant_prove() {
     let opts = default_options();
-    let result =
-        pipeline::prove_safety(SAFE_RECONFIG_INVARIANT, "safe_reconfig_inv.trs", &opts)
-            .expect("prove should complete");
+    let result = pipeline::prove_safety(SAFE_RECONFIG_INVARIANT, "safe_reconfig_inv.trs", &opts)
+        .expect("prove should complete");
     match &result {
         UnboundedSafetyResult::Safe { induction_k } => {
             assert!(*induction_k >= 1);
@@ -837,8 +836,8 @@ fn reconfig_safe_invariant_prove() {
 
 #[test]
 fn reconfig_lowering_marks_params_time_varying() {
-    let program = pipeline::parse(SAFE_RECONFIG_PROTOCOL, "safe_reconfig.trs")
-        .expect("parse should succeed");
+    let program =
+        pipeline::parse(SAFE_RECONFIG_PROTOCOL, "safe_reconfig.trs").expect("parse should succeed");
     let ta = pipeline::lower(&program).expect("lower should succeed");
 
     // 't' should be time-varying (target of reconfigure)
@@ -865,9 +864,8 @@ fn reconfig_lowering_marks_params_time_varying() {
 #[test]
 fn reconfig_pdr_safe_invariant() {
     let opts = pdr_options();
-    let result =
-        pipeline::prove_safety(SAFE_RECONFIG_INVARIANT, "safe_reconfig_inv.trs", &opts)
-            .expect("PDR should complete");
+    let result = pipeline::prove_safety(SAFE_RECONFIG_INVARIANT, "safe_reconfig_inv.trs", &opts)
+        .expect("PDR should complete");
     match &result {
         UnboundedSafetyResult::Safe { induction_k } => {
             assert!(*induction_k >= 1);
@@ -887,8 +885,8 @@ fn dag_round_alpha_example_verifies_safe() {
     let ta = pipeline::lower(&program).expect("lower should succeed");
     assert_eq!(ta.dag_rounds.len(), 3);
 
-    let result = pipeline::verify(&src, "dag_round_alpha_safe.trs", &opts)
-        .expect("verify should complete");
+    let result =
+        pipeline::verify(&src, "dag_round_alpha_safe.trs", &opts).expect("verify should complete");
     assert!(
         matches!(result, VerificationResult::Safe { .. }),
         "alpha DAG example should be safe"
@@ -1067,8 +1065,7 @@ fn dag_round_safe_prove() {
 
     // The existing test (dag_round_alpha_example_verifies_safe) only does BMC.
     // This test exercises the full k-induction proof engine.
-    let program = pipeline::parse(&src, "dag_round_alpha_safe.trs")
-        .expect("parse should succeed");
+    let program = pipeline::parse(&src, "dag_round_alpha_safe.trs").expect("parse should succeed");
     assert_eq!(program.protocol.node.dag_rounds.len(), 3);
 
     let result = pipeline::prove_safety(&src, "dag_round_alpha_safe.trs", &opts)

@@ -29,217 +29,373 @@ macro_rules! roundtrip_test {
 // Top-level examples
 roundtrip_test!(
     roundtrip_reliable_broadcast,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/reliable_broadcast.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/reliable_broadcast.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_reliable_broadcast_buggy,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/reliable_broadcast_buggy.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/reliable_broadcast_buggy.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_algorand_committee,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/algorand_committee.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/algorand_committee.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_pbft_simple,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/pbft_simple.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/pbft_simple.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_trivial_live,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/trivial_live.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/trivial_live.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_pbft_faithful_liveness,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/pbft_faithful_liveness.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/pbft_faithful_liveness.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_temporal_liveness,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/temporal_liveness.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/temporal_liveness.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_crypto_objects,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/crypto_objects.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/crypto_objects.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_crash_recovery_demo,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/crash_recovery_demo.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/crash_recovery_demo.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_leader_role_demo,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/leader_role_demo.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/leader_role_demo.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_bounded_log_demo,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/bounded_log_demo.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/bounded_log_demo.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_fifo_channel_demo,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/fifo_channel_demo.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/fifo_channel_demo.trs"
+    )
 );
 
 // Library examples (representative selection covering diverse protocol features)
 roundtrip_test!(
     roundtrip_lib_pbft_core,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/pbft_core.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/pbft_core.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_pbft_view_change,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/pbft_view_change.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/pbft_view_change.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_tendermint_locking,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/tendermint_locking.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/tendermint_locking.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_hotstuff_chained,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/hotstuff_chained.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/hotstuff_chained.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_streamlet,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/streamlet.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/streamlet.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_zyzzyva_fastpath,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/zyzzyva_fastpath.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/zyzzyva_fastpath.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_paxos_basic,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/paxos_basic.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/paxos_basic.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_raft_election_safety,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/raft_election_safety.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/raft_election_safety.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_grandpa_finality,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/grandpa_finality.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/grandpa_finality.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_multi_paxos_round,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/multi_paxos_round.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/multi_paxos_round.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_dls_partial_sync,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/dls_partial_sync.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/dls_partial_sync.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_casper_ffg_like,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/casper_ffg_like.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/casper_ffg_like.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_reliable_broadcast_safe,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/reliable_broadcast_safe.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/reliable_broadcast_safe.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_pbft_simple_safe,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/pbft_simple_safe.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/pbft_simple_safe.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_voting_enum_phases,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/voting_enum_phases.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/voting_enum_phases.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_reliable_broadcast_process_selective,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/reliable_broadcast_process_selective.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/reliable_broadcast_process_selective.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_reliable_broadcast_cohort_selective,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/reliable_broadcast_cohort_selective.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/reliable_broadcast_cohort_selective.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_pbft_simple_safe_faithful,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/pbft_simple_safe_faithful.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/pbft_simple_safe_faithful.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_hotstuff_simple_safe_faithful,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/hotstuff_simple_safe_faithful.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/hotstuff_simple_safe_faithful.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_viewstamped_replication,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/viewstamped_replication.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/viewstamped_replication.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_zab_atomic_broadcast,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/zab_atomic_broadcast.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/zab_atomic_broadcast.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_pbft_crypto_qc_safe_faithful,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/pbft_crypto_qc_safe_faithful.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/pbft_crypto_qc_safe_faithful.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_hotstuff_crypto_qc_safe_faithful,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/hotstuff_crypto_qc_safe_faithful.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/hotstuff_crypto_qc_safe_faithful.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_tendermint_crypto_qc_safe_faithful,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/tendermint_crypto_qc_safe_faithful.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/tendermint_crypto_qc_safe_faithful.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_reliable_broadcast_safe_live,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/reliable_broadcast_safe_live.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/reliable_broadcast_safe_live.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_sbft_committee,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/sbft_committee.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/sbft_committee.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_algorand_vote_cert,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/algorand_vote_cert.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/algorand_vote_cert.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_narwhal_bullshark_vote,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/narwhal_bullshark_vote.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/narwhal_bullshark_vote.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_minimmit_safe_faithful,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/minimmit_safe_faithful.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/minimmit_safe_faithful.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_phoenixx_safe_faithful,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/phoenixx_safe_faithful.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/phoenixx_safe_faithful.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_rbft_qbft_safe_faithful,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/rbft_qbft_safe_faithful.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/rbft_qbft_safe_faithful.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_reliable_broadcast_reconfig_safe,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/reliable_broadcast_reconfig_safe.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/reliable_broadcast_reconfig_safe.trs"
+    )
 );
 
 // Experimental examples
 roundtrip_test!(
     roundtrip_exp_dag_round_alpha_safe,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/experimental/dag_round_alpha_safe.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/experimental/dag_round_alpha_safe.trs"
+    )
 );
 
 // Buggy examples (should still parse successfully, bugs are semantic)
 roundtrip_test!(
     roundtrip_lib_reliable_broadcast_buggy,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/reliable_broadcast_buggy.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/reliable_broadcast_buggy.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_viewstamped_replication_buggy,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/viewstamped_replication_buggy.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/viewstamped_replication_buggy.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_zab_atomic_broadcast_buggy,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/zab_atomic_broadcast_buggy.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/zab_atomic_broadcast_buggy.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_reconfig_threshold_buggy,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/reconfig_threshold_buggy.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/reconfig_threshold_buggy.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_clock_premature_buggy,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/clock_premature_buggy.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/clock_premature_buggy.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_fifo_weak_guard_buggy,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/fifo_weak_guard_buggy.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/fifo_weak_guard_buggy.trs"
+    )
 );
 roundtrip_test!(
     roundtrip_lib_dag_conflicting_buggy,
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/library/dag_conflicting_buggy.trs")
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/library/dag_conflicting_buggy.trs"
+    )
 );
 
 // Also test the glob-based approach for completeness: parse ALL .trs files
@@ -328,7 +484,10 @@ protocol Broken {
     }
 "#;
     let result = parse(src, "missing_protocol_brace.trs");
-    assert!(result.is_err(), "missing protocol closing brace should fail");
+    assert!(
+        result.is_err(),
+        "missing protocol closing brace should fail"
+    );
 }
 
 #[test]
@@ -388,10 +547,7 @@ protocol Broken {
 }
 "#;
     let result = parse(src, "invalid_threshold2.trs");
-    assert!(
-        result.is_err(),
-        "doubled comparison operator should fail"
-    );
+    assert!(result.is_err(), "doubled comparison operator should fail");
 }
 
 #[test]
@@ -503,7 +659,10 @@ protocol Valid {
 extra stuff here
 "#;
     let result = parse(src, "junk_after.trs");
-    assert!(result.is_err(), "junk after protocol closing brace should fail");
+    assert!(
+        result.is_err(),
+        "junk after protocol closing brace should fail"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -521,7 +680,11 @@ protocol NoRoles {
 "#;
     let result = parse(src, "no_roles.trs");
     // Should parse successfully -- having no roles is syntactically valid.
-    assert!(result.is_ok(), "protocol with no roles should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "protocol with no roles should parse: {:?}",
+        result.err()
+    );
     let prog = result.unwrap();
     assert!(prog.protocol.node.roles.is_empty());
 }
@@ -540,7 +703,11 @@ protocol EmptyPhase {
 }
 "#;
     let result = parse(src, "empty_phase.trs");
-    assert!(result.is_ok(), "empty phase should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "empty phase should parse: {:?}",
+        result.err()
+    );
     let prog = result.unwrap();
     let role = &prog.protocol.node.roles[0].node;
     assert_eq!(role.phases[0].node.transitions.len(), 0);
@@ -650,7 +817,11 @@ protocol MultiRole {
 }
 "#;
     let result = parse(src, "multi_role.trs");
-    assert!(result.is_ok(), "multi-role protocol should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "multi-role protocol should parse: {:?}",
+        result.err()
+    );
     let prog = result.unwrap();
     assert_eq!(prog.protocol.node.roles.len(), 2);
     assert_eq!(prog.protocol.node.roles[0].node.name, "Leader");
@@ -688,7 +859,11 @@ protocol MultiProp {
 }
 "#;
     let result = parse(src, "multi_prop.trs");
-    assert!(result.is_ok(), "multiple properties should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "multiple properties should parse: {:?}",
+        result.err()
+    );
     let prog = result.unwrap();
     assert_eq!(prog.protocol.node.properties.len(), 2);
 }
@@ -705,7 +880,11 @@ protocol Shorthand {
 }
 "#;
     let result = parse(src, "shorthand.trs");
-    assert!(result.is_ok(), "params shorthand should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "params shorthand should parse: {:?}",
+        result.err()
+    );
     let prog = result.unwrap();
     assert_eq!(prog.protocol.node.parameters.len(), 2);
 }
@@ -722,7 +901,11 @@ protocol ResColon {
 }
 "#;
     let result = parse(src, "res_colon.trs");
-    assert!(result.is_ok(), "resilience colon syntax should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "resilience colon syntax should parse: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -751,7 +934,11 @@ protocol ManyPhases {
 }
 "#;
     let result = parse(src, "many_phases.trs");
-    assert!(result.is_ok(), "many phases should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "many phases should parse: {:?}",
+        result.err()
+    );
     let prog = result.unwrap();
     assert_eq!(prog.protocol.node.roles[0].node.phases.len(), 5);
 }
@@ -794,7 +981,11 @@ protocol WithEnum {
 }
 "#;
     let result = parse(src, "enum_decl.trs");
-    assert!(result.is_ok(), "enum declaration should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "enum declaration should parse: {:?}",
+        result.err()
+    );
     let prog = result.unwrap();
     assert_eq!(prog.protocol.node.enums.len(), 1);
     assert_eq!(prog.protocol.node.enums[0].variants.len(), 3);
@@ -815,7 +1006,11 @@ protocol WithAdversary {
 }
 "#;
     let result = parse(src, "adversary.trs");
-    assert!(result.is_ok(), "adversary block should parse: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "adversary block should parse: {:?}",
+        result.err()
+    );
     let prog = result.unwrap();
     assert_eq!(prog.protocol.node.adversary.len(), 2);
 }

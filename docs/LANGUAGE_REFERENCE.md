@@ -1094,7 +1094,7 @@ All commands are invoked as `tarsier <command> [args] [flags]`. The 40 commands 
 
 #### Unbounded Proofs
 
-- `prove <file>` — Unbounded safety via k-induction or PDR. `--engine kinduction|pdr`, `--k 10`, `--auto-strengthen`, `--assist`
+- `prove <file>` — Unbounded safety via k-induction or PDR. `--engine kinduction|pdr`, `--k 10`, `--auto-strengthen`
 - `prove-fair <file>` — Unbounded liveness under fairness. `--fairness weak|strong`, `--k 0`
 - `prove-round <file>` — Safety via round-erasure over-approximation. `--round-vars view,round,epoch,height`, `--engine pdr`
 - `prove-fair-round <file>` — Fair-liveness via round-erasure. `--round-vars`, `--fairness`

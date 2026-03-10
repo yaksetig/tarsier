@@ -901,7 +901,7 @@ pub(crate) fn prove_safety_program(
 /// Run an unbounded safety proof attempt on an already-parsed program.
 ///
 /// This is useful for workflows that synthesize/mutate property declarations
-/// (for example, AI-assisted candidate validation) before invoking the solver.
+/// before invoking the solver.
 pub fn prove_safety_program_ast(
     program: &ast::Program,
     options: &PipelineOptions,

@@ -1409,7 +1409,10 @@ mod tests {
         };
         let canon = safety_property_canonical(&prop);
         // Pairs should be sorted
-        assert_eq!(canon, "agreement:[(LocationId(0), LocationId(1)), (LocationId(2), LocationId(3))]");
+        assert_eq!(
+            canon,
+            "agreement:[(LocationId(0), LocationId(1)), (LocationId(2), LocationId(3))]"
+        );
     }
 
     #[test]
@@ -1428,7 +1431,10 @@ mod tests {
         };
         let canon = safety_property_canonical(&prop);
         // Inner sets sorted, outer sorted
-        assert_eq!(canon, "invariant:[[LocationId(0)], [LocationId(1), LocationId(2)]]");
+        assert_eq!(
+            canon,
+            "invariant:[[LocationId(0)], [LocationId(1), LocationId(2)]]"
+        );
     }
 
     #[test]
@@ -1437,7 +1443,10 @@ mod tests {
             goal_locs: vec![3.into(), 1.into(), 2.into()],
         };
         let canon = safety_property_canonical(&prop);
-        assert_eq!(canon, "termination:[LocationId(1), LocationId(2), LocationId(3)]");
+        assert_eq!(
+            canon,
+            "termination:[LocationId(1), LocationId(2), LocationId(3)]"
+        );
     }
 
     /// Helper: build a minimal ThresholdAutomaton with the given parameters.

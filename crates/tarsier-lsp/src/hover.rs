@@ -161,3 +161,290 @@ pub(crate) fn hover_for_user_defined(word: &str, program: &Program) -> Option<St
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tarsier_dsl::ast::*;
+
+    fn empty_program() -> Program {
+        Program {
+            protocol: Spanned::new(
+                ProtocolDecl {
+                    name: "Test".to_string(),
+                    imports: vec![],
+                    refines: None,
+                    modules: vec![],
+                    enums: vec![],
+                    parameters: vec![],
+                    resilience: None,
+                    pacemaker: None,
+                    adversary: vec![],
+                    identities: vec![],
+                    channels: vec![],
+                    equivocation_policies: vec![],
+                    committees: vec![],
+                    dag_rounds: vec![],
+                    collections: vec![],
+                    clocks: vec![],
+                    messages: vec![],
+                    crypto_objects: vec![],
+                    roles: vec![],
+                    properties: vec![],
+                },
+                Span { start: 0, end: 0 },
+            ),
+        }
+    }
+
+    // ── keyword_docs tests ──
+
+    #[test]
+    fn keyword_docs_protocol() {
+        let doc = keyword_docs("protocol");
+        assert!(doc.is_some());
+        assert!(doc.unwrap().contains("protocol"));
+    }
+
+    #[test]
+    fn keyword_docs_all_known_keywords_return_some() {
+        let keywords = [
+            "protocol", "parameters", "resilience", "adversary", "message",
+            "role", "var", "init", "phase", "when", "send", "goto", "decide",
+            "received", "property", "agreement", "validity", "safety",
+            "invariant", "liveness", "committee", "identity", "channel",
+            "equivocation", "forall", "exists", "enum", "certificate",
+            "threshold_signature", "pacemaker", "module", "import", "refines",
+            "dag_round", "extends", "log", "sequence", "fifo_channel",
+            "true", "false", "bool", "nat", "int", "distinct", "append",
+            "enqueue", "dequeue", "reconfigure",
+        ];
+        for kw in keywords {
+            assert!(keyword_docs(kw).is_some(), "keyword '{}' should have docs", kw);
+        }
+    }
+
+    #[test]
+    fn keyword_docs_unknown_returns_none() {
+        assert!(keyword_docs("foobar").is_none());
+        assert!(keyword_docs("").is_none());
+        assert!(keyword_docs("Protocol").is_none()); // case-sensitive
+    }
+
+    #[test]
+    fn keyword_docs_certificate_and_threshold_signature_same() {
+        let doc1 = keyword_docs("certificate").unwrap();
+        let doc2 = keyword_docs("threshold_signature").unwrap();
+        assert_eq!(doc1, doc2);
+    }
+
+    // ── hover_for_user_defined tests ──
+
+    #[test]
+    fn hover_message_no_fields() {
+        let mut prog = empty_program();
+        prog.protocol.node.messages.push(MessageDecl {
+            name: "Ping".to_string(),
+            fields: vec![],
+            span: Span { start: 0, end: 0 },
+        });
+        let result = hover_for_user_defined("Ping", &prog);
+        assert_eq!(result, Some("**Message** `Ping`".to_string()));
+    }
+
+    #[test]
+    fn hover_message_with_fields() {
+        let mut prog = empty_program();
+        prog.protocol.node.messages.push(MessageDecl {
+            name: "Vote".to_string(),
+            fields: vec![
+                FieldDef { name: "value".into(), ty: "nat".into(), range: None },
+                FieldDef { name: "round".into(), ty: "nat".into(), range: None },
+            ],
+            span: Span { start: 0, end: 0 },
+        });
+        let result = hover_for_user_defined("Vote", &prog).unwrap();
+        assert!(result.contains("Vote(value: nat, round: nat)"));
+    }
+
+    #[test]
+    fn hover_role() {
+        let mut prog = empty_program();
+        prog.protocol.node.roles.push(Spanned::new(
+            RoleDecl {
+                name: "Voter".to_string(),
+                is_leader: false,
+                vars: vec![VarDecl {
+                    name: "x".into(),
+                    ty: VarType::Bool,
+                    range: None,
+                    init: None,
+                    span: Span { start: 0, end: 0 },
+                }],
+                init_phase: Some("start".into()),
+                phases: vec![
+                    Spanned::new(
+                        PhaseDecl { name: "start".into(), transitions: vec![] },
+                        Span { start: 0, end: 0 },
+                    ),
+                    Spanned::new(
+                        PhaseDecl { name: "done".into(), transitions: vec![] },
+                        Span { start: 0, end: 0 },
+                    ),
+                ],
+            },
+            Span { start: 0, end: 0 },
+        ));
+        let result = hover_for_user_defined("Voter", &prog).unwrap();
+        assert!(result.contains("**Role** `Voter`"));
+        assert!(result.contains("1 variable(s)"));
+        assert!(result.contains("2 phase(s)"));
+        assert!(result.contains("start, done"));
+    }
+
+    #[test]
+    fn hover_phase() {
+        let mut prog = empty_program();
+        prog.protocol.node.roles.push(Spanned::new(
+            RoleDecl {
+                name: "R".to_string(),
+                is_leader: false,
+                vars: vec![],
+                init_phase: Some("idle".into()),
+                phases: vec![Spanned::new(
+                    PhaseDecl { name: "idle".into(), transitions: vec![] },
+                    Span { start: 0, end: 0 },
+                )],
+            },
+            Span { start: 0, end: 0 },
+        ));
+        let result = hover_for_user_defined("idle", &prog).unwrap();
+        assert!(result.contains("**Phase** `idle`"));
+        assert!(result.contains("role `R`"));
+        assert!(result.contains("0 transition(s)"));
+    }
+
+    #[test]
+    fn hover_parameter() {
+        let mut prog = empty_program();
+        prog.protocol.node.parameters.push(ParamDef {
+            name: "n".to_string(),
+            ty: ParamType::Nat,
+            span: Span { start: 0, end: 0 },
+        });
+        let result = hover_for_user_defined("n", &prog).unwrap();
+        assert!(result.contains("**Parameter** `n:"));
+    }
+
+    #[test]
+    fn hover_variable_bool() {
+        let mut prog = empty_program();
+        prog.protocol.node.roles.push(Spanned::new(
+            RoleDecl {
+                name: "R".to_string(),
+                is_leader: false,
+                vars: vec![VarDecl {
+                    name: "decided".into(),
+                    ty: VarType::Bool,
+                    range: None,
+                    init: Some(Expr::BoolLit(false)),
+                    span: Span { start: 0, end: 0 },
+                }],
+                init_phase: None,
+                phases: vec![],
+            },
+            Span { start: 0, end: 0 },
+        ));
+        let result = hover_for_user_defined("decided", &prog).unwrap();
+        assert!(result.contains("**Variable** `decided: bool"));
+        assert!(result.contains("role `R`"));
+    }
+
+    #[test]
+    fn hover_variable_enum_type() {
+        let mut prog = empty_program();
+        prog.protocol.node.roles.push(Spanned::new(
+            RoleDecl {
+                name: "R".to_string(),
+                is_leader: false,
+                vars: vec![VarDecl {
+                    name: "color".into(),
+                    ty: VarType::Enum("Color".into()),
+                    range: None,
+                    init: None,
+                    span: Span { start: 0, end: 0 },
+                }],
+                init_phase: None,
+                phases: vec![],
+            },
+            Span { start: 0, end: 0 },
+        ));
+        let result = hover_for_user_defined("color", &prog).unwrap();
+        assert!(result.contains("Color"));
+    }
+
+    #[test]
+    fn hover_property() {
+        let mut prog = empty_program();
+        prog.protocol.node.properties.push(Spanned::new(
+            PropertyDecl {
+                name: "agree".to_string(),
+                kind: PropertyKind::Agreement,
+                formula: QuantifiedFormula {
+                    quantifiers: vec![],
+                    body: FormulaExpr::Comparison {
+                        lhs: FormulaAtom::BoolLit(true),
+                        op: CmpOp::Eq,
+                        rhs: FormulaAtom::BoolLit(true),
+                    },
+                },
+            },
+            Span { start: 0, end: 0 },
+        ));
+        let result = hover_for_user_defined("agree", &prog).unwrap();
+        assert!(result.contains("**Property** `agree`"));
+        assert!(result.contains("agreement"));
+    }
+
+    #[test]
+    fn hover_enum() {
+        let mut prog = empty_program();
+        prog.protocol.node.enums.push(EnumDecl {
+            name: "Color".to_string(),
+            variants: vec!["Red".into(), "Green".into(), "Blue".into()],
+            span: Span { start: 0, end: 0 },
+        });
+        let result = hover_for_user_defined("Color", &prog).unwrap();
+        assert!(result.contains("**Enum** `Color`"));
+        assert!(result.contains("Red, Green, Blue"));
+    }
+
+    #[test]
+    fn hover_unknown_returns_none() {
+        let prog = empty_program();
+        assert!(hover_for_user_defined("nonexistent", &prog).is_none());
+    }
+
+    #[test]
+    fn hover_priority_message_over_role() {
+        // If a message and role share the same name, message wins (checked first)
+        let mut prog = empty_program();
+        prog.protocol.node.messages.push(MessageDecl {
+            name: "X".to_string(),
+            fields: vec![],
+            span: Span { start: 0, end: 0 },
+        });
+        prog.protocol.node.roles.push(Spanned::new(
+            RoleDecl {
+                name: "X".to_string(),
+                is_leader: false,
+                vars: vec![],
+                init_phase: None,
+                phases: vec![],
+            },
+            Span { start: 0, end: 0 },
+        ));
+        let result = hover_for_user_defined("X", &prog).unwrap();
+        assert!(result.starts_with("**Message**"));
+    }
+}

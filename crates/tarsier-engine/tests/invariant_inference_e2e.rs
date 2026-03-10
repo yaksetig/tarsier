@@ -43,9 +43,8 @@ fn auto_strengthen_reliable_broadcast_safe() {
 fn auto_strengthen_pbft_simple_safe() {
     let source =
         std::fs::read_to_string("../../examples/pbft_simple.trs").expect("read pbft_simple.trs");
-    let result =
-        prove_safety_with_auto_strengthen(&source, "pbft_simple.trs", &default_options())
-            .expect("prove should succeed");
+    let result = prove_safety_with_auto_strengthen(&source, "pbft_simple.trs", &default_options())
+        .expect("prove should succeed");
     match &result {
         UnboundedSafetyResult::Safe { induction_k } => {
             assert!(*induction_k >= 1);
@@ -168,12 +167,9 @@ fn auto_strengthen_agrees_with_baseline_unsafe() {
 
     let baseline = pipeline::prove_safety(&source, "reliable_broadcast_buggy.trs", &options)
         .expect("baseline prove");
-    let strengthened = prove_safety_with_auto_strengthen(
-        &source,
-        "reliable_broadcast_buggy.trs",
-        &options,
-    )
-    .expect("strengthened prove");
+    let strengthened =
+        prove_safety_with_auto_strengthen(&source, "reliable_broadcast_buggy.trs", &options)
+            .expect("strengthened prove");
 
     let baseline_unsafe = matches!(baseline, UnboundedSafetyResult::Unsafe { .. });
     let strengthened_unsafe = matches!(strengthened, UnboundedSafetyResult::Unsafe { .. });

@@ -381,7 +381,9 @@ mod tests {
     use super::*;
 
     fn parse(src: &str) -> Program {
-        tarsier_dsl::parse_with_diagnostics(src, "test.trs").unwrap().0
+        tarsier_dsl::parse_with_diagnostics(src, "test.trs")
+            .unwrap()
+            .0
     }
 
     fn test_uri() -> Url {
@@ -413,17 +415,38 @@ mod tests {
 
     #[test]
     fn test_definition_kind_sort_key_ordering() {
-        assert!(definition_kind_sort_key(&DefinitionKind::Message) < definition_kind_sort_key(&DefinitionKind::Role));
-        assert!(definition_kind_sort_key(&DefinitionKind::Role) < definition_kind_sort_key(&DefinitionKind::Phase));
-        assert!(definition_kind_sort_key(&DefinitionKind::Phase) < definition_kind_sort_key(&DefinitionKind::Param));
+        assert!(
+            definition_kind_sort_key(&DefinitionKind::Message)
+                < definition_kind_sort_key(&DefinitionKind::Role)
+        );
+        assert!(
+            definition_kind_sort_key(&DefinitionKind::Role)
+                < definition_kind_sort_key(&DefinitionKind::Phase)
+        );
+        assert!(
+            definition_kind_sort_key(&DefinitionKind::Phase)
+                < definition_kind_sort_key(&DefinitionKind::Param)
+        );
     }
 
     #[test]
     fn test_dedup_symbol_targets_removes_duplicates() {
         let targets = vec![
-            SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None },
-            SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None },
-            SymbolTarget { name: "Node".into(), kind: DefinitionKind::Role, parent: None },
+            SymbolTarget {
+                name: "Echo".into(),
+                kind: DefinitionKind::Message,
+                parent: None,
+            },
+            SymbolTarget {
+                name: "Echo".into(),
+                kind: DefinitionKind::Message,
+                parent: None,
+            },
+            SymbolTarget {
+                name: "Node".into(),
+                kind: DefinitionKind::Role,
+                parent: None,
+            },
         ];
         assert_eq!(dedup_symbol_targets(targets).len(), 2);
     }
@@ -431,23 +454,53 @@ mod tests {
     #[test]
     fn test_dedup_symbol_targets_keeps_different_kinds() {
         let targets = vec![
-            SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None },
-            SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Var, parent: Some("Node".into()) },
+            SymbolTarget {
+                name: "Echo".into(),
+                kind: DefinitionKind::Message,
+                parent: None,
+            },
+            SymbolTarget {
+                name: "Echo".into(),
+                kind: DefinitionKind::Var,
+                parent: Some("Node".into()),
+            },
         ];
         assert_eq!(dedup_symbol_targets(targets).len(), 2);
     }
 
     #[test]
     fn test_symbol_target_matches_occurrence_positive() {
-        let target = SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None };
-        let occ = SymbolOccurrence { name: "Echo".into(), kind: DefinitionKind::Message, parent: None, start: 0, end: 4, declaration: true };
+        let target = SymbolTarget {
+            name: "Echo".into(),
+            kind: DefinitionKind::Message,
+            parent: None,
+        };
+        let occ = SymbolOccurrence {
+            name: "Echo".into(),
+            kind: DefinitionKind::Message,
+            parent: None,
+            start: 0,
+            end: 4,
+            declaration: true,
+        };
         assert!(symbol_target_matches_occurrence(&target, &occ));
     }
 
     #[test]
     fn test_symbol_target_matches_occurrence_negative() {
-        let target = SymbolTarget { name: "Echo".into(), kind: DefinitionKind::Message, parent: None };
-        let occ = SymbolOccurrence { name: "Ready".into(), kind: DefinitionKind::Message, parent: None, start: 0, end: 5, declaration: true };
+        let target = SymbolTarget {
+            name: "Echo".into(),
+            kind: DefinitionKind::Message,
+            parent: None,
+        };
+        let occ = SymbolOccurrence {
+            name: "Ready".into(),
+            kind: DefinitionKind::Message,
+            parent: None,
+            start: 0,
+            end: 5,
+            declaration: true,
+        };
         assert!(!symbol_target_matches_occurrence(&target, &occ));
     }
 
@@ -485,7 +538,10 @@ mod tests {
 
     #[test]
     fn test_as_goto_definition_response_single() {
-        let loc = Location { uri: test_uri(), range: Range::new(Position::new(0, 0), Position::new(0, 5)) };
+        let loc = Location {
+            uri: test_uri(),
+            range: Range::new(Position::new(0, 0), Position::new(0, 5)),
+        };
         match as_goto_definition_response(vec![loc]).unwrap() {
             GotoDefinitionResponse::Scalar(l) => assert_eq!(l.uri, test_uri()),
             _ => panic!("expected scalar"),
@@ -494,8 +550,14 @@ mod tests {
 
     #[test]
     fn test_as_goto_definition_response_multiple() {
-        let loc1 = Location { uri: test_uri(), range: Range::new(Position::new(0, 0), Position::new(0, 5)) };
-        let loc2 = Location { uri: test_uri(), range: Range::new(Position::new(1, 0), Position::new(1, 5)) };
+        let loc1 = Location {
+            uri: test_uri(),
+            range: Range::new(Position::new(0, 0), Position::new(0, 5)),
+        };
+        let loc2 = Location {
+            uri: test_uri(),
+            range: Range::new(Position::new(1, 0), Position::new(1, 5)),
+        };
         match as_goto_definition_response(vec![loc1, loc2]).unwrap() {
             GotoDefinitionResponse::Array(locs) => assert_eq!(locs.len(), 2),
             _ => panic!("expected array"),
@@ -504,12 +566,33 @@ mod tests {
 
     #[test]
     fn test_symbol_kind_for_definition_kind_mapping() {
-        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Message), SymbolKind::STRUCT);
-        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Role), SymbolKind::CLASS);
-        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Phase), SymbolKind::METHOD);
-        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Param), SymbolKind::CONSTANT);
-        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Var), SymbolKind::VARIABLE);
-        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Property), SymbolKind::PROPERTY);
-        assert_eq!(symbol_kind_for_definition_kind(&DefinitionKind::Enum), SymbolKind::ENUM);
+        assert_eq!(
+            symbol_kind_for_definition_kind(&DefinitionKind::Message),
+            SymbolKind::STRUCT
+        );
+        assert_eq!(
+            symbol_kind_for_definition_kind(&DefinitionKind::Role),
+            SymbolKind::CLASS
+        );
+        assert_eq!(
+            symbol_kind_for_definition_kind(&DefinitionKind::Phase),
+            SymbolKind::METHOD
+        );
+        assert_eq!(
+            symbol_kind_for_definition_kind(&DefinitionKind::Param),
+            SymbolKind::CONSTANT
+        );
+        assert_eq!(
+            symbol_kind_for_definition_kind(&DefinitionKind::Var),
+            SymbolKind::VARIABLE
+        );
+        assert_eq!(
+            symbol_kind_for_definition_kind(&DefinitionKind::Property),
+            SymbolKind::PROPERTY
+        );
+        assert_eq!(
+            symbol_kind_for_definition_kind(&DefinitionKind::Enum),
+            SymbolKind::ENUM
+        );
     }
 }

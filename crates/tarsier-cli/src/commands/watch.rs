@@ -48,9 +48,6 @@ fn run_once(args: &WatchCommandArgs) {
         cegar_report_out: None,
         portfolio: args.portfolio,
         auto_strengthen: false,
-        assist: false,
-        assist_max_suggestions: 5,
-        assist_payload_out: None,
         format: args.format.clone(),
         cli_network_mode: args.cli_network_mode,
     });
@@ -173,4 +170,83 @@ pub(crate) fn run_watch_command(args: WatchCommandArgs) -> miette::Result<()> {
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- DEBOUNCE_MS --
+
+    #[test]
+    fn debounce_ms_is_positive() {
+        assert!(DEBOUNCE_MS > 0);
+    }
+
+    // -- chrono_free_timestamp --
+
+    #[test]
+    fn chrono_free_timestamp_format() {
+        let ts = chrono_free_timestamp();
+        // Expected format: HH:MM:SS UTC
+        assert!(ts.ends_with(" UTC"), "timestamp should end with ' UTC': {ts}");
+        let parts: Vec<&str> = ts.trim_end_matches(" UTC").split(':').collect();
+        assert_eq!(parts.len(), 3, "timestamp should have 3 colon-separated parts");
+        for part in &parts {
+            assert_eq!(part.len(), 2, "each time component should be 2 digits: {part}");
+            assert!(part.chars().all(|c| c.is_ascii_digit()));
+        }
+    }
+
+    #[test]
+    fn chrono_free_timestamp_hours_in_range() {
+        let ts = chrono_free_timestamp();
+        let h: u64 = ts[..2].parse().unwrap();
+        assert!(h < 24);
+    }
+
+    // -- WatchCommandArgs --
+
+    #[test]
+    fn watch_command_args_clone() {
+        let args = WatchCommandArgs {
+            file: PathBuf::from("test.trs"),
+            solver: "z3".into(),
+            k: 12,
+            timeout: 60,
+            soundness: "strict".into(),
+            engine: "pdr".into(),
+            fairness: "weak".into(),
+            portfolio: false,
+            format: "text".into(),
+            cli_network_mode: CliNetworkSemanticsMode::Dsl,
+        };
+        let cloned = args.clone();
+        assert_eq!(cloned.file, PathBuf::from("test.trs"));
+        assert_eq!(cloned.solver, "z3");
+        assert_eq!(cloned.k, 12);
+        assert!(!cloned.portfolio);
+    }
+
+    #[test]
+    fn watch_command_args_with_faithful_mode() {
+        let args = WatchCommandArgs {
+            file: PathBuf::from("f.trs"),
+            solver: "cvc5".into(),
+            k: 24,
+            timeout: 120,
+            soundness: "permissive".into(),
+            engine: "kinduction".into(),
+            fairness: "strong".into(),
+            portfolio: true,
+            format: "json".into(),
+            cli_network_mode: CliNetworkSemanticsMode::Faithful,
+        };
+        assert_eq!(args.cli_network_mode, CliNetworkSemanticsMode::Faithful);
+        assert!(args.portfolio);
+    }
 }

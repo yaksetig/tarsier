@@ -24,8 +24,7 @@ pub(crate) fn run_infer_invariants(
     format: &str,
 ) -> miette::Result<()> {
     // 1. Parse protocol.
-    let src =
-        std::fs::read_to_string(file).map_err(|e| miette::miette!("read protocol: {e}"))?;
+    let src = std::fs::read_to_string(file).map_err(|e| miette::miette!("read protocol: {e}"))?;
     let filename = file.display().to_string();
     let ast = parse(&src, &filename).map_err(|e| miette::miette!("parse: {e}"))?;
 
@@ -84,10 +83,8 @@ pub(crate) fn run_infer_invariants(
     };
 
     // 6. Partition results.
-    let inductive: Vec<&InductivenessResult> =
-        results.iter().filter(|r| r.score == 2).collect();
-    let init_only: Vec<&InductivenessResult> =
-        results.iter().filter(|r| r.score == 1).collect();
+    let inductive: Vec<&InductivenessResult> = results.iter().filter(|r| r.score == 2).collect();
+    let init_only: Vec<&InductivenessResult> = results.iter().filter(|r| r.score == 1).collect();
 
     // 7. Report.
     match format {
@@ -146,8 +143,14 @@ fn print_json_report(
     init_only: &[&InductivenessResult],
     all: &[InductivenessResult],
 ) {
-    let inductive_labels: Vec<&str> = inductive.iter().map(|r| r.candidate.label.as_str()).collect();
-    let init_only_labels: Vec<&str> = init_only.iter().map(|r| r.candidate.label.as_str()).collect();
+    let inductive_labels: Vec<&str> = inductive
+        .iter()
+        .map(|r| r.candidate.label.as_str())
+        .collect();
+    let init_only_labels: Vec<&str> = init_only
+        .iter()
+        .map(|r| r.candidate.label.as_str())
+        .collect();
     let result = if inductive.is_empty() {
         "no_inductive_invariants"
     } else {

@@ -377,3 +377,253 @@ pub(crate) fn expected_matches(expected: &str, actual: &str) -> bool {
 pub(crate) fn is_valid_sha256_hex(raw: &str) -> bool {
     raw.len() == 64 && raw.bytes().all(|b| b.is_ascii_hexdigit())
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- chrono_utc_now --
+
+    #[test]
+    fn chrono_utc_now_iso_format() {
+        let ts = chrono_utc_now();
+        // Should look like "YYYY-MM-DDTHH:MM:SSZ"
+        assert!(ts.ends_with('Z'), "timestamp should end with Z: {ts}");
+        assert_eq!(ts.len(), 20, "timestamp should be 20 chars: {ts}");
+        assert_eq!(&ts[4..5], "-");
+        assert_eq!(&ts[7..8], "-");
+        assert_eq!(&ts[10..11], "T");
+        assert_eq!(&ts[13..14], ":");
+        assert_eq!(&ts[16..17], ":");
+    }
+
+    #[test]
+    fn chrono_utc_now_year_reasonable() {
+        let ts = chrono_utc_now();
+        let year: u32 = ts[0..4].parse().unwrap();
+        assert!(year >= 2024 && year <= 2100);
+    }
+
+    // -- parse_solver_list --
+
+    #[test]
+    fn parse_solver_list_single() {
+        assert_eq!(parse_solver_list("z3"), vec!["z3"]);
+    }
+
+    #[test]
+    fn parse_solver_list_multiple() {
+        assert_eq!(parse_solver_list("z3,cvc5"), vec!["z3", "cvc5"]);
+    }
+
+    #[test]
+    fn parse_solver_list_with_spaces() {
+        assert_eq!(parse_solver_list("z3 , cvc5"), vec!["z3", "cvc5"]);
+    }
+
+    #[test]
+    fn parse_solver_list_empty_entries() {
+        assert_eq!(parse_solver_list("z3,,cvc5,"), vec!["z3", "cvc5"]);
+    }
+
+    #[test]
+    fn parse_solver_list_empty_string() {
+        let result: Vec<String> = parse_solver_list("");
+        assert!(result.is_empty());
+    }
+
+    // -- is_truthy_flag --
+
+    #[test]
+    fn is_truthy_flag_true_values() {
+        for val in &["1", "true", "yes", "on", "TRUE", "Yes", "ON", " true "] {
+            assert!(is_truthy_flag(val), "should be truthy: {val}");
+        }
+    }
+
+    #[test]
+    fn is_truthy_flag_false_values() {
+        for val in &["0", "false", "no", "off", "", "maybe"] {
+            assert!(!is_truthy_flag(val), "should be falsy: {val}");
+        }
+    }
+
+    // -- has_independent_solver --
+
+    #[test]
+    fn has_independent_solver_true() {
+        let solvers = vec!["z3".to_string(), "cvc5".to_string()];
+        assert!(has_independent_solver(&solvers, "z3"));
+    }
+
+    #[test]
+    fn has_independent_solver_false() {
+        let solvers = vec!["z3".to_string()];
+        assert!(!has_independent_solver(&solvers, "z3"));
+    }
+
+    #[test]
+    fn has_independent_solver_empty() {
+        let solvers: Vec<String> = vec![];
+        assert!(!has_independent_solver(&solvers, "z3"));
+    }
+
+    // -- proof_object_looks_nontrivial --
+
+    #[test]
+    fn proof_object_nontrivial_valid() {
+        let proof = "(proof\n  (step1)\n  (step2)\n)";
+        assert!(proof_object_looks_nontrivial(proof));
+    }
+
+    #[test]
+    fn proof_object_trivial_single_line() {
+        assert!(!proof_object_looks_nontrivial("unsat"));
+    }
+
+    #[test]
+    fn proof_object_trivial_empty() {
+        assert!(!proof_object_looks_nontrivial(""));
+    }
+
+    #[test]
+    fn proof_object_error_text() {
+        assert!(!proof_object_looks_nontrivial(
+            "(error\n  unsupported\n)"
+        ));
+    }
+
+    #[test]
+    fn proof_object_unbalanced_parens() {
+        assert!(!proof_object_looks_nontrivial("(\n)\n)"));
+    }
+
+    #[test]
+    fn proof_object_no_parens() {
+        assert!(!proof_object_looks_nontrivial("line1\nline2\nline3"));
+    }
+
+    // -- parse_solver_choice_checked --
+
+    #[test]
+    fn parse_solver_choice_checked_valid() {
+        assert!(parse_solver_choice_checked("z3").is_ok());
+        assert!(parse_solver_choice_checked("cvc5").is_ok());
+    }
+
+    #[test]
+    fn parse_solver_choice_checked_invalid() {
+        assert!(parse_solver_choice_checked("minisat").is_err());
+    }
+
+    // -- parse_soundness_mode_checked --
+
+    #[test]
+    fn parse_soundness_mode_checked_valid() {
+        assert!(parse_soundness_mode_checked("strict").is_ok());
+        assert!(parse_soundness_mode_checked("permissive").is_ok());
+    }
+
+    #[test]
+    fn parse_soundness_mode_checked_invalid() {
+        assert!(parse_soundness_mode_checked("relaxed").is_err());
+    }
+
+    // -- parse_proof_engine_checked --
+
+    #[test]
+    fn parse_proof_engine_checked_valid() {
+        assert!(parse_proof_engine_checked("kinduction").is_ok());
+        assert!(parse_proof_engine_checked("pdr").is_ok());
+    }
+
+    #[test]
+    fn parse_proof_engine_checked_invalid() {
+        assert!(parse_proof_engine_checked("bmc").is_err());
+    }
+
+    // -- parse_fairness_mode_checked --
+
+    #[test]
+    fn parse_fairness_mode_checked_valid() {
+        assert!(parse_fairness_mode_checked("weak").is_ok());
+        assert!(parse_fairness_mode_checked("strong").is_ok());
+    }
+
+    #[test]
+    fn parse_fairness_mode_checked_invalid() {
+        assert!(parse_fairness_mode_checked("fair").is_err());
+    }
+
+    // -- expected_matches --
+
+    #[test]
+    fn expected_matches_exact() {
+        assert!(expected_matches("safe", "safe"));
+    }
+
+    #[test]
+    fn expected_matches_case_insensitive() {
+        assert!(expected_matches("SAFE", "safe"));
+        assert!(expected_matches("Safe", "SAFE"));
+    }
+
+    #[test]
+    fn expected_matches_with_whitespace() {
+        assert!(expected_matches(" safe ", " SAFE "));
+    }
+
+    #[test]
+    fn expected_matches_different() {
+        assert!(!expected_matches("safe", "unsafe"));
+    }
+
+    // -- is_valid_sha256_hex --
+
+    #[test]
+    fn is_valid_sha256_hex_valid() {
+        let hash = "a".repeat(64);
+        assert!(is_valid_sha256_hex(&hash));
+    }
+
+    #[test]
+    fn is_valid_sha256_hex_valid_mixed_case() {
+        let hash = "aAbBcCdDeEfF0123456789".to_string() + &"0".repeat(42);
+        assert!(is_valid_sha256_hex(&hash));
+    }
+
+    #[test]
+    fn is_valid_sha256_hex_too_short() {
+        assert!(!is_valid_sha256_hex("abcd"));
+    }
+
+    #[test]
+    fn is_valid_sha256_hex_too_long() {
+        let hash = "a".repeat(65);
+        assert!(!is_valid_sha256_hex(&hash));
+    }
+
+    #[test]
+    fn is_valid_sha256_hex_invalid_chars() {
+        let hash = "g".repeat(64);
+        assert!(!is_valid_sha256_hex(&hash));
+    }
+
+    // -- validate_foundational_profile_requirements --
+
+    #[test]
+    fn validate_foundational_requires_cvc5() {
+        let solvers = vec!["z3".to_string()];
+        assert!(validate_foundational_profile_requirements(&solvers, false).is_err());
+    }
+
+    #[test]
+    fn validate_foundational_passes_with_cvc5() {
+        let solvers = vec!["cvc5".to_string()];
+        assert!(validate_foundational_profile_requirements(&solvers, false).is_ok());
+    }
+}
