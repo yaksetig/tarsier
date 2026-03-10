@@ -269,3 +269,5 @@ for k in ["Threat Model for Formalization Work","Semantic Model Requirements","T
     assert k in t
 print("kernel_rfc_sections_ok")
 PY`
+`2026-03-10T21:00:07Z | AGENT_1 | KERN-02 | CLAIM | taking task`
+`2026-03-10T21:00:07Z | AGENT_1 | KERN-02 | START | implementation started`
