@@ -73,6 +73,10 @@ python3 scripts/ux_snapshot_regression.py --update
 
 ## Deployment Profiles
 
+Compose deployment template (local + hosted):
+- [`playground/deploy`](deploy/README.md)
+- Detailed guide: [`docs/PLAYGROUND_DEPLOYMENT.md`](../docs/PLAYGROUND_DEPLOYMENT.md)
+
 ### Local mode (default)
 
 No configuration needed. All security middleware is permissive:

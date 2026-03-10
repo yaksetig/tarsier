@@ -161,3 +161,16 @@ Highest-priority dependency edges:
 - Example coverage may already exist for parts of DAG/clock/reconfigure/bounded features; `EXAMPLE-01` should prevent duplicate churn.
 - CI gating tasks (`CI-01`, `CI-02`) must include runtime budget controls to avoid excessive PR cycle times.
 - Keep backward compatibility for existing `.trs` protocols and existing JSON report schemas.
+`2026-03-10T19:34:45Z | AGENT_1 | PLAY-01 | CLAIM | taking task`
+`2026-03-10T19:34:45Z | AGENT_1 | PLAY-01 | START | implementation started`
+`2026-03-10T19:37:26Z | AGENT_1 | PLAY-01 | PR_OPEN | branch=codex/agent1-play-docs-v1 pr=local summary=playground docker-compose template with optional proxy profile`
+`2026-03-10T19:37:26Z | AGENT_1 | PLAY-01 | DONE | commit=ebe5d4b tests=cp playground/deploy/.env.example playground/deploy/.env; docker compose -f playground/deploy/docker-compose.yml config; docker compose -f playground/deploy/docker-compose.yml --profile proxy config`
+`2026-03-10T19:37:26Z | AGENT_1 | PLAY-02 | CLAIM | taking task`
+`2026-03-10T19:37:26Z | AGENT_1 | PLAY-02 | START | implementation started`
+`2026-03-10T19:38:30Z | AGENT_1 | PLAY-02 | PR_OPEN | branch=codex/agent1-play-docs-v1 pr=local summary=local/hosted playground deployment guide with env contract and ops notes`
+`2026-03-10T19:38:30Z | AGENT_1 | PLAY-02 | DONE | commit=217857f tests=python3 - <<'PY'\nfrom pathlib import Path\ntext = Path('docs/PLAYGROUND_DEPLOYMENT.md').read_text(encoding='utf-8')\nassert 'TARSIER_AUTH_TOKEN' in text and 'TARSIER_ALLOWED_ORIGINS' in text\nassert 'docker compose -f playground/deploy/docker-compose.yml up -d --build' in text\nprint('ok')\nPY; rg -n "PLAYGROUND_DEPLOYMENT|playground/deploy" playground/README.md docs/PLAYGROUND_DEPLOYMENT.md`
+`2026-03-10T19:38:30Z | AGENT_1 | DOCS-01 | CLAIM | taking task`
+`2026-03-10T19:38:30Z | AGENT_1 | DOCS-01 | START | implementation started`
+`2026-03-10T19:40:03Z | AGENT_1 | DOCS-01 | PR_OPEN | branch=codex/agent1-play-docs-v1 pr=local summary=multi-solver operations guide for Z3/cvc5/ByMC with setup + troubleshooting`
+`2026-03-10T19:40:03Z | AGENT_1 | DOCS-01 | DONE | commit=706d891 tests=python3 - <<'PY'\nfrom pathlib import Path\ntext = Path('docs/MULTI_SOLVER_OPERATIONS.md').read_text(encoding='utf-8')\nfor key in ['Z3', 'cvc5', 'ByMC', 'install_solvers.sh', 'benchmarks/bymc/run_bymc.sh']:\n    assert key in text\nprint('ok')\nPY; rg -n "MULTI_SOLVER_OPERATIONS" docs/ADVANCED_USAGE.md docs/GETTING_STARTED.md docs/MULTI_SOLVER_OPERATIONS.md`
+`2026-03-10T19:40:53Z | AGENT_1 | DOCS-01 | CHANGE | pr_url=https://github.com/yaksetig/tarsier/pull/new/codex/agent1-play-docs-v1`

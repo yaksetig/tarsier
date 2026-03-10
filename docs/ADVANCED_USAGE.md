@@ -2,6 +2,9 @@
 
 This document covers CI integration, governance pipelines, proof certificates, CEGAR refinement, benchmarks, and other advanced Tarsier features. For getting started, see the [README](../README.md) or [Getting Started guide](GETTING_STARTED.md).
 
+For solver setup and cross-tool parity operations, see
+[`MULTI_SOLVER_OPERATIONS.md`](MULTI_SOLVER_OPERATIONS.md).
+
 ## Analysis Modes
 
 Use `analyze` for deterministic CI/governance pipelines:
