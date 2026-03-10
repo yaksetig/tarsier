@@ -284,6 +284,21 @@ The smoke script verifies:
 - live contract metadata is `tarsier.active.v1`;
 - endpoint receives the exact deterministic `start -> tick/fault* -> stop` sequence.
 
+## CI Integration for Live Adapter Tests (INTEG-05)
+
+Workflow: `.github/workflows/live-adapter-conformance.yml`
+
+- **PR smoke job**:
+  - deterministic harness config checks;
+  - fixture contract checks for CometBFT and etcd-raft;
+  - adapter schedule generation smoke (`conformance-active`) for both adapters;
+  - uploads smoke artifacts for debugging.
+
+- **Nightly full job** (and manual `workflow_dispatch`):
+  - runs full `smoke` for CometBFT and etcd-raft active conformance scripts;
+  - on failure captures triage artifacts (`docker ps`, compose `ps/logs`, reports, event logs);
+  - uploads triage bundle as workflow artifact.
+
 ## Triage Playbook
 
 Conformance mismatches/errors are classified as:

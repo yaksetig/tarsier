@@ -1,0 +1,140 @@
+name: live-adapter-conformance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/live-adapter-conformance.yml"
+      - "scripts/cometbft-live-harness.sh"
+      - "scripts/etcd-raft-live-harness.sh"
+      - "scripts/cometbft-conformance-active-smoke.sh"
+      - "scripts/etcd-raft-conformance-active-smoke.sh"
+      - "scripts/check-cometbft-live-config.py"
+      - "scripts/check-etcd-raft-live-config.py"
+      - "integration/cometbft-live/**"
+      - "integration/etcd-raft-live/**"
+      - "examples/conformance/active/**"
+      - "crates/tarsier-cli/src/commands/conformance.rs"
+      - "crates/tarsier-conformance/src/adapters.rs"
+      - "docs/CONFORMANCE.md"
+  workflow_dispatch:
+  schedule:
+    # Nightly full live-adapter conformance run (UTC)
+    - cron: "20 5 * * *"
+
+jobs:
+  pr-smoke:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Deterministic Harness Config Checks
+        run: |
+          python3 scripts/check-cometbft-live-config.py
+          python3 scripts/check-etcd-raft-live-config.py
+
+      - name: Fixture Contracts
+        run: |
+          ./scripts/cometbft-conformance-active-smoke.sh assert-fixture
+          ./scripts/etcd-raft-conformance-active-smoke.sh assert-fixture
+
+      - name: Adapter Schedule Generation Smoke
+        run: |
+          mkdir -p artifacts/live-adapter
+          cargo run -q -p tarsier-cli -- conformance-active \
+            --trace examples/conformance/active/cometbft_faults_basic.json \
+            --adapter cometbft \
+            --seed 7 \
+            --format json \
+            --out artifacts/live-adapter/pr-cometbft-schedule.json >/dev/null
+          cargo run -q -p tarsier-cli -- conformance-active \
+            --trace examples/conformance/active/etcd_raft_faults_basic.json \
+            --adapter etcd-raft \
+            --seed 11 \
+            --format json \
+            --out artifacts/live-adapter/pr-etcd-raft-schedule.json >/dev/null
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for path, adapter in [
+              ("artifacts/live-adapter/pr-cometbft-schedule.json", "cometbft"),
+              ("artifacts/live-adapter/pr-etcd-raft-schedule.json", "etcd-raft"),
+          ]:
+              doc = json.loads(Path(path).read_text(encoding="utf-8"))
+              assert doc["schema_version"] == 1
+              assert doc["adapter"] == adapter
+              assert isinstance(doc["faults"], list) and doc["faults"]
+          print("schedule smoke ok")
+          PY
+
+      - name: Upload PR smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-adapter-pr-smoke-${{ github.run_id }}
+          path: artifacts/live-adapter
+          if-no-files-found: warn
+          retention-days: 7
+
+  nightly-full:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run full live-adapter smoke (CometBFT + etcd-raft)
+        run: |
+          mkdir -p artifacts/live-adapter
+          REPORT_FILE=artifacts/live-adapter/cometbft-live-report.json \
+          EVENTS_FILE=artifacts/live-adapter/cometbft-live-events.jsonl \
+          SERVER_LOG=artifacts/live-adapter/cometbft-live-server.log \
+          ./scripts/cometbft-conformance-active-smoke.sh smoke
+
+          REPORT_FILE=artifacts/live-adapter/etcd-raft-live-report.json \
+          EVENTS_FILE=artifacts/live-adapter/etcd-raft-live-events.jsonl \
+          SERVER_LOG=artifacts/live-adapter/etcd-raft-live-server.log \
+          ./scripts/etcd-raft-conformance-active-smoke.sh smoke
+
+      - name: Capture triage details on failure
+        if: failure()
+        run: |
+          mkdir -p artifacts/live-adapter
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > artifacts/live-adapter/failure-timestamp.txt || true
+          git rev-parse HEAD > artifacts/live-adapter/commit.txt || true
+          docker ps -a > artifacts/live-adapter/docker-ps.txt || true
+          docker compose -f integration/cometbft-live/docker-compose.yml ps > artifacts/live-adapter/cometbft-compose-ps.txt || true
+          docker compose -f integration/cometbft-live/docker-compose.yml logs --no-color > artifacts/live-adapter/cometbft-compose-logs.txt || true
+          docker compose -f integration/etcd-raft-live/docker-compose.yml ps > artifacts/live-adapter/etcd-compose-ps.txt || true
+          docker compose -f integration/etcd-raft-live/docker-compose.yml logs --no-color > artifacts/live-adapter/etcd-compose-logs.txt || true
+
+      - name: Upload nightly artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-adapter-nightly-${{ github.run_id }}
+          path: artifacts/live-adapter
+          if-no-files-found: warn
+          retention-days: 14
