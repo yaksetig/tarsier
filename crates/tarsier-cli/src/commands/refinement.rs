@@ -10,6 +10,8 @@ use tarsier_dsl::parser::parse;
 use tarsier_ir::lowering::lower;
 use tarsier_ir::product::build_product;
 use tarsier_ir::refinement::{RefinementMapping, RefinementRelation};
+use tarsier_smt::backends::z3_backend::Z3Solver;
+use tarsier_smt::refinement_encoder::{run_refinement_solver, SimulationCheckResult};
 
 /// Run the refinement-check command.
 pub(crate) fn run_refinement_check(
@@ -22,8 +24,8 @@ pub(crate) fn run_refinement_check(
     let concrete_src = std::fs::read_to_string(concrete_path)
         .map_err(|e| miette::miette!("read concrete: {e}"))?;
     let filename = concrete_path.display().to_string();
-    let concrete_ast = parse(&concrete_src, &filename)
-        .map_err(|e| miette::miette!("parse concrete: {e}"))?;
+    let concrete_ast =
+        parse(&concrete_src, &filename).map_err(|e| miette::miette!("parse concrete: {e}"))?;
 
     // 2. Determine abstract protocol path.
     let abstract_path = if let Some(p) = abstract_path_override {
@@ -41,14 +43,12 @@ pub(crate) fn run_refinement_check(
     let abstract_src = std::fs::read_to_string(&abstract_path)
         .map_err(|e| miette::miette!("read abstract: {e}"))?;
     let abs_filename = abstract_path.display().to_string();
-    let abstract_ast = parse(&abstract_src, &abs_filename)
-        .map_err(|e| miette::miette!("parse abstract: {e}"))?;
+    let abstract_ast =
+        parse(&abstract_src, &abs_filename).map_err(|e| miette::miette!("parse abstract: {e}"))?;
 
     // 4. Lower both to IR.
-    let concrete_ta =
-        lower(&concrete_ast).map_err(|e| miette::miette!("lower concrete: {e}"))?;
-    let abstract_ta =
-        lower(&abstract_ast).map_err(|e| miette::miette!("lower abstract: {e}"))?;
+    let concrete_ta = lower(&concrete_ast).map_err(|e| miette::miette!("lower concrete: {e}"))?;
+    let abstract_ta = lower(&abstract_ast).map_err(|e| miette::miette!("lower abstract: {e}"))?;
 
     // 5. Build refinement mapping (name-based auto-mapping).
     let mapping = build_auto_mapping(
@@ -62,27 +62,57 @@ pub(crate) fn run_refinement_check(
     let product =
         build_product(&concrete_ta, &abstract_ta, &relation).map_err(|e| miette::miette!("{e}"))?;
 
-    // 7. Report.
+    // 7. Run solver.
+    let mut solver = Z3Solver::with_timeout_secs(60);
+    let result = run_refinement_solver(&mut solver, &product, depth)
+        .map_err(|e| miette::miette!("solver error: {e}"))?;
+
+    // 8. Report.
+    let (result_str, violation_step, violation_detail) = match &result {
+        SimulationCheckResult::SimulationHolds { .. } => {
+            if product.mismatch_locations.is_empty() {
+                ("trivially_holds".to_string(), None, None)
+            } else {
+                ("simulation_holds".to_string(), None, None)
+            }
+        }
+        SimulationCheckResult::SimulationViolated {
+            violation_step,
+            mismatch_location,
+            ..
+        } => (
+            "simulation_violated".to_string(),
+            Some(*violation_step),
+            Some(format!(
+                "concrete={}, abstract={}",
+                mismatch_location.concrete.as_usize(),
+                mismatch_location.abstract_loc.as_usize()
+            )),
+        ),
+        SimulationCheckResult::Unknown { reason, .. } => {
+            (format!("unknown: {reason}"), None, None)
+        }
+    };
+
     match format {
         "json" => {
-            let result_str = if product.mismatch_locations.is_empty() {
-                "trivially_holds"
-            } else {
-                "encoding_ready"
-            };
-            println!(
-                "{}",
-                json!({
-                    "schema_version": 1,
-                    "concrete": concrete_path.display().to_string(),
-                    "abstract": abstract_path.display().to_string(),
-                    "depth": depth,
-                    "product_locations": product.num_locations(),
-                    "product_rules": product.num_rules(),
-                    "mismatch_locations": product.mismatch_locations.len(),
-                    "result": result_str,
-                })
-            );
+            let mut report = json!({
+                "schema_version": 1,
+                "concrete": concrete_path.display().to_string(),
+                "abstract": abstract_path.display().to_string(),
+                "depth": depth,
+                "product_locations": product.num_locations(),
+                "product_rules": product.num_rules(),
+                "mismatch_locations": product.mismatch_locations.len(),
+                "result": result_str,
+            });
+            if let Some(step) = violation_step {
+                report["violation_step"] = json!(step);
+            }
+            if let Some(detail) = &violation_detail {
+                report["violation_detail"] = json!(detail);
+            }
+            println!("{}", report);
         }
         _ => {
             println!("Refinement Check Report");
@@ -96,15 +126,30 @@ pub(crate) fn run_refinement_check(
             println!("  Rules:      {}", product.num_rules());
             println!("  Mismatches: {}", product.mismatch_locations.len());
             println!();
-            if product.mismatch_locations.is_empty() {
-                println!("Result: SIMULATION TRIVIALLY HOLDS (no mismatch locations)");
-            } else {
-                println!(
-                    "Result: ENCODING READY ({} mismatch locations, depth {})",
-                    product.mismatch_locations.len(),
-                    depth
-                );
-                println!("  (Full solver integration pending engine wiring)");
+            match &result {
+                SimulationCheckResult::SimulationHolds { .. } => {
+                    if product.mismatch_locations.is_empty() {
+                        println!("Result: SIMULATION TRIVIALLY HOLDS (no mismatch locations)");
+                    } else {
+                        println!("Result: SIMULATION HOLDS (no mismatch reachable within depth {depth})");
+                    }
+                }
+                SimulationCheckResult::SimulationViolated {
+                    violation_step,
+                    mismatch_location,
+                    ..
+                } => {
+                    println!("Result: SIMULATION VIOLATED");
+                    println!("  Violation at step {violation_step}");
+                    println!(
+                        "  Mismatch location: concrete={}, abstract={}",
+                        mismatch_location.concrete.as_usize(),
+                        mismatch_location.abstract_loc.as_usize()
+                    );
+                }
+                SimulationCheckResult::Unknown { reason, .. } => {
+                    println!("Result: UNKNOWN ({reason})");
+                }
             }
         }
     }

@@ -11,6 +11,9 @@ use tarsier_ir::threshold_automaton::{
     CmpOp, GuardAtom, LinearCombination, SharedVarId, UpdateKind,
 };
 
+use tracing::info;
+
+use crate::solver::{SatResult, SmtSolver};
 use crate::sorts::SmtSort;
 use crate::terms::SmtTerm;
 
@@ -67,10 +70,7 @@ fn prod_delta(step: usize, r: usize) -> String {
 /// Returns a `RefinementEncoding` that is SAT iff a mismatch state in the
 /// product automaton is reachable within `depth` steps, meaning the
 /// simulation relation is violated.
-pub fn encode_refinement_check(
-    product: &ProductAutomaton,
-    depth: usize,
-) -> RefinementEncoding {
+pub fn encode_refinement_check(product: &ProductAutomaton, depth: usize) -> RefinementEncoding {
     let mut enc = RefinementEncoding::new();
 
     // --- 1. Declare parameters ---
@@ -146,11 +146,7 @@ fn encode_initial_state(enc: &mut RefinementEncoding, product: &ProductAutomaton
 }
 
 /// Encode a single step transition from step `k` to step `k+1`.
-fn encode_step_transition(
-    enc: &mut RefinementEncoding,
-    product: &ProductAutomaton,
-    k: usize,
-) {
+fn encode_step_transition(enc: &mut RefinementEncoding, product: &ProductAutomaton, k: usize) {
     let k_next = k + 1;
 
     // Declare counters at step k+1.
@@ -316,11 +312,7 @@ fn encode_step_transition(
 }
 
 /// Encode mismatch reachability: at some step, a mismatch location has processes.
-fn encode_mismatch_target(
-    enc: &mut RefinementEncoding,
-    product: &ProductAutomaton,
-    depth: usize,
-) {
+fn encode_mismatch_target(enc: &mut RefinementEncoding, product: &ProductAutomaton, depth: usize) {
     if product.mismatch_locations.is_empty() {
         // No mismatches possible — simulation trivially holds.
         // Assert false to make the formula UNSAT.
@@ -372,10 +364,7 @@ fn encode_guard_atom(
                 CmpOp::Gt => SmtTerm::Gt(Box::new(lhs), Box::new(rhs)),
                 CmpOp::Lt => SmtTerm::Lt(Box::new(lhs), Box::new(rhs)),
                 CmpOp::Eq => SmtTerm::Eq(Box::new(lhs), Box::new(rhs)),
-                CmpOp::Ne => SmtTerm::Not(Box::new(SmtTerm::Eq(
-                    Box::new(lhs),
-                    Box::new(rhs),
-                ))),
+                CmpOp::Ne => SmtTerm::Not(Box::new(SmtTerm::Eq(Box::new(lhs), Box::new(rhs)))),
             }
         }
     }
@@ -425,6 +414,109 @@ pub enum SimulationCheckResult {
         /// The mismatch product location that was reached.
         mismatch_location: ProductLocationId,
     },
+    /// Solver returned unknown (e.g., timeout).
+    Unknown { depth: usize, reason: String },
+}
+
+/// Run the refinement simulation check against an SMT solver.
+///
+/// Encodes the product automaton at the given `depth`, feeds the encoding to
+/// the solver, and interprets the result:
+/// - **UNSAT** → simulation holds up to `depth`
+/// - **SAT** → simulation violated; extracts violation step and mismatch location
+/// - **Unknown** → solver could not decide (e.g., timeout)
+pub fn run_refinement_solver<S: SmtSolver>(
+    solver: &mut S,
+    product: &ProductAutomaton,
+    depth: usize,
+) -> Result<SimulationCheckResult, S::Error> {
+    // Trivial case: no mismatches → simulation holds without calling solver.
+    if product.mismatch_locations.is_empty() {
+        return Ok(SimulationCheckResult::SimulationHolds { depth });
+    }
+
+    info!(depth, mismatches = product.mismatch_locations.len(), "refinement: encoding product");
+
+    let encoding = encode_refinement_check(product, depth);
+
+    solver.reset()?;
+
+    // Declare all variables.
+    for (name, sort) in &encoding.declarations {
+        solver.declare_var(name, sort)?;
+    }
+
+    // Assert all constraints.
+    for assertion in &encoding.assertions {
+        solver.assert(assertion)?;
+    }
+
+    // Build variable list for model extraction.
+    let var_refs: Vec<(&str, &SmtSort)> = encoding
+        .declarations
+        .iter()
+        .map(|(n, s)| (n.as_str(), s))
+        .collect();
+
+    let (result, model) = solver.check_sat_with_model(&var_refs)?;
+
+    match result {
+        SatResult::Sat => {
+            info!(depth, "refinement: VIOLATED - mismatch reachable");
+            // Extract which step and which mismatch location was reached.
+            let (violation_step, mismatch_loc) = extract_violation(product, depth, &model);
+            Ok(SimulationCheckResult::SimulationViolated {
+                depth,
+                violation_step,
+                mismatch_location: mismatch_loc,
+            })
+        }
+        SatResult::Unsat => {
+            info!(depth, "refinement: HOLDS up to depth");
+            Ok(SimulationCheckResult::SimulationHolds { depth })
+        }
+        SatResult::Unknown(reason) => {
+            info!(depth, %reason, "refinement: solver returned unknown");
+            Ok(SimulationCheckResult::Unknown { depth, reason })
+        }
+    }
+}
+
+/// Extract the violation step and mismatch location from a SAT model.
+fn extract_violation(
+    product: &ProductAutomaton,
+    depth: usize,
+    model: &Option<crate::solver::Model>,
+) -> (usize, ProductLocationId) {
+    let default_mismatch = product
+        .mismatch_locations
+        .first()
+        .cloned()
+        .unwrap_or(ProductLocationId {
+            concrete: tarsier_ir::threshold_automaton::LocationId::from(0),
+            abstract_loc: tarsier_ir::threshold_automaton::LocationId::from(0),
+        });
+
+    let Some(model) = model else {
+        return (0, default_mismatch);
+    };
+
+    // Find the earliest step where a mismatch location counter > 0.
+    for step in 0..=depth {
+        for mismatch in &product.mismatch_locations {
+            if let Some(idx) = product.location_idx(mismatch) {
+                let var_name = prod_kappa(step, idx);
+                if let Some(val) = model.get_int(&var_name) {
+                    if val > 0 {
+                        return (step, mismatch.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: SAT but couldn't identify exact step (shouldn't happen).
+    (0, default_mismatch)
 }
 
 #[cfg(test)]
@@ -585,10 +677,7 @@ mod tests {
     #[test]
     fn simulation_check_result_variants() {
         let holds = SimulationCheckResult::SimulationHolds { depth: 5 };
-        assert_eq!(
-            holds,
-            SimulationCheckResult::SimulationHolds { depth: 5 }
-        );
+        assert_eq!(holds, SimulationCheckResult::SimulationHolds { depth: 5 });
 
         let violated = SimulationCheckResult::SimulationViolated {
             depth: 3,
