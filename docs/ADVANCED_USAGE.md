@@ -48,6 +48,9 @@ Use these when you need targeted diagnostics beyond the default `analyze` flow:
 | `tarsier equivalence-check a.trs --other b.trs --depth 12` | Bidirectional bounded equivalence diagnostics |
 | `tarsier conformance-replay <file> --check verify --export-trace replay.json` | Concretize/replay traces for conformance workflows |
 
+For stalled unbounded proofs, see the invariant troubleshooting playbook:
+[`docs/INVARIANT_INFERENCE_DEBUGGING.md`](INVARIANT_INFERENCE_DEBUGGING.md).
+
 ### Scale Guardrails by Mode
 
 - **quick**: `--depth 4..8`, `--timeout 60..120`. Keep faithful fallback at `identity` or `classic` with budgets near `--fallback-max-locations 6000 --fallback-max-shared-vars 30000 --fallback-max-message-counters 20000`.
