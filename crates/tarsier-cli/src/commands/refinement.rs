@@ -68,49 +68,47 @@ pub(crate) fn run_refinement_check(
         .map_err(|e| miette::miette!("solver error: {e}"))?;
 
     // 8. Report.
-    let (result_str, violation_step, violation_detail) = match &result {
-        SimulationCheckResult::SimulationHolds { .. } => {
-            if product.mismatch_locations.is_empty() {
-                ("trivially_holds".to_string(), None, None)
-            } else {
-                ("simulation_holds".to_string(), None, None)
-            }
-        }
-        SimulationCheckResult::SimulationViolated {
-            violation_step,
-            mismatch_location,
-            ..
-        } => (
-            "simulation_violated".to_string(),
-            Some(*violation_step),
-            Some(format!(
-                "concrete={}, abstract={}",
-                mismatch_location.concrete.as_usize(),
-                mismatch_location.abstract_loc.as_usize()
-            )),
-        ),
-        SimulationCheckResult::Unknown { reason, .. } => {
-            (format!("unknown: {reason}"), None, None)
-        }
-    };
+    let base_report = json!({
+        "schema_version": 2,
+        "concrete": concrete_path.display().to_string(),
+        "abstract": abstract_path.display().to_string(),
+        "depth": depth,
+        "product_locations": product.num_locations(),
+        "product_rules": product.num_rules(),
+        "mismatch_locations": product.mismatch_locations.len(),
+    });
 
     match format {
         "json" => {
-            let mut report = json!({
-                "schema_version": 1,
-                "concrete": concrete_path.display().to_string(),
-                "abstract": abstract_path.display().to_string(),
-                "depth": depth,
-                "product_locations": product.num_locations(),
-                "product_rules": product.num_rules(),
-                "mismatch_locations": product.mismatch_locations.len(),
-                "result": result_str,
-            });
-            if let Some(step) = violation_step {
-                report["violation_step"] = json!(step);
-            }
-            if let Some(detail) = &violation_detail {
-                report["violation_detail"] = json!(detail);
+            let mut report = base_report;
+            match &result {
+                SimulationCheckResult::SimulationHolds { .. } => {
+                    report["result"] = json!(if product.mismatch_locations.is_empty() {
+                        "trivially_holds"
+                    } else {
+                        "simulation_holds"
+                    });
+                }
+                SimulationCheckResult::SimulationViolated {
+                    violation_step,
+                    mismatch_location,
+                    witness,
+                    ..
+                } => {
+                    report["result"] = json!("simulation_violated");
+                    report["violation_step"] = json!(violation_step);
+                    report["violation_detail"] = json!(format!(
+                        "concrete={}, abstract={}",
+                        mismatch_location.concrete.as_usize(),
+                        mismatch_location.abstract_loc.as_usize()
+                    ));
+                    if let Some(w) = witness {
+                        report["witness"] = witness_to_json(w, &product);
+                    }
+                }
+                SimulationCheckResult::Unknown { reason, .. } => {
+                    report["result"] = json!(format!("unknown: {reason}"));
+                }
             }
             println!("{}", report);
         }
@@ -137,6 +135,7 @@ pub(crate) fn run_refinement_check(
                 SimulationCheckResult::SimulationViolated {
                     violation_step,
                     mismatch_location,
+                    witness,
                     ..
                 } => {
                     println!("Result: SIMULATION VIOLATED");
@@ -146,6 +145,10 @@ pub(crate) fn run_refinement_check(
                         mismatch_location.concrete.as_usize(),
                         mismatch_location.abstract_loc.as_usize()
                     );
+                    if let Some(w) = witness {
+                        println!();
+                        print_witness_text(w, &product);
+                    }
                 }
                 SimulationCheckResult::Unknown { reason, .. } => {
                     println!("Result: UNKNOWN ({reason})");
@@ -155,6 +158,147 @@ pub(crate) fn run_refinement_check(
     }
 
     Ok(())
+}
+
+/// Convert a witness to JSON for structured output.
+fn witness_to_json(
+    witness: &tarsier_smt::refinement_encoder::RefinementWitness,
+    product: &tarsier_ir::product::ProductAutomaton,
+) -> serde_json::Value {
+    let params: Vec<serde_json::Value> = witness
+        .parameter_values
+        .iter()
+        .map(|(idx, val)| {
+            let name = product
+                .parameters
+                .get(*idx)
+                .map(|p| p.name.as_str())
+                .unwrap_or("?");
+            json!({"index": idx, "name": name, "value": val})
+        })
+        .collect();
+
+    let steps: Vec<serde_json::Value> = witness
+        .trace
+        .iter()
+        .map(|step| {
+            let locs: Vec<serde_json::Value> = step
+                .location_counters
+                .iter()
+                .map(|(loc, count)| {
+                    json!({
+                        "concrete": loc.concrete.as_usize(),
+                        "abstract": loc.abstract_loc.as_usize(),
+                        "count": count,
+                    })
+                })
+                .collect();
+
+            let vars: Vec<serde_json::Value> = step
+                .shared_var_values
+                .iter()
+                .map(|(idx, val)| {
+                    let name = product
+                        .shared_vars
+                        .get(*idx)
+                        .map(|v| v.name.as_str())
+                        .unwrap_or("?");
+                    json!({"index": idx, "name": name, "value": val})
+                })
+                .collect();
+
+            let firings: Vec<serde_json::Value> = step
+                .rule_firings
+                .iter()
+                .map(|(idx, count)| json!({"rule": idx, "count": count}))
+                .collect();
+
+            json!({
+                "step": step.step,
+                "occupied_locations": locs,
+                "shared_vars": vars,
+                "rule_firings": firings,
+            })
+        })
+        .collect();
+
+    json!({
+        "parameters": params,
+        "trace": steps,
+    })
+}
+
+/// Print a witness trace in human-readable text format.
+fn print_witness_text(
+    witness: &tarsier_smt::refinement_encoder::RefinementWitness,
+    product: &tarsier_ir::product::ProductAutomaton,
+) {
+    println!("Witness Trace");
+    println!("-------------");
+
+    if !witness.parameter_values.is_empty() {
+        print!("  Parameters: ");
+        for (i, (idx, val)) in witness.parameter_values.iter().enumerate() {
+            let name = product
+                .parameters
+                .get(*idx)
+                .map(|p| p.name.as_str())
+                .unwrap_or("?");
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{name}={val}");
+        }
+        println!();
+    }
+
+    for step in &witness.trace {
+        println!();
+        println!("  Step {}:", step.step);
+
+        if !step.location_counters.is_empty() {
+            print!("    Occupied: ");
+            for (i, (loc, count)) in step.location_counters.iter().enumerate() {
+                if i > 0 {
+                    print!(", ");
+                }
+                print!(
+                    "(c={}, a={})×{}",
+                    loc.concrete.as_usize(),
+                    loc.abstract_loc.as_usize(),
+                    count
+                );
+            }
+            println!();
+        }
+
+        if !step.shared_var_values.is_empty() {
+            print!("    Vars: ");
+            for (i, (idx, val)) in step.shared_var_values.iter().enumerate() {
+                let name = product
+                    .shared_vars
+                    .get(*idx)
+                    .map(|v| v.name.as_str())
+                    .unwrap_or("?");
+                if i > 0 {
+                    print!(", ");
+                }
+                print!("{name}={val}");
+            }
+            println!();
+        }
+
+        if !step.rule_firings.is_empty() {
+            print!("    Rules fired: ");
+            for (i, (idx, count)) in step.rule_firings.iter().enumerate() {
+                if i > 0 {
+                    print!(", ");
+                }
+                print!("r{idx}×{count}");
+            }
+            println!();
+        }
+    }
 }
 
 /// Auto-map concrete locations/variables to abstract by name matching.

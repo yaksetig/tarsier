@@ -401,6 +401,37 @@ fn sum_of_vars(names: impl Iterator<Item = String>) -> SmtTerm {
     acc
 }
 
+/// A snapshot of the product automaton state at a single step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WitnessStep {
+    /// Step index (0 = initial state).
+    pub step: usize,
+    /// Counter value for each product location at this step.
+    /// Index corresponds to the product's location list.
+    pub location_counters: Vec<(ProductLocationId, i64)>,
+    /// Shared variable values at this step.
+    /// Entries are `(var_index, value)`.
+    pub shared_var_values: Vec<(usize, i64)>,
+    /// Rule firing counts from this step to the next (empty for the last step).
+    /// Entries are `(rule_index, firing_count)`.
+    pub rule_firings: Vec<(usize, i64)>,
+}
+
+/// A full counterexample/witness trace for a violated simulation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefinementWitness {
+    /// The depth at which the violation was found.
+    pub depth: usize,
+    /// The step at which the mismatch was first reached.
+    pub violation_step: usize,
+    /// The mismatch product location that was reached.
+    pub mismatch_location: ProductLocationId,
+    /// Parameter values in the witness.
+    pub parameter_values: Vec<(usize, i64)>,
+    /// Step-by-step trace from initial state to the violation.
+    pub trace: Vec<WitnessStep>,
+}
+
 /// Result of a refinement simulation check.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SimulationCheckResult {
@@ -413,6 +444,8 @@ pub enum SimulationCheckResult {
         violation_step: usize,
         /// The mismatch product location that was reached.
         mismatch_location: ProductLocationId,
+        /// Full witness trace (if model extraction succeeded).
+        witness: Option<RefinementWitness>,
     },
     /// Solver returned unknown (e.g., timeout).
     Unknown { depth: usize, reason: String },
@@ -463,12 +496,15 @@ pub fn run_refinement_solver<S: SmtSolver>(
     match result {
         SatResult::Sat => {
             info!(depth, "refinement: VIOLATED - mismatch reachable");
-            // Extract which step and which mismatch location was reached.
             let (violation_step, mismatch_loc) = extract_violation(product, depth, &model);
+            let witness = model
+                .as_ref()
+                .map(|m| extract_witness(product, depth, violation_step, &mismatch_loc, m));
             Ok(SimulationCheckResult::SimulationViolated {
                 depth,
                 violation_step,
                 mismatch_location: mismatch_loc,
+                witness,
             })
         }
         SatResult::Unsat => {
@@ -517,6 +553,83 @@ fn extract_violation(
 
     // Fallback: SAT but couldn't identify exact step (shouldn't happen).
     (0, default_mismatch)
+}
+
+/// Extract a full witness trace from a SAT model.
+fn extract_witness(
+    product: &ProductAutomaton,
+    depth: usize,
+    violation_step: usize,
+    mismatch_location: &ProductLocationId,
+    model: &crate::solver::Model,
+) -> RefinementWitness {
+    // Extract parameter values.
+    let parameter_values: Vec<(usize, i64)> = (0..product.parameters.len())
+        .filter_map(|p| {
+            let val = model.get_int(&prod_param(p))?;
+            Some((p, val))
+        })
+        .collect();
+
+    // Extract step-by-step trace up to and including the violation step.
+    let trace_depth = violation_step.min(depth);
+    let mut trace = Vec::with_capacity(trace_depth + 1);
+
+    for step in 0..=trace_depth {
+        // Location counters at this step.
+        let location_counters: Vec<(ProductLocationId, i64)> = product
+            .locations
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, loc)| {
+                let val = model.get_int(&prod_kappa(step, idx)).unwrap_or(0);
+                if val != 0 {
+                    Some((*loc, val))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Shared variable values at this step.
+        let shared_var_values: Vec<(usize, i64)> = (0..product.shared_vars.len())
+            .filter_map(|v| {
+                let val = model.get_int(&prod_gamma(step, v))?;
+                Some((v, val))
+            })
+            .collect();
+
+        // Rule firings from this step (not applicable for the last step).
+        let rule_firings: Vec<(usize, i64)> = if step < trace_depth {
+            (0..product.rules.len())
+                .filter_map(|r| {
+                    let val = model.get_int(&prod_delta(step, r)).unwrap_or(0);
+                    if val > 0 {
+                        Some((r, val))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        trace.push(WitnessStep {
+            step,
+            location_counters,
+            shared_var_values,
+            rule_firings,
+        });
+    }
+
+    RefinementWitness {
+        depth,
+        violation_step,
+        mismatch_location: mismatch_location.clone(),
+        parameter_values,
+        trace,
+    }
 }
 
 #[cfg(test)]
@@ -686,10 +799,102 @@ mod tests {
                 concrete: LocationId::from(1),
                 abstract_loc: LocationId::from(0),
             },
+            witness: None,
         };
         assert!(matches!(
             violated,
             SimulationCheckResult::SimulationViolated { .. }
         ));
+    }
+
+    #[test]
+    fn witness_step_construction() {
+        let step = WitnessStep {
+            step: 0,
+            location_counters: vec![(
+                ProductLocationId {
+                    concrete: LocationId::from(0),
+                    abstract_loc: LocationId::from(0),
+                },
+                3,
+            )],
+            shared_var_values: vec![(0, 5)],
+            rule_firings: vec![(1, 2)],
+        };
+        assert_eq!(step.step, 0);
+        assert_eq!(step.location_counters.len(), 1);
+        assert_eq!(step.shared_var_values[0], (0, 5));
+        assert_eq!(step.rule_firings[0], (1, 2));
+    }
+
+    #[test]
+    fn refinement_witness_construction() {
+        let witness = RefinementWitness {
+            depth: 3,
+            violation_step: 2,
+            mismatch_location: ProductLocationId {
+                concrete: LocationId::from(1),
+                abstract_loc: LocationId::from(0),
+            },
+            parameter_values: vec![(0, 4)],
+            trace: vec![
+                WitnessStep {
+                    step: 0,
+                    location_counters: vec![(
+                        ProductLocationId {
+                            concrete: LocationId::from(0),
+                            abstract_loc: LocationId::from(0),
+                        },
+                        4,
+                    )],
+                    shared_var_values: vec![],
+                    rule_firings: vec![(0, 2)],
+                },
+                WitnessStep {
+                    step: 1,
+                    location_counters: vec![(
+                        ProductLocationId {
+                            concrete: LocationId::from(1),
+                            abstract_loc: LocationId::from(0),
+                        },
+                        2,
+                    )],
+                    shared_var_values: vec![],
+                    rule_firings: vec![],
+                },
+            ],
+        };
+        assert_eq!(witness.depth, 3);
+        assert_eq!(witness.violation_step, 2);
+        assert_eq!(witness.trace.len(), 2);
+        assert_eq!(witness.parameter_values[0], (0, 4));
+    }
+
+    #[test]
+    fn violated_result_includes_witness() {
+        let result = SimulationCheckResult::SimulationViolated {
+            depth: 1,
+            violation_step: 1,
+            mismatch_location: ProductLocationId {
+                concrete: LocationId::from(0),
+                abstract_loc: LocationId::from(1),
+            },
+            witness: Some(RefinementWitness {
+                depth: 1,
+                violation_step: 1,
+                mismatch_location: ProductLocationId {
+                    concrete: LocationId::from(0),
+                    abstract_loc: LocationId::from(1),
+                },
+                parameter_values: vec![],
+                trace: vec![],
+            }),
+        };
+        match result {
+            SimulationCheckResult::SimulationViolated { witness, .. } => {
+                assert!(witness.is_some());
+            }
+            _ => panic!("expected SimulationViolated"),
+        }
     }
 }
