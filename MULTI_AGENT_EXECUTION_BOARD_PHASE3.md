@@ -207,3 +207,4 @@ Highest-priority dependency edges:
 `2026-03-10T20:11:01Z | AGENT_1 | INTEG-04 | START | implementation started`
 `2026-03-10T20:12:36Z | AGENT_1 | INTEG-04 | PR_OPEN | branch=codex/agent1-integ-04-v1 pr=local summary=add etcd-raft active conformance e2e smoke script with deterministic trace assertions and docs`
 `2026-03-10T20:12:36Z | AGENT_1 | INTEG-04 | DONE | commit=pending tests=bash -n scripts/etcd-raft-conformance-active-smoke.sh; ./scripts/etcd-raft-conformance-active-smoke.sh assert-fixture; python3 scripts/check-etcd-raft-live-config.py; rg -n "INTEG-04|etcd-raft-conformance-active-smoke" docs/CONFORMANCE.md integration/etcd-raft-live/README.md`
+`2026-03-10T20:12:45Z | AGENT_1 | INTEG-04 | CHANGE | done_commit=14f33c8`
