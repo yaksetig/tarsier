@@ -209,3 +209,19 @@ Contract checks:
   validates required tools are present and real ByMC execution occurred.
 - `.github/scripts/check_cross_tool_verdict_parity.py`
   fails on verdict mismatch across tools.
+
+## 12) Branch Protection Required Checks (main)
+
+Purpose:
+- Keep CI enforcement aligned with branch-protection settings for merges into `main`.
+- Ensure new PR enforcement workflows remain non-optional.
+
+Recommended required checks for `main` branch protection:
+- `CI / build-test`
+- `Mutation Testing (PR Targeted) / mutation-test-pr`
+- `ByMC Parity (PR Targeted) / bymc-parity-pr`
+
+Configuration guidance:
+- Require all listed checks to pass before merge.
+- Require branch up-to-date before merge (so latest required checks rerun on head SHA).
+- Do not mark nightly workflows as required checks (nightly jobs are drift detection, not merge gating).
