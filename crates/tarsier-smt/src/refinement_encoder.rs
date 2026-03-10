@@ -432,6 +432,43 @@ pub struct RefinementWitness {
     pub trace: Vec<WitnessStep>,
 }
 
+impl RefinementWitness {
+    /// Return a minimized copy: trim trace to violation step + 1 and remove
+    /// zero-valued entries for compactness.
+    pub fn minimized(&self) -> RefinementWitness {
+        let cutoff = self.violation_step + 1;
+        let trace = self
+            .trace
+            .iter()
+            .filter(|s| s.step <= cutoff)
+            .map(|s| WitnessStep {
+                step: s.step,
+                location_counters: s
+                    .location_counters
+                    .iter()
+                    .filter(|(_, c)| *c != 0)
+                    .cloned()
+                    .collect(),
+                shared_var_values: s.shared_var_values.clone(),
+                rule_firings: s
+                    .rule_firings
+                    .iter()
+                    .filter(|(_, c)| *c != 0)
+                    .cloned()
+                    .collect(),
+            })
+            .collect();
+
+        RefinementWitness {
+            depth: self.depth,
+            violation_step: self.violation_step,
+            mismatch_location: self.mismatch_location,
+            parameter_values: self.parameter_values.clone(),
+            trace,
+        }
+    }
+}
+
 /// Result of a refinement simulation check.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SimulationCheckResult {

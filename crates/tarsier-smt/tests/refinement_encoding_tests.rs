@@ -397,3 +397,59 @@ fn solver_unknown_variant_exists() {
     };
     assert!(matches!(result, SimulationCheckResult::Unknown { .. }));
 }
+
+#[test]
+fn witness_minimized_trims_trace_and_zeros() {
+    use tarsier_ir::product::ProductLocationId;
+    use tarsier_smt::refinement_encoder::{RefinementWitness, WitnessStep};
+
+    let witness = RefinementWitness {
+        depth: 5,
+        violation_step: 1,
+        mismatch_location: ProductLocationId {
+            concrete: LocationId::from(0),
+            abstract_loc: LocationId::from(1),
+        },
+        parameter_values: vec![(0, 10)],
+        trace: vec![
+            WitnessStep {
+                step: 0,
+                location_counters: vec![
+                    (ProductLocationId { concrete: LocationId::from(0), abstract_loc: LocationId::from(0) }, 5),
+                    (ProductLocationId { concrete: LocationId::from(1), abstract_loc: LocationId::from(0) }, 0),
+                ],
+                shared_var_values: vec![(0, 0)],
+                rule_firings: vec![(0, 3), (1, 0)],
+            },
+            WitnessStep {
+                step: 1,
+                location_counters: vec![],
+                shared_var_values: vec![],
+                rule_firings: vec![],
+            },
+            WitnessStep {
+                step: 2,
+                location_counters: vec![],
+                shared_var_values: vec![],
+                rule_firings: vec![(0, 1)],
+            },
+            WitnessStep {
+                step: 3,
+                location_counters: vec![],
+                shared_var_values: vec![],
+                rule_firings: vec![],
+            },
+        ],
+    };
+
+    let min = witness.minimized();
+    // Trace trimmed to steps 0, 1, 2 (violation_step + 1 = 2)
+    assert_eq!(min.trace.len(), 3);
+    assert_eq!(min.trace[0].step, 0);
+    assert_eq!(min.trace[2].step, 2);
+
+    // Zero-valued counters removed from step 0
+    assert_eq!(min.trace[0].location_counters.len(), 1);
+    assert_eq!(min.trace[0].rule_firings.len(), 1);
+    assert_eq!(min.trace[0].rule_firings[0], (0, 3));
+}
