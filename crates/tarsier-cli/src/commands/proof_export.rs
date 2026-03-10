@@ -11,7 +11,7 @@ use tarsier_engine::pipeline::{
     ProofExportCertificateObligationEvidence, ProofExportIr, SafetyProofCertificate,
     SafetyProofObligation, SolverChoice, SoundnessMode,
 };
-use tarsier_proof_kernel::load_metadata;
+use tarsier_proof_kernel::{check_bundle_integrity, CertificateMetadata};
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ProofExportReport {
@@ -19,6 +19,8 @@ pub(crate) struct ProofExportReport {
     pub(crate) bundle: String,
     pub(crate) output: Option<String>,
     pub(crate) kind: String,
+    pub(crate) bundle_sha256: Option<String>,
+    pub(crate) obligation_artifacts: Vec<ProofExportObligationArtifact>,
     pub(crate) certcheck: Option<ProofExportCertcheckReport>,
 }
 
@@ -26,6 +28,15 @@ pub(crate) struct ProofExportReport {
 pub(crate) struct ProofExportCertcheckReport {
     pub(crate) binary: String,
     pub(crate) overall: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ProofExportObligationArtifact {
+    pub(crate) name: String,
+    pub(crate) file: String,
+    pub(crate) sha256: Option<String>,
+    pub(crate) proof_file: Option<String>,
+    pub(crate) proof_sha256: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +51,11 @@ pub(crate) fn run_proof_export_command(
     certcheck: bool,
     certcheck_bin: Option<PathBuf>,
 ) -> miette::Result<()> {
+    let target = parse_export_target(&to)?;
+    let metadata = load_verified_metadata_for_export(&bundle)?;
+    let obligation_artifacts = collect_obligation_artifacts(&metadata);
+    let bundle_sha256 = metadata.bundle_sha256.clone();
+
     let certcheck_result = if certcheck {
         Some(run_certcheck(
             &bundle,
@@ -51,8 +67,6 @@ pub(crate) fn run_proof_export_command(
         None
     };
 
-    let target = parse_export_target(&to)?;
-    let metadata = load_metadata(&bundle).into_diagnostic()?;
     let obligations = metadata
         .obligations
         .iter()
@@ -133,11 +147,49 @@ pub(crate) fn run_proof_export_command(
         bundle: bundle.display().to_string(),
         output: out.as_ref().map(|p| p.display().to_string()),
         kind: metadata.kind,
+        bundle_sha256,
+        obligation_artifacts,
         certcheck: certcheck_result,
     };
     let report_json = serde_json::to_string(&report).into_diagnostic()?;
     eprintln!("{report_json}");
     Ok(())
+}
+
+fn load_verified_metadata_for_export(
+    bundle: &std::path::Path,
+) -> miette::Result<CertificateMetadata> {
+    let report = check_bundle_integrity(bundle).into_diagnostic()?;
+    if !report.is_ok() {
+        let details = report
+            .issues
+            .iter()
+            .map(|issue| format!("{}: {}", issue.code, issue.message))
+            .collect::<Vec<_>>()
+            .join("; ");
+        miette::bail!(
+            "Bundle integrity check failed before proof-export for '{}': {}",
+            bundle.display(),
+            details
+        );
+    }
+    Ok(report.metadata)
+}
+
+fn collect_obligation_artifacts(
+    metadata: &CertificateMetadata,
+) -> Vec<ProofExportObligationArtifact> {
+    metadata
+        .obligations
+        .iter()
+        .map(|ob| ProofExportObligationArtifact {
+            name: ob.name.clone(),
+            file: ob.file.clone(),
+            sha256: ob.sha256.clone(),
+            proof_file: ob.proof_file.clone(),
+            proof_sha256: ob.proof_sha256.clone(),
+        })
+        .collect()
 }
 
 fn run_certcheck(
@@ -442,6 +494,7 @@ mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tarsier_engine::pipeline::{ProofExportKind, ProofExportObligation};
+    use tarsier_proof_kernel::CertificateObligationMeta;
 
     #[test]
     fn render_lean_module_contains_expected_sections() {
@@ -518,6 +571,41 @@ mod tests {
     fn coq_escape_escapes_quotes_and_newlines() {
         let escaped = coq_escape("a\"b\nc");
         assert_eq!(escaped, "a\"\"b\\nc");
+    }
+
+    #[test]
+    fn collect_obligation_artifacts_preserves_hash_and_proof_fields() {
+        let metadata = CertificateMetadata {
+            schema_version: 2,
+            kind: "safety_proof".into(),
+            protocol_file: "safe.trs".into(),
+            proof_engine: "pdr".into(),
+            induction_k: Some(7),
+            solver_used: "z3".into(),
+            soundness: "strict".into(),
+            fairness: None,
+            committee_bounds: vec![("n".into(), 4), ("f".into(), 1)],
+            bundle_sha256: Some("b".repeat(64)),
+            obligations: vec![CertificateObligationMeta {
+                name: "init_implies_inv".into(),
+                expected: "unsat".into(),
+                file: "init_implies_inv.smt2".into(),
+                sha256: Some("a".repeat(64)),
+                proof_file: Some("init_implies_inv.proof".into()),
+                proof_sha256: Some("c".repeat(64)),
+            }],
+        };
+
+        let artifacts = collect_obligation_artifacts(&metadata);
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].name, "init_implies_inv");
+        assert_eq!(artifacts[0].file, "init_implies_inv.smt2");
+        assert_eq!(artifacts[0].sha256, Some("a".repeat(64)));
+        assert_eq!(
+            artifacts[0].proof_file.as_deref(),
+            Some("init_implies_inv.proof")
+        );
+        assert_eq!(artifacts[0].proof_sha256, Some("c".repeat(64)));
     }
 
     #[cfg(unix)]
