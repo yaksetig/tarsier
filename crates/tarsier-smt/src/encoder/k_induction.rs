@@ -42,6 +42,14 @@ pub(super) struct KInductionEncoderBuilder<'a> {
     sent_flag_true_locs: HashMap<usize, Vec<usize>>,
 }
 
+fn param_term_at_step(step: usize, param_id: usize, time_varying_param_ids: &[usize]) -> SmtTerm {
+    if time_varying_param_ids.contains(&param_id) {
+        SmtTerm::var(param_var_at_step(step, param_id))
+    } else {
+        SmtTerm::var(param_var(param_id))
+    }
+}
+
 impl<'a> KInductionEncoderBuilder<'a> {
     pub(super) fn new(cs: &'a CounterSystem, property: &'a SafetyProperty, k: usize) -> Self {
         let ta = cs;
@@ -116,24 +124,57 @@ impl<'a> KInductionEncoderBuilder<'a> {
     pub(super) fn phase_declare_parameters_and_resilience(&mut self) {
         let ta = self.ta;
         let num_params = self.context.num_params;
+        let time_varying_param_ids = &self.context.time_varying_param_ids;
+        let k = self.k;
         let enc = &mut self.enc;
+        if matches!(
+            ta.reconfiguration.as_ref().map(|s| s.semantics),
+            Some(ReconfigurationSemantics::Immediate)
+        ) {
+            // Fail closed when callers bypass IR validation.
+            enc.assert_term(SmtTerm::bool(false));
+            return;
+        }
         // Parameters and resilience
         for i in 0..num_params {
             enc.declare(param_var(i), SmtSort::Int);
             enc.assert_term(SmtTerm::var(param_var(i)).ge(SmtTerm::int(0)));
         }
+        for &i in time_varying_param_ids {
+            for step in 0..=k {
+                enc.declare(param_var_at_step(step, i), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(param_var_at_step(step, i)).ge(SmtTerm::int(0)));
+            }
+            enc.assert_term(SmtTerm::var(param_var_at_step(0, i)).eq(SmtTerm::var(param_var(i))));
+        }
         if let Some(ref rc) = ta.constraints.resilience_condition {
-            let lhs = encode_lc(&rc.lhs);
-            let rhs = encode_lc(&rc.rhs);
-            let constraint = match rc.op {
-                CmpOp::Gt => lhs.gt(rhs),
-                CmpOp::Ge => lhs.ge(rhs),
-                CmpOp::Lt => lhs.lt(rhs),
-                CmpOp::Le => lhs.le(rhs),
-                CmpOp::Eq => lhs.eq(rhs),
-                CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
-            };
-            enc.assert_term(constraint);
+            if time_varying_param_ids.is_empty() {
+                let lhs = encode_lc(&rc.lhs);
+                let rhs = encode_lc(&rc.rhs);
+                let constraint = match rc.op {
+                    CmpOp::Gt => lhs.gt(rhs),
+                    CmpOp::Ge => lhs.ge(rhs),
+                    CmpOp::Lt => lhs.lt(rhs),
+                    CmpOp::Le => lhs.le(rhs),
+                    CmpOp::Eq => lhs.eq(rhs),
+                    CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
+                };
+                enc.assert_term(constraint);
+            } else {
+                for step in 0..=k {
+                    let lhs = encode_lc_at_step(&rc.lhs, step, time_varying_param_ids);
+                    let rhs = encode_lc_at_step(&rc.rhs, step, time_varying_param_ids);
+                    let constraint = match rc.op {
+                        CmpOp::Gt => lhs.gt(rhs),
+                        CmpOp::Ge => lhs.ge(rhs),
+                        CmpOp::Lt => lhs.lt(rhs),
+                        CmpOp::Le => lhs.le(rhs),
+                        CmpOp::Eq => lhs.eq(rhs),
+                        CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
+                    };
+                    enc.assert_term(constraint);
+                }
+            }
         }
     }
 
@@ -154,6 +195,12 @@ impl<'a> KInductionEncoderBuilder<'a> {
         let byzantine_faults = self.context.byzantine_faults;
         let signed_sender_channels = &self.context.signed_sender_channels;
         let message_counter_flags = &self.context.message_counter_flags;
+        let time_varying_param_ids = &self.context.time_varying_param_ids;
+        let max_reconfigurations = ta
+            .reconfiguration
+            .as_ref()
+            .map(|spec| spec.max_reconfigurations)
+            .unwrap_or(0);
         let lossy_delivery = self.context.lossy_delivery;
         let selective_network = self.context.selective_network;
         let message_variant_groups = &self.context.message_variant_groups;
@@ -182,9 +229,11 @@ impl<'a> KInductionEncoderBuilder<'a> {
                 enc.declare(kappa_var(step, l), SmtSort::Int);
                 enc.assert_term(SmtTerm::var(kappa_var(step, l)).ge(SmtTerm::int(0)));
                 if let Some(n_pid) = n_param {
-                    enc.assert_term(
-                        SmtTerm::var(kappa_var(step, l)).le(SmtTerm::var(param_var(n_pid))),
-                    );
+                    enc.assert_term(SmtTerm::var(kappa_var(step, l)).le(param_term_at_step(
+                        step,
+                        n_pid,
+                        time_varying_param_ids,
+                    )));
                 }
             }
             for v in 0..num_svars {
@@ -205,6 +254,13 @@ impl<'a> KInductionEncoderBuilder<'a> {
             }
             enc.declare(time_var(step), SmtSort::Int);
             enc.assert_term(SmtTerm::var(time_var(step)).ge(SmtTerm::int(0)));
+            if max_reconfigurations > 0 {
+                enc.declare(reconf_count_var(step), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(reconf_count_var(step)).ge(SmtTerm::int(0)));
+                if step == 0 {
+                    enc.assert_term(SmtTerm::var(reconf_count_var(step)).eq(SmtTerm::int(0)));
+                }
+            }
 
             // DAG rounds: boolean activation flags with parent dependency across steps.
             for (rid, parents) in dag_parent_indices.iter().enumerate() {
@@ -229,16 +285,20 @@ impl<'a> KInductionEncoderBuilder<'a> {
             for (v, role) in distinct_vars {
                 if let Some(role) = role {
                     if let Some(&pid) = role_pop_params.get(role) {
-                        enc.assert_term(
-                            SmtTerm::var(gamma_var(step, *v)).le(SmtTerm::var(param_var(pid))),
-                        );
+                        enc.assert_term(SmtTerm::var(gamma_var(step, *v)).le(param_term_at_step(
+                            step,
+                            pid,
+                            time_varying_param_ids,
+                        )));
                         continue;
                     }
                 }
                 if let Some(n_param) = n_param {
-                    enc.assert_term(
-                        SmtTerm::var(gamma_var(step, *v)).le(SmtTerm::var(param_var(n_param))),
-                    );
+                    enc.assert_term(SmtTerm::var(gamma_var(step, *v)).le(param_term_at_step(
+                        step,
+                        n_param,
+                        time_varying_param_ids,
+                    )));
                 } else {
                     enc.assert_term(SmtTerm::bool(false));
                 }
@@ -250,7 +310,7 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     .map(|l| SmtTerm::var(kappa_var(step, l)))
                     .collect::<Vec<_>>();
                 let total = sum_terms_balanced(total);
-                enc.assert_term(total.eq(SmtTerm::var(param_var(n_pid))));
+                enc.assert_term(total.eq(param_term_at_step(step, n_pid, time_varying_param_ids)));
             }
 
             // Strengthening: per-role conservation when a role-population parameter exists.
@@ -261,7 +321,11 @@ impl<'a> KInductionEncoderBuilder<'a> {
                         .map(|l| SmtTerm::var(kappa_var(step, *l)))
                         .collect::<Vec<_>>();
                     let total = sum_terms_balanced(total);
-                    enc.assert_term(total.eq(SmtTerm::var(param_var(pid))));
+                    enc.assert_term(total.eq(param_term_at_step(
+                        step,
+                        pid,
+                        time_varying_param_ids,
+                    )));
                 }
             }
 
@@ -422,6 +486,17 @@ impl<'a> KInductionEncoderBuilder<'a> {
         let signed_uncompromised_sender_idx_by_var =
             &self.context.signed_uncompromised_sender_idx_by_var;
         let increment_only_var = &self.increment_only_var;
+        let time_varying_param_ids = &self.context.time_varying_param_ids;
+        let max_reconfigurations = ta
+            .reconfiguration
+            .as_ref()
+            .map(|spec| spec.max_reconfigurations)
+            .unwrap_or(0);
+        let reconfig_rule_ids: Vec<usize> = active_rule_ids
+            .iter()
+            .copied()
+            .filter(|r| !ta.rules[*r].param_updates.is_empty())
+            .collect();
         let enc = &mut self.enc;
         // Transition relation for each step
         for step in 0..k {
@@ -471,13 +546,30 @@ impl<'a> KInductionEncoderBuilder<'a> {
                             op,
                             bound,
                             distinct,
-                        } => encode_threshold_guard_at_step(step, vars, *op, bound, *distinct),
+                        } => {
+                            if time_varying_param_ids.is_empty() {
+                                encode_threshold_guard_at_step(step, vars, *op, bound, *distinct)
+                            } else {
+                                encode_threshold_guard_at_step_epoch(
+                                    step,
+                                    vars,
+                                    *op,
+                                    bound,
+                                    *distinct,
+                                    time_varying_param_ids,
+                                )
+                            }
+                        }
                     };
                     enc.assert_term(dr_pos.clone().implies(guard_term));
                 }
                 for guard in &rule.clock_guards {
                     let lhs = SmtTerm::var(clock_var(step, guard.clock.as_usize()));
-                    let rhs = encode_lc(&guard.bound);
+                    let rhs = if time_varying_param_ids.is_empty() {
+                        encode_lc(&guard.bound)
+                    } else {
+                        encode_lc_at_step(&guard.bound, step, time_varying_param_ids)
+                    };
                     let guard_term = match guard.op {
                         CmpOp::Ge => lhs.ge(rhs),
                         CmpOp::Gt => lhs.gt(rhs),
@@ -536,7 +628,15 @@ impl<'a> KInductionEncoderBuilder<'a> {
                                     updated = SmtTerm::int(0);
                                 }
                                 ClockUpdateKind::TickBy(delta) => {
-                                    updated = updated.add(encode_lc(delta));
+                                    updated = if time_varying_param_ids.is_empty() {
+                                        updated.add(encode_lc(delta))
+                                    } else {
+                                        updated.add(encode_lc_at_step(
+                                            delta,
+                                            step,
+                                            time_varying_param_ids,
+                                        ))
+                                    };
                                 }
                             }
                         }
@@ -576,7 +676,11 @@ impl<'a> KInductionEncoderBuilder<'a> {
                                 UpdateKind::Set(lc) => {
                                     let dr_pos =
                                         SmtTerm::var(delta_var(step, r)).gt(SmtTerm::int(0));
-                                    let set_val = encode_lc(lc);
+                                    let set_val = if time_varying_param_ids.is_empty() {
+                                        encode_lc(lc)
+                                    } else {
+                                        encode_lc_at_step(lc, step, time_varying_param_ids)
+                                    };
                                     enc.assert_term(
                                         dr_pos.implies(
                                             SmtTerm::var(gamma_var(step + 1, v)).eq(set_val),
@@ -619,8 +723,12 @@ impl<'a> KInductionEncoderBuilder<'a> {
                         && selective_network
                     {
                         if let Some(gst_pid) = ta.semantics.gst_param {
-                            let post_gst =
-                                SmtTerm::var(param_var(gst_pid)).le(SmtTerm::var(time_var(step)));
+                            let post_gst = param_term_at_step(
+                                step,
+                                gst_pid.as_usize(),
+                                time_varying_param_ids,
+                            )
+                            .le(SmtTerm::var(time_var(step)));
                             if byzantine_faults {
                                 if let Some(sender_idx) = signed_uncompromised_sender_idx_by_var
                                     .get(v)
@@ -647,8 +755,12 @@ impl<'a> KInductionEncoderBuilder<'a> {
                         && ta.semantics.gst_param.is_some()
                     {
                         if let Some(gst_pid) = ta.semantics.gst_param {
-                            let post_gst =
-                                SmtTerm::var(param_var(gst_pid)).le(SmtTerm::var(time_var(step)));
+                            let post_gst = param_term_at_step(
+                                step,
+                                gst_pid.as_usize(),
+                                time_varying_param_ids,
+                            )
+                            .le(SmtTerm::var(time_var(step)));
                             enc.assert_term(post_gst.implies(net_drop.eq(SmtTerm::int(0))));
                         }
                     }
@@ -713,10 +825,11 @@ impl<'a> KInductionEncoderBuilder<'a> {
                             enc.assert_term(gamma_next.clone().ge(sum_term.clone()));
                             enc.assert_term(gamma_next.clone().le(sum_term.clone()));
                             if let Some(&pid) = role_pop_params.get(role) {
-                                let pop = SmtTerm::var(param_var(pid));
+                                let pop = param_term_at_step(step + 1, pid, time_varying_param_ids);
                                 enc.assert_term(gamma_next.le(pop));
                             } else if let Some(n_param) = n_param {
-                                let pop = SmtTerm::var(param_var(n_param));
+                                let pop =
+                                    param_term_at_step(step + 1, n_param, time_varying_param_ids);
                                 enc.assert_term(gamma_next.le(pop));
                             }
                             next_expr = None;
@@ -735,8 +848,15 @@ impl<'a> KInductionEncoderBuilder<'a> {
                             enc.assert_term(drop_term.clone().le(sent_expr.add(adv_term)));
                             if ta.semantics.timing_model == TimingModel::PartialSynchrony {
                                 if let Some(gst_pid) = ta.semantics.gst_param {
+                                    let gst_idx = gst_pid.as_usize();
                                     let post_gst = SmtTerm::var(param_var(gst_pid))
                                         .le(SmtTerm::var(time_var(step)));
+                                    let post_gst = if time_varying_param_ids.contains(&gst_idx) {
+                                        param_term_at_step(step, gst_idx, time_varying_param_ids)
+                                            .le(SmtTerm::var(time_var(step)))
+                                    } else {
+                                        post_gst
+                                    };
                                     enc.assert_term(
                                         post_gst.implies(drop_term.eq(SmtTerm::int(0))),
                                     );
@@ -750,6 +870,90 @@ impl<'a> KInductionEncoderBuilder<'a> {
                         SmtTerm::var(gamma_var(step + 1, v)).ge(SmtTerm::var(gamma_var(step, v))),
                     );
                 }
+            }
+
+            if !time_varying_param_ids.is_empty() {
+                for &pid in time_varying_param_ids {
+                    let mut update_rules: Vec<(usize, &LinearCombination)> = Vec::new();
+                    for &r in active_rule_ids {
+                        for pu in &ta.rules[r].param_updates {
+                            if pu.param.as_usize() == pid {
+                                update_rules.push((r, &pu.value));
+                            }
+                        }
+                    }
+
+                    if update_rules.is_empty() {
+                        enc.assert_term(
+                            SmtTerm::var(param_var_at_step(step + 1, pid))
+                                .eq(SmtTerm::var(param_var_at_step(step, pid))),
+                        );
+                    } else {
+                        for &(r, value) in &update_rules {
+                            let dr_pos = SmtTerm::var(delta_var(step, r)).gt(SmtTerm::int(0));
+                            let new_val = encode_lc_at_step(value, step, time_varying_param_ids);
+                            enc.assert_term(dr_pos.implies(
+                                SmtTerm::var(param_var_at_step(step + 1, pid)).eq(new_val),
+                            ));
+                        }
+                        let any_fires = sum_terms_balanced(
+                            update_rules
+                                .iter()
+                                .map(|&(r, _)| SmtTerm::var(delta_var(step, r)))
+                                .collect(),
+                        )
+                        .gt(SmtTerm::int(0));
+                        enc.assert_term(
+                            SmtTerm::not(any_fires).implies(
+                                SmtTerm::var(param_var_at_step(step + 1, pid))
+                                    .eq(SmtTerm::var(param_var_at_step(step, pid))),
+                            ),
+                        );
+
+                        if update_rules.len() > 1 {
+                            let fire_indicators: Vec<SmtTerm> = update_rules
+                                .iter()
+                                .map(|&(r, _)| {
+                                    SmtTerm::Ite(
+                                        Box::new(
+                                            SmtTerm::var(delta_var(step, r)).gt(SmtTerm::int(0)),
+                                        ),
+                                        Box::new(SmtTerm::int(1)),
+                                        Box::new(SmtTerm::int(0)),
+                                    )
+                                })
+                                .collect();
+                            let total = sum_terms_balanced(fire_indicators);
+                            enc.assert_term(total.le(SmtTerm::int(1)));
+                        }
+                    }
+                }
+            }
+
+            if max_reconfigurations > 0 {
+                let any_reconfigure_fire = if reconfig_rule_ids.is_empty() {
+                    SmtTerm::bool(false)
+                } else {
+                    sum_terms_balanced(
+                        reconfig_rule_ids
+                            .iter()
+                            .map(|r| SmtTerm::var(delta_var(step, *r)))
+                            .collect(),
+                    )
+                    .gt(SmtTerm::int(0))
+                };
+                let inc = SmtTerm::Ite(
+                    Box::new(any_reconfigure_fire),
+                    Box::new(SmtTerm::int(1)),
+                    Box::new(SmtTerm::int(0)),
+                );
+                let max_bound =
+                    SmtTerm::int(i64::try_from(max_reconfigurations).unwrap_or(i64::MAX));
+                enc.assert_term(
+                    SmtTerm::var(reconf_count_var(step + 1))
+                        .eq(SmtTerm::var(reconf_count_var(step)).add(inc)),
+                );
+                enc.assert_term(SmtTerm::var(reconf_count_var(step + 1)).le(max_bound));
             }
         }
 
@@ -1209,5 +1413,131 @@ pub(super) fn encode_property_violation(
         SafetyProperty::Termination { .. } => {
             encode_property_violation_at_step(ta, property, max_depth)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backends::smtlib_printer::to_smtlib;
+    use indexmap::IndexMap;
+
+    fn build_reconfig_ta() -> (ThresholdAutomaton, LocationId) {
+        let mut ta = ThresholdAutomaton::new();
+        ta.add_parameter(Parameter::fixed("n".to_string()));
+        let t_id = ta.add_parameter(Parameter::varying("t".to_string()));
+        let l0 = ta.add_location(Location {
+            name: "Init".into(),
+            role: "R".into(),
+            phase: "init".into(),
+            local_vars: IndexMap::new(),
+        });
+        let l1 = ta.add_location(Location {
+            name: "Done".into(),
+            role: "R".into(),
+            phase: "done".into(),
+            local_vars: IndexMap::new(),
+        });
+        ta.initial_locations.push(l0);
+        ta.add_shared_var(SharedVar {
+            name: "votes".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        ta.add_rule(Rule {
+            from: l0,
+            to: l1,
+            guard: Guard::trivial(),
+            updates: vec![],
+            collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
+            param_updates: vec![ParamUpdate {
+                param: t_id,
+                value: LinearCombination::constant(5),
+            }],
+        });
+        ta.constraints.adversary_bound_param = Some(t_id);
+        ta.constraints.resilience_condition = Some(LinearConstraint {
+            lhs: LinearCombination {
+                constant: 0,
+                terms: vec![(1, ParamId::from(0))], // n
+            },
+            op: CmpOp::Gt,
+            rhs: LinearCombination {
+                constant: 0,
+                terms: vec![(3, ParamId::from(1))], // 3*t
+            },
+        });
+        (ta, l1)
+    }
+
+    #[test]
+    fn k_induction_declares_epoch_param_vars_for_reconfigure() {
+        let (ta, l1) = build_reconfig_ta();
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_k_induction_step(&cs, &property, 2);
+        let decl_names: Vec<&str> = encoding
+            .declarations
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+
+        assert!(decl_names.contains(&"p_1_0"));
+        assert!(decl_names.contains(&"p_1_1"));
+        assert!(decl_names.contains(&"p_1_2"));
+    }
+
+    #[test]
+    fn k_induction_emits_reconfiguration_counter_when_bounded() {
+        let (mut ta, l1) = build_reconfig_ta();
+        ta.reconfiguration = Some(ReconfigurationSpec {
+            semantics: ReconfigurationSemantics::NextStep,
+            max_reconfigurations: 1,
+        });
+
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_k_induction_step(&cs, &property, 1);
+        let decl_names: Vec<&str> = encoding
+            .declarations
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert!(decl_names.contains(&"reconf_count_0"));
+        assert!(decl_names.contains(&"reconf_count_1"));
+
+        let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("reconf_count_1") && a.contains("<=") && a.contains("1")),
+            "expected max_reconfigurations upper bound constraint"
+        );
+    }
+
+    #[test]
+    fn k_induction_fail_closed_on_immediate_reconfiguration_semantics() {
+        let (mut ta, l1) = build_reconfig_ta();
+        ta.reconfiguration = Some(ReconfigurationSpec {
+            semantics: ReconfigurationSemantics::Immediate,
+            max_reconfigurations: 0,
+        });
+
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_k_induction_step(&cs, &property, 1);
+        assert!(
+            encoding.assertions.contains(&SmtTerm::bool(false)),
+            "encoder should fail closed when immediate semantics is requested"
+        );
     }
 }

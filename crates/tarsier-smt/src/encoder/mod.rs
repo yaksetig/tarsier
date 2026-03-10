@@ -235,6 +235,14 @@ impl<'a> BmcEncoderBuilder<'a> {
         let ta = self.ta;
         let num_params = self.context.num_params;
         let enc = &mut self.enc;
+        if matches!(
+            ta.reconfiguration.as_ref().map(|s| s.semantics),
+            Some(ReconfigurationSemantics::Immediate)
+        ) {
+            // Fail closed when callers bypass IR validation.
+            enc.assert_term(SmtTerm::bool(false));
+            return;
+        }
         // 1. Declare parameter variables
         for i in 0..num_params {
             enc.declare(param_var(i), SmtSort::Int);
@@ -391,6 +399,12 @@ impl<'a> BmcEncoderBuilder<'a> {
                 enc.assert_term(SmtTerm::var(queue_tail_var(0, cid)).eq(SmtTerm::int(0)));
             }
         }
+        if let Some(spec) = &ta.reconfiguration {
+            if spec.max_reconfigurations > 0 {
+                enc.declare(reconf_count_var(0), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(reconf_count_var(0)).eq(SmtTerm::int(0)));
+            }
+        }
         if missing_process_ids {
             enc.assert_term(SmtTerm::bool(false));
         }
@@ -461,6 +475,16 @@ impl<'a> BmcEncoderBuilder<'a> {
         let signed_uncompromised_sender_idx_by_var =
             &self.context.signed_uncompromised_sender_idx_by_var;
         let time_varying_param_ids = &self.context.time_varying_param_ids;
+        let max_reconfigurations = ta
+            .reconfiguration
+            .as_ref()
+            .map(|spec| spec.max_reconfigurations)
+            .unwrap_or(0);
+        let reconfig_rule_ids: Vec<usize> = active_rule_ids
+            .iter()
+            .copied()
+            .filter(|r| !ta.rules[*r].param_updates.is_empty())
+            .collect();
         let enc = &mut self.enc;
         // 5. Encode transitions for each step k = 0..max_depth-1
         // At each step, the adversary (up to t faulty processes) can inject
@@ -484,6 +508,10 @@ impl<'a> BmcEncoderBuilder<'a> {
                 enc.assert_term(SmtTerm::var(name).ge(SmtTerm::int(0)));
             }
             enc.declare(time_var(k + 1), SmtSort::Int);
+            if max_reconfigurations > 0 {
+                enc.declare(reconf_count_var(k + 1), SmtSort::Int);
+                enc.assert_term(SmtTerm::var(reconf_count_var(k + 1)).ge(SmtTerm::int(0)));
+            }
             for (v, role) in distinct_vars {
                 if let Some(role) = role {
                     if let Some(&pid) = role_pop_params.get(role) {
@@ -530,9 +558,8 @@ impl<'a> BmcEncoderBuilder<'a> {
                 let delta_name = format!("dag_delta_{k}_{rid}");
                 enc.declare(delta_name.clone(), SmtSort::Int);
                 enc.assert_term(
-                    SmtTerm::var(delta_name.clone()).eq(
-                        SmtTerm::var(next.clone()).sub(SmtTerm::var(curr)),
-                    ),
+                    SmtTerm::var(delta_name.clone())
+                        .eq(SmtTerm::var(next.clone()).sub(SmtTerm::var(curr))),
                 );
 
                 for parent_id in parents {
@@ -1151,6 +1178,32 @@ impl<'a> BmcEncoderBuilder<'a> {
                     };
                     enc.assert_term(constraint);
                 }
+            }
+
+            if max_reconfigurations > 0 {
+                let any_reconfigure_fire = if reconfig_rule_ids.is_empty() {
+                    SmtTerm::bool(false)
+                } else {
+                    sum_terms_balanced(
+                        reconfig_rule_ids
+                            .iter()
+                            .map(|r| SmtTerm::var(delta_var(k, *r)))
+                            .collect(),
+                    )
+                    .gt(SmtTerm::int(0))
+                };
+                let inc = SmtTerm::Ite(
+                    Box::new(any_reconfigure_fire),
+                    Box::new(SmtTerm::int(1)),
+                    Box::new(SmtTerm::int(0)),
+                );
+                let max_bound =
+                    SmtTerm::int(i64::try_from(max_reconfigurations).unwrap_or(i64::MAX));
+                enc.assert_term(
+                    SmtTerm::var(reconf_count_var(k + 1))
+                        .eq(SmtTerm::var(reconf_count_var(k)).add(inc)),
+                );
+                enc.assert_term(SmtTerm::var(reconf_count_var(k + 1)).le(max_bound));
             }
         }
 
@@ -4685,7 +4738,10 @@ protocol BuggyBroadcast {
                 .iter()
                 .any(|a| a.contains("dag_delta_0_0") && a.contains("dag_active_1_0")),
             "delta should be defined as next - curr; assertions: {:?}",
-            assertions.iter().filter(|a| a.contains("dag_delta")).collect::<Vec<_>>()
+            assertions
+                .iter()
+                .filter(|a| a.contains("dag_delta"))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -4765,20 +4821,14 @@ protocol BuggyBroadcast {
             .iter()
             .filter(|d| d.starts_with("dag_active_"))
             .count();
-        assert_eq!(
-            dag_active_count, 24,
-            "4 rounds × 6 steps = 24 active vars"
-        );
+        assert_eq!(dag_active_count, 24, "4 rounds × 6 steps = 24 active vars");
 
         // 4 rounds × 5 deltas (0..4)
         let dag_delta_count = declarations
             .iter()
             .filter(|d| d.starts_with("dag_delta_"))
             .count();
-        assert_eq!(
-            dag_delta_count, 20,
-            "4 rounds × 5 steps = 20 delta vars"
-        );
+        assert_eq!(dag_delta_count, 20, "4 rounds × 5 steps = 20 delta vars");
     }
 
     #[test]
@@ -5122,7 +5172,9 @@ protocol BuggyBroadcast {
         let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
 
         // Should contain resilience re-assertion at step 1 using p_1_1 (step-1 t)
-        let has_epoch_resilience = assertions.iter().any(|a| a.contains("p_1_1") && a.contains("p_0"));
+        let has_epoch_resilience = assertions
+            .iter()
+            .any(|a| a.contains("p_1_1") && a.contains("p_0"));
         assert!(
             has_epoch_resilience,
             "resilience should be re-asserted using epoch-aware params at step 1"
@@ -5198,7 +5250,9 @@ protocol BuggyBroadcast {
         let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
 
         // Should contain mutual exclusion constraint (ite-based indicator sum <= 1)
-        let has_mutex = assertions.iter().any(|a| a.contains("ite") && a.contains("delta_0_0") && a.contains("delta_0_1"));
+        let has_mutex = assertions
+            .iter()
+            .any(|a| a.contains("ite") && a.contains("delta_0_0") && a.contains("delta_0_1"));
         assert!(
             has_mutex,
             "should have mutual-exclusion constraint for multi-rule param updates"
@@ -5220,7 +5274,9 @@ protocol BuggyBroadcast {
         for step in 0..3 {
             let curr = format!("p_1_{}", step);
             let next = format!("p_1_{}", step + 1);
-            let has_frame = assertions.iter().any(|a| a.contains(&curr) && a.contains(&next));
+            let has_frame = assertions
+                .iter()
+                .any(|a| a.contains(&curr) && a.contains(&next));
             assert!(
                 has_frame,
                 "should have frame/update constraint between step {} and {}",
@@ -5228,5 +5284,56 @@ protocol BuggyBroadcast {
                 step + 1
             );
         }
+    }
+
+    #[test]
+    fn reconfiguration_max_count_constraints_emitted() {
+        let (mut ta, _l0, l1, _t_id) = build_reconfig_ta(LinearCombination::constant(5));
+        ta.reconfiguration = Some(ReconfigurationSpec {
+            semantics: ReconfigurationSemantics::NextStep,
+            max_reconfigurations: 2,
+        });
+
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_bmc(&cs, &property, 2);
+
+        let decl_names: Vec<&str> = encoding
+            .declarations
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert!(decl_names.contains(&"reconf_count_0"));
+        assert!(decl_names.contains(&"reconf_count_1"));
+        assert!(decl_names.contains(&"reconf_count_2"));
+
+        let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("reconf_count_1") && a.contains("<=") && a.contains("2")),
+            "expected max_reconfigurations upper bound constraint"
+        );
+    }
+
+    #[test]
+    fn immediate_reconfiguration_semantics_fail_closed() {
+        let (mut ta, _l0, l1, _t_id) = build_reconfig_ta(LinearCombination::constant(5));
+        ta.reconfiguration = Some(ReconfigurationSpec {
+            semantics: ReconfigurationSemantics::Immediate,
+            max_reconfigurations: 0,
+        });
+
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_bmc(&cs, &property, 1);
+        assert!(
+            encoding.assertions.contains(&SmtTerm::bool(false)),
+            "encoder should fail closed when immediate semantics is requested"
+        );
     }
 }
