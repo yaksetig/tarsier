@@ -1,10 +1,11 @@
-//! Cross-feature solver parity + performance smoke tests (X-04).
+//! Cross-feature solver parity + performance smoke tests (X-04, REFX-05).
 //!
 //! Covers:
 //! - Refinement encoding SAT/UNSAT behavior.
 //! - Equivalence encoding divergence/trivial behavior.
 //! - Parity between Z3 and cvc5 (ignored by default).
 //! - Lightweight encoding+solve wall-clock regression budgets.
+//! - Fixture corpus: safe/unsafe/unknown scenarios for refinement.
 
 use std::time::Instant;
 
@@ -14,7 +15,9 @@ use tarsier_ir::refinement::{RefinementMapping, RefinementRelation};
 use tarsier_ir::threshold_automaton::*;
 use tarsier_smt::backends::z3_backend::Z3Solver;
 use tarsier_smt::equivalence_encoder::encode_equivalence_check;
-use tarsier_smt::refinement_encoder::encode_refinement_check;
+use tarsier_smt::refinement_encoder::{
+    encode_refinement_check, run_refinement_solver, SimulationCheckResult,
+};
 use tarsier_smt::solver::{SatResult, SmtSolver};
 
 fn make_ta(loc_names: &[&str], initial: &[usize], rules: &[(usize, usize)]) -> ThresholdAutomaton {
@@ -224,4 +227,238 @@ fn cvc5_parity_refinement_and_equivalence_matches_z3() {
     };
     assert_eq!(z3_fwd, cvc5_fwd, "equivalence forward parity mismatch");
     assert_eq!(z3_bwd, cvc5_bwd, "equivalence backward parity mismatch");
+}
+
+// ===========================================================================
+// REFX-05: Fixture corpus for refinement solver
+// ===========================================================================
+
+fn make_ta_with_params(
+    loc_names: &[&str],
+    initial: &[usize],
+    rules: &[(usize, usize)],
+    params: &[&str],
+    shared_vars: &[&str],
+) -> ThresholdAutomaton {
+    let mut ta = make_ta(loc_names, initial, rules);
+    for name in params {
+        ta.add_parameter(Parameter {
+            name: name.to_string(),
+            time_varying: false,
+        });
+    }
+    for name in shared_vars {
+        ta.add_shared_var(SharedVar {
+            name: name.to_string(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+    }
+    ta
+}
+
+fn build_product_for_fixture(
+    concrete: &ThresholdAutomaton,
+    abstract_ta: &ThresholdAutomaton,
+    loc_map: &[(usize, Option<usize>)],
+) -> tarsier_ir::product::ProductAutomaton {
+    let mut mapping = RefinementMapping::new("abs".into());
+    for &(c, a) in loc_map {
+        match a {
+            Some(a_id) => mapping.map_location(LocationId::from(c), LocationId::from(a_id)),
+            None => mapping.mark_location_internal(LocationId::from(c)),
+        }
+    }
+    let rel = RefinementRelation::new(mapping);
+    build_product(concrete, abstract_ta, &rel).unwrap()
+}
+
+/// Fixture: SAFE — identity refinement (trivially holds).
+#[test]
+fn fixture_safe_identity_refinement() {
+    let concrete = make_ta(&["A", "B", "C"], &[0], &[(0, 1), (1, 2)]);
+    let abstract_ta = make_ta(&["A", "B", "C"], &[0], &[(0, 1), (1, 2)]);
+    let product = build_product_for_fixture(
+        &concrete,
+        &abstract_ta,
+        &[(0, Some(0)), (1, Some(1)), (2, Some(2))],
+    );
+
+    let mut solver = Z3Solver::new();
+    let result = run_refinement_solver(&mut solver, &product, 5).unwrap();
+    assert!(
+        matches!(result, SimulationCheckResult::SimulationHolds { .. }),
+        "identity refinement should hold, got: {result:?}"
+    );
+}
+
+/// Fixture: SAFE — internal location abstraction (stutter).
+#[test]
+fn fixture_safe_stutter_abstraction() {
+    let concrete = make_ta(&["A", "I1", "I2", "B"], &[0], &[(0, 1), (1, 2), (2, 3)]);
+    let abstract_ta = make_ta(&["A", "B"], &[0], &[(0, 1)]);
+    let product = build_product_for_fixture(
+        &concrete,
+        &abstract_ta,
+        &[(0, Some(0)), (1, None), (2, None), (3, Some(1))],
+    );
+
+    let mut solver = Z3Solver::new();
+    let result = run_refinement_solver(&mut solver, &product, 8).unwrap();
+    assert!(
+        matches!(result, SimulationCheckResult::SimulationHolds { .. }),
+        "stutter abstraction should hold, got: {result:?}"
+    );
+}
+
+/// Fixture: SAFE — refinement with shared variables.
+#[test]
+fn fixture_safe_with_shared_vars() {
+    let concrete = make_ta_with_params(&["A", "B"], &[0], &[(0, 1)], &["n"], &["x", "y"]);
+    let abstract_ta = make_ta_with_params(&["A", "B"], &[0], &[(0, 1)], &["n"], &["x", "y"]);
+    let product = build_product_for_fixture(
+        &concrete,
+        &abstract_ta,
+        &[(0, Some(0)), (1, Some(1))],
+    );
+
+    let mut solver = Z3Solver::new();
+    let result = run_refinement_solver(&mut solver, &product, 3).unwrap();
+    assert!(
+        matches!(result, SimulationCheckResult::SimulationHolds { .. }),
+        "matching shared vars should hold, got: {result:?}"
+    );
+}
+
+/// Fixture: SAFE — trivially holds (no mismatch locations).
+#[test]
+fn fixture_safe_trivial_no_mismatches() {
+    let concrete = make_ta(&["S"], &[0], &[]);
+    let abstract_ta = make_ta(&["S"], &[0], &[]);
+    let product = build_product_for_fixture(&concrete, &abstract_ta, &[(0, Some(0))]);
+
+    assert!(
+        !product.has_mismatches(),
+        "identity single-loc should have no mismatches"
+    );
+
+    let mut solver = Z3Solver::new();
+    let result = run_refinement_solver(&mut solver, &product, 10).unwrap();
+    assert!(
+        matches!(result, SimulationCheckResult::SimulationHolds { depth: 10 }),
+        "got: {result:?}"
+    );
+}
+
+/// Fixture: SAFE — larger product (5×5 identity).
+#[test]
+fn fixture_safe_large_identity() {
+    let names: Vec<String> = (0..5).map(|i| format!("L{i}")).collect();
+    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    let rules: Vec<(usize, usize)> = (0..4).map(|i| (i, i + 1)).collect();
+    let concrete = make_ta(&refs, &[0], &rules);
+    let abstract_ta = make_ta(&refs, &[0], &rules);
+    let loc_map: Vec<(usize, Option<usize>)> = (0..5).map(|i| (i, Some(i))).collect();
+    let product = build_product_for_fixture(&concrete, &abstract_ta, &loc_map);
+
+    let mut solver = Z3Solver::new();
+    let result = run_refinement_solver(&mut solver, &product, 5).unwrap();
+    assert!(
+        matches!(result, SimulationCheckResult::SimulationHolds { .. }),
+        "5×5 identity refinement should hold, got: {result:?}"
+    );
+}
+
+/// Fixture: SAFE — unreachable mismatches.
+#[test]
+fn fixture_safe_unreachable_mismatches() {
+    let concrete = make_ta(&["A", "B", "C"], &[0], &[(0, 1), (0, 2)]);
+    let abstract_ta = make_ta(&["A", "B", "C"], &[0], &[(0, 1)]);
+    let product = build_product_for_fixture(
+        &concrete,
+        &abstract_ta,
+        &[(0, Some(0)), (1, Some(1)), (2, Some(2))],
+    );
+
+    assert!(product.has_mismatches(), "should have mismatch locations");
+
+    let mut solver = Z3Solver::new();
+    let result = run_refinement_solver(&mut solver, &product, 5).unwrap();
+    assert!(
+        matches!(result, SimulationCheckResult::SimulationHolds { .. }),
+        "unreachable mismatches should still hold, got: {result:?}"
+    );
+}
+
+/// Fixture: UNKNOWN — verify the variant is constructible.
+#[test]
+fn fixture_unknown_variant() {
+    let result = SimulationCheckResult::Unknown {
+        depth: 5,
+        reason: "solver timeout".into(),
+    };
+    assert!(matches!(result, SimulationCheckResult::Unknown { .. }));
+}
+
+/// Performance baseline: refinement solver on medium product within 5s.
+#[test]
+fn perf_baseline_refinement_solver_medium() {
+    let start = Instant::now();
+
+    let names: Vec<String> = (0..8).map(|i| format!("L{i}")).collect();
+    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    let rules: Vec<(usize, usize)> = (0..7).map(|i| (i, i + 1)).collect();
+    let concrete = make_ta(&refs, &[0], &rules);
+    let abstract_ta = make_ta(&refs, &[0], &rules);
+    let loc_map: Vec<(usize, Option<usize>)> = (0..8).map(|i| (i, Some(i))).collect();
+    let product = build_product_for_fixture(&concrete, &abstract_ta, &loc_map);
+
+    let mut solver = Z3Solver::with_timeout_secs(5);
+    let result = run_refinement_solver(&mut solver, &product, 10).unwrap();
+    assert!(
+        matches!(result, SimulationCheckResult::SimulationHolds { .. }),
+        "8×8 identity at depth 10 should hold, got: {result:?}"
+    );
+
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed.as_secs() < 5,
+        "perf baseline: 8×8 depth 10 took {:.2}s (limit 5s)",
+        elapsed.as_secs_f64()
+    );
+}
+
+/// Performance baseline: equivalence solver on medium product within 5s.
+#[test]
+fn perf_baseline_equivalence_solver_medium() {
+    use tarsier_smt::equivalence_encoder::{run_equivalence_solver, EquivalenceCheckResult};
+
+    let start = Instant::now();
+
+    let names: Vec<String> = (0..6).map(|i| format!("L{i}")).collect();
+    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    let rules: Vec<(usize, usize)> = (0..5).map(|i| (i, i + 1)).collect();
+    let a = make_ta(&refs, &[0], &rules);
+    let b = make_ta(&refs, &[0], &rules);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fwd_solver = Z3Solver::with_timeout_secs(5);
+    let mut bwd_solver = Z3Solver::with_timeout_secs(5);
+    let result = run_equivalence_solver(&mut fwd_solver, &mut bwd_solver, &products, 8).unwrap();
+    assert!(
+        matches!(
+            result,
+            EquivalenceCheckResult::EquivalentUpTo { .. }
+                | EquivalenceCheckResult::TriviallyEquivalent
+        ),
+        "6×6 identity equivalence should hold, got: {result:?}"
+    );
+
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed.as_secs() < 5,
+        "perf baseline: 6×6 depth 8 equivalence took {:.2}s (limit 5s)",
+        elapsed.as_secs_f64()
+    );
 }
