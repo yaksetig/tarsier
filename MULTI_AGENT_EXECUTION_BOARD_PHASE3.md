@@ -132,6 +132,7 @@ Highest-priority dependency edges:
 `2026-03-10T00:00:00Z | system | INIT | CLAIM | Phase-3 board created`
 `2026-03-10T18:53:25Z | AGENT_2 | PANIC-01 | CLAIM | taking task`
 `2026-03-10T18:53:50Z | AGENT_1 | INTEG-01 | CLAIM | taking task`
+`2026-03-10T19:18:51Z | AGENT_1 | INTEG-02 | CLAIM | taking task`
 
 ---
 
@@ -145,6 +146,9 @@ Highest-priority dependency edges:
 `2026-03-10T19:02:42Z | AGENT_1 | INTEG-01 | PR_OPEN | branch=codex/agent1-integ-01-v1 pr=local summary=deterministic CometBFT docker-compose harness + bootstrap + config validator + docs`
 `2026-03-10T19:02:42Z | AGENT_1 | INTEG-01 | DONE | commit=5573943 tests=python3 scripts/check-cometbft-live-config.py; bash -n scripts/cometbft-live-harness.sh; bash -n integration/cometbft-live/bootstrap/bootstrap.sh; docker compose -f integration/cometbft-live/docker-compose.yml config >/tmp/cometbft_live_compose.out; ./scripts/cometbft-live-harness.sh endpoint` 
 `2026-03-10T19:03:21Z | AGENT_1 | INTEG-01 | CHANGE | pr_url=https://github.com/yaksetig/tarsier/pull/new/codex/agent1-integ-01-v1` 
+`2026-03-10T19:18:51Z | AGENT_1 | INTEG-02 | START | implementation started`
+`2026-03-10T19:21:08Z | AGENT_1 | INTEG-02 | PR_OPEN | branch=codex/agent1-integ-02-v1 pr=https://github.com/yaksetig/tarsier/pull/new/codex/agent1-integ-02-v1 summary=deterministic etcd-raft docker-compose harness + config validator + docs`
+`2026-03-10T19:21:08Z | AGENT_1 | INTEG-02 | DONE | commit=f767aa2 tests=python3 scripts/check-etcd-raft-live-config.py; bash -n scripts/etcd-raft-live-harness.sh; docker compose -f integration/etcd-raft-live/docker-compose.yml config >/tmp/etcd_raft_live_compose.out; ./scripts/etcd-raft-live-harness.sh endpoint` 
 
 ---
 
