@@ -133,9 +133,16 @@ Acceptance criteria:
 Minimum theorem target:
 - Coq statement equivalent to Lean theorem over same exported semantics artifact.
 
+Prototype artifacts:
+- generator: `.github/scripts/export_kernel_semantics_coq.py`
+- checked Coq module: `artifacts/kernel-semantics/coq/KernelSemanticsV1.v`
+- contract checker: `.github/scripts/check_kernel_coq_prototype.py`
+- CI workflow: `.github/workflows/kernel-coq-proof.yml`
+
 Acceptance criteria:
 - Coq proof script checks in CI;
 - proof scope and assumptions documented side-by-side with Lean statement.
+- deterministic regeneration gate (`export_kernel_semantics_coq.py` output must match committed Coq module).
 
 ## M4 (Post KERN-04): Parity Drift Gate
 
