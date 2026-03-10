@@ -8,7 +8,7 @@ Scope:
 - expose deterministic RPC/P2P endpoints for downstream conformance work.
 
 Out of scope:
-- model-to-implementation conformance assertions (handled by `INTEG-03`).
+- full multi-node adversarial campaigns (single-node harness is intentional here).
 
 ## Layout
 
@@ -44,3 +44,18 @@ scripts/cometbft-live-harness.sh start
 The harness intentionally runs one validator (`proxy_app=kvstore`) so upstream
 integration tests can have stable startup and transport behavior before moving
 to multi-node scenarios in later tasks.
+
+## Active Conformance Smoke (INTEG-03)
+
+Model-to-implementation active conformance assertions are available via:
+
+```bash
+./scripts/cometbft-conformance-active-smoke.sh assert-fixture
+./scripts/cometbft-conformance-active-smoke.sh smoke
+```
+
+`smoke` runs a live end-to-end path:
+
+- starts the CometBFT harness;
+- replays `conformance-active` schedule events to a local live endpoint contract;
+- validates deterministic trace assertions (`start/tick/fault/stop`, event counts, final tick).

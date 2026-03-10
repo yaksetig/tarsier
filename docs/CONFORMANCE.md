@@ -196,6 +196,34 @@ Static deterministic config checks:
 python3 scripts/check-cometbft-live-config.py
 ```
 
+## CometBFT Active Conformance E2E (INTEG-03)
+
+`INTEG-03` adds an end-to-end active conformance smoke path that exercises:
+
+1. live CometBFT harness health (`scripts/cometbft-live-harness.sh start`);
+2. `tarsier conformance-active` schedule replay to a live endpoint contract;
+3. deterministic trace assertions over emitted `start/tick/fault/stop` events.
+
+Fixture-only contract check (no Docker required):
+
+```bash
+./scripts/cometbft-conformance-active-smoke.sh assert-fixture
+```
+
+Full end-to-end smoke (requires Docker + local toolchain):
+
+```bash
+./scripts/cometbft-conformance-active-smoke.sh smoke
+```
+
+The smoke script verifies:
+
+- adapter is `cometbft`;
+- schema version and seed are stable;
+- expected fault/tick counts are deterministic;
+- live contract metadata is `tarsier.active.v1`;
+- endpoint receives the exact deterministic `start -> tick/fault* -> stop` sequence.
+
 ## etcd-raft Live Harness
 
 `INTEG-02` adds a reproducible single-node etcd harness for live etcd-raft
