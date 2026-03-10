@@ -5051,4 +5051,182 @@ protocol BuggyBroadcast {
             "should declare global p_1 (initial)"
         );
     }
+
+    // ── RECONF-03: multi-epoch regression tests ─────────────────────
+
+    /// Helper: build a minimal TA with n (fixed), t (varying), and a
+    /// reconfigure rule from l0→l1 that sets t = new_value.
+    fn build_reconfig_ta(
+        new_value: LinearCombination,
+    ) -> (ThresholdAutomaton, LocationId, LocationId, ParamId) {
+        let mut ta = ThresholdAutomaton::new();
+        ta.add_parameter(Parameter::fixed("n".to_string()));
+        let t_id = ta.add_parameter(Parameter::varying("t".to_string()));
+        let l0 = ta.add_location(Location {
+            name: "Init".into(),
+            role: "R".into(),
+            phase: "init".into(),
+            local_vars: IndexMap::new(),
+        });
+        let l1 = ta.add_location(Location {
+            name: "Done".into(),
+            role: "R".into(),
+            phase: "done".into(),
+            local_vars: IndexMap::new(),
+        });
+        ta.initial_locations.push(l0);
+        ta.add_shared_var(SharedVar {
+            name: "votes".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        ta.add_rule(Rule {
+            from: l0,
+            to: l1,
+            guard: Guard::trivial(),
+            updates: vec![],
+            collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
+            param_updates: vec![ParamUpdate {
+                param: t_id,
+                value: new_value,
+            }],
+        });
+        ta.constraints.adversary_bound_param = Some(t_id);
+        (ta, l0, l1, t_id)
+    }
+
+    #[test]
+    fn epoch_resilience_reasserted_at_each_step() {
+        // TA with resilience n > 3*t and reconfigure { t = 5; }
+        let (mut ta, _l0, l1, _t_id) = build_reconfig_ta(LinearCombination::constant(5));
+        ta.constraints.resilience_condition = Some(LinearConstraint {
+            lhs: LinearCombination {
+                constant: 0,
+                terms: vec![(1, ParamId::from(0))], // n
+            },
+            op: CmpOp::Gt,
+            rhs: LinearCombination {
+                constant: 0,
+                terms: vec![(3, ParamId::from(1))], // 3*t
+            },
+        });
+
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_bmc(&cs, &property, 2);
+        let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+
+        // Should contain resilience re-assertion at step 1 using p_1_1 (step-1 t)
+        let has_epoch_resilience = assertions.iter().any(|a| a.contains("p_1_1") && a.contains("p_0"));
+        assert!(
+            has_epoch_resilience,
+            "resilience should be re-asserted using epoch-aware params at step 1"
+        );
+    }
+
+    #[test]
+    fn epoch_mutual_exclusion_for_multi_rule_updates() {
+        // TA with two rules both updating t to different values
+        let mut ta = ThresholdAutomaton::new();
+        ta.add_parameter(Parameter::fixed("n".to_string()));
+        let t_id = ta.add_parameter(Parameter::varying("t".to_string()));
+        let l0 = ta.add_location(Location {
+            name: "Init".into(),
+            role: "R".into(),
+            phase: "init".into(),
+            local_vars: IndexMap::new(),
+        });
+        let l1 = ta.add_location(Location {
+            name: "DoneA".into(),
+            role: "R".into(),
+            phase: "done_a".into(),
+            local_vars: IndexMap::new(),
+        });
+        let l2 = ta.add_location(Location {
+            name: "DoneB".into(),
+            role: "R".into(),
+            phase: "done_b".into(),
+            local_vars: IndexMap::new(),
+        });
+        ta.initial_locations.push(l0);
+        ta.add_shared_var(SharedVar {
+            name: "votes".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        // Rule 0: reconfigure t = 1
+        ta.add_rule(Rule {
+            from: l0,
+            to: l1,
+            guard: Guard::trivial(),
+            updates: vec![],
+            collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
+            param_updates: vec![ParamUpdate {
+                param: t_id,
+                value: LinearCombination::constant(1),
+            }],
+        });
+        // Rule 1: reconfigure t = 2
+        ta.add_rule(Rule {
+            from: l0,
+            to: l2,
+            guard: Guard::trivial(),
+            updates: vec![],
+            collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
+            param_updates: vec![ParamUpdate {
+                param: t_id,
+                value: LinearCombination::constant(2),
+            }],
+        });
+        ta.constraints.adversary_bound_param = Some(t_id);
+
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_bmc(&cs, &property, 1);
+        let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+
+        // Should contain mutual exclusion constraint (ite-based indicator sum <= 1)
+        let has_mutex = assertions.iter().any(|a| a.contains("ite") && a.contains("delta_0_0") && a.contains("delta_0_1"));
+        assert!(
+            has_mutex,
+            "should have mutual-exclusion constraint for multi-rule param updates"
+        );
+    }
+
+    #[test]
+    fn epoch_frame_constraint_preserves_unchanged_params() {
+        // TA with varying param but no rule updates it at some steps
+        let (ta, _l0, l1, _t_id) = build_reconfig_ta(LinearCombination::constant(5));
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_bmc(&cs, &property, 3);
+        let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+
+        // Check frame constraints exist at each step boundary
+        for step in 0..3 {
+            let curr = format!("p_1_{}", step);
+            let next = format!("p_1_{}", step + 1);
+            let has_frame = assertions.iter().any(|a| a.contains(&curr) && a.contains(&next));
+            assert!(
+                has_frame,
+                "should have frame/update constraint between step {} and {}",
+                step,
+                step + 1
+            );
+        }
+    }
 }

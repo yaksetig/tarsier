@@ -3690,6 +3690,75 @@ protocol Reconfig {
     );
 }
 
+// ── RECONF-03: lowering regression tests ─────────────────────
+
+#[test]
+fn lower_reconfigure_populates_reconfiguration_spec() {
+    let src = r#"
+protocol Reconfig {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    message Vote;
+    role Replica {
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                reconfigure {
+                    t = t - 1;
+                }
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let prog = parse(src, "reconfig_spec.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+    assert!(
+        ta.reconfiguration.is_some(),
+        "ReconfigurationSpec should be populated when reconfigure actions exist"
+    );
+    let spec = ta.reconfiguration.unwrap();
+    assert_eq!(
+        spec.semantics,
+        ReconfigurationSemantics::NextStep,
+        "default semantics should be NextStep"
+    );
+    assert_eq!(
+        spec.max_reconfigurations, 0,
+        "default max_reconfigurations should be 0 (unbounded)"
+    );
+}
+
+#[test]
+fn lower_no_reconfigure_leaves_spec_none() {
+    let src = r#"
+protocol NoReconfig {
+    parameters { n: nat; t: nat; }
+    resilience { n > 3*t; }
+    message Vote;
+    role Replica {
+        init waiting;
+        phase waiting {
+            when received >= 1 Vote => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property safe: safety { true == true }
+}
+"#;
+    let prog = parse(src, "no_reconfig.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+    assert!(
+        ta.reconfiguration.is_none(),
+        "ReconfigurationSpec should be None when no reconfigure actions exist"
+    );
+}
+
 #[test]
 fn lower_clock_actions_to_rule_clock_updates() {
     let src = r#"
