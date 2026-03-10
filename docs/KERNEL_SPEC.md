@@ -242,5 +242,6 @@ Total: **31** distinct error codes.
 | `docs/certificate-schema-v2.json` | Machine-readable JSON Schema for `certificate.json` |
 | `docs/TRUST_BOUNDARY.md` | Trust assumptions, governance profiles, threat model |
 | `docs/CHECKER_SOUNDNESS_ARGUMENT.md` | Soundness argument artifact with explicit assumptions/non-goals and machine-checked subset proof links |
+| `docs/KERNEL_FORMALIZATION_RFC.md` | Formalization roadmap for exported semantics + Lean/Coq checker soundness milestones |
 | `crates/tarsier-proof-kernel/src/lib.rs` | Reference implementation |
 | `crates/tarsier-certcheck/src/main.rs` | Standalone replay binary using this kernel |
