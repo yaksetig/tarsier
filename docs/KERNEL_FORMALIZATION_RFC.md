@@ -118,9 +118,15 @@ Minimum theorem target:
 - hash-match predicates,
 - SMT structural sanity predicates.
 
+Prototype artifacts:
+- generator: `.github/scripts/export_kernel_semantics_lean.py`
+- checked Lean module: `artifacts/kernel-semantics/lean/KernelSemanticsV1.lean`
+- contract checker: `.github/scripts/check_kernel_lean_prototype.py`
+
 Acceptance criteria:
 - theorem checked in CI by Lean;
 - at least one negative counterexample construction tested (reject path).
+- deterministic regeneration gate (`export_kernel_semantics_lean.py` output must match committed Lean module).
 
 ## M3 (KERN-04): Coq Prototype Parity Theorem
 

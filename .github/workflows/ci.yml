@@ -55,6 +55,17 @@ jobs:
       - name: Enforce Kernel Semantics Artifact Contract
         run: python3 ./.github/scripts/check_kernel_semantics_artifact.py
 
+      - name: Setup Lean Toolchain
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf > /tmp/elan-init.sh
+          sh /tmp/elan-init.sh -y --default-toolchain stable
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Enforce Kernel Lean Prototype Contract
+        run: |
+          lean --version
+          python3 ./.github/scripts/check_kernel_lean_prototype.py
+
       - name: Enforce Checker Soundness Artifact
         run: python3 ./.github/scripts/check_checker_soundness_artifact.py
 

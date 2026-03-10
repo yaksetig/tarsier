@@ -245,5 +245,8 @@ Total: **31** distinct error codes.
 | `docs/KERNEL_FORMALIZATION_RFC.md` | Formalization roadmap for exported semantics + Lean/Coq checker soundness milestones |
 | `docs/kernel-semantics-schema-v1.json` | JSON schema for checker-semantics export artifacts |
 | `artifacts/kernel-semantics/kernel_semantics_v1.json` | Canonical v1 checker-semantics artifact emitted by `kernel-semantics-export` |
+| `artifacts/kernel-semantics/lean/KernelSemanticsV1.lean` | Lean prototype theorem module proving minimal checker-soundness implication over exported semantics |
+| `.github/scripts/export_kernel_semantics_lean.py` | Deterministic exporter from JSON semantics artifact to Lean prototype module |
+| `.github/scripts/check_kernel_lean_prototype.py` | Contract check: Lean module regen parity + theorem typecheck |
 | `crates/tarsier-proof-kernel/src/lib.rs` | Reference implementation |
 | `crates/tarsier-certcheck/src/main.rs` | Standalone replay binary using this kernel |
