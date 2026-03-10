@@ -1,0 +1,39 @@
+{
+  "genesis_time": "2026-01-01T00:00:00Z",
+  "chain_id": "tarsier-integ-01",
+  "initial_height": "1",
+  "consensus_params": {
+    "block": {
+      "max_bytes": "22020096",
+      "max_gas": "-1",
+      "time_iota_ms": "1000"
+    },
+    "evidence": {
+      "max_age_num_blocks": "100000",
+      "max_age_duration": "172800000000000",
+      "max_bytes": "1048576"
+    },
+    "validator": {
+      "pub_key_types": [
+        "ed25519"
+      ]
+    },
+    "version": {},
+    "abci": {
+      "vote_extensions_enable_height": "0"
+    }
+  },
+  "validators": [
+    {
+      "address": "E74FBE24164CFC4F88E311C3AC92E63D0DC310D8",
+      "pub_key": {
+        "type": "tendermint/PubKeyEd25519",
+        "value": "UjxDQgVTlHJOZ7axpMl/iczMIJXiQpFxCFjwKGvzYqE="
+      },
+      "power": "10",
+      "name": "tarsier-validator-0"
+    }
+  ],
+  "app_hash": "",
+  "app_state": {}
+}
