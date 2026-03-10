@@ -1,0 +1,33 @@
+services:
+  etcd-node0:
+    image: quay.io/coreos/etcd:v3.5.14
+    container_name: tarsier-etcd-node0
+    command:
+      - /usr/local/bin/etcd
+      - --name=node0
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd-node0:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd-node0:2380
+      - --initial-cluster=node0=http://etcd-node0:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=tarsier-integ-02
+      - --heartbeat-interval=100
+      - --election-timeout=1000
+      - --log-level=warn
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    volumes:
+      - etcd-node0-data:/etcd-data
+    healthcheck:
+      test: ["CMD-SHELL", "ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 endpoint health >/dev/null"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  etcd-node0-data:
+    name: tarsier-etcd-node0-data

@@ -196,6 +196,38 @@ Static deterministic config checks:
 python3 scripts/check-cometbft-live-config.py
 ```
 
+## etcd-raft Live Harness
+
+`INTEG-02` adds a reproducible single-node etcd harness for live etcd-raft
+integration bring-up. It runs a real etcd process in Docker with fixed cluster
+token, node identity, and timing parameters.
+
+Harness assets:
+
+- `integration/etcd-raft-live/docker-compose.yml`
+
+From repo root:
+
+```bash
+scripts/etcd-raft-live-harness.sh start
+scripts/etcd-raft-live-harness.sh status
+scripts/etcd-raft-live-harness.sh endpoint
+scripts/etcd-raft-live-harness.sh stop
+```
+
+For a clean deterministic restart:
+
+```bash
+scripts/etcd-raft-live-harness.sh reset
+scripts/etcd-raft-live-harness.sh start
+```
+
+Static deterministic config checks:
+
+```bash
+python3 scripts/check-etcd-raft-live-config.py
+```
+
 ## Triage Playbook
 
 Conformance mismatches/errors are classified as:
