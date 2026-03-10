@@ -420,3 +420,80 @@ Columns:
 2026-03-09T12:53:32Z | 1 | X-03 | START | documentation/migration/quickstart updates started
 2026-03-09T12:57:59Z | 1 | X-03 | PR_OPEN | codex/agent1-x-03-v2 https://github.com/yaksetig/tarsier/pull/new/codex/agent1-x-03-v2 docs+migration+quickstart updates
 2026-03-09T12:57:59Z | 1 | X-03 | DONE | commit=ba6f645 tests=git diff --check -- README.md docs/ADVANCED_USAGE.md docs/GETTING_STARTED.md docs/LANGUAGE_REFERENCE.md docs/MIGRATION.md MULTI_AGENT_EXECUTION_BOARD.md; python3 scripts/board_status.py; rg -n "infer-invariants|refinement-check|equivalence-check|conformance-replay|auto-strengthen|refines|fifo_channel|reconfigure" README.md docs/GETTING_STARTED.md docs/MIGRATION.md docs/ADVANCED_USAGE.md docs/LANGUAGE_REFERENCE.md
+
+2026-03-10T17:00:00Z | AGENT_2 | AI-01 | REVIEW_START | reviewing Agent 1 — AI-assisted invariant suggestion feature was removed by policy
+2026-03-10T17:00:00Z | AGENT_2 | AI-01 | REVIEW_PASS | feature deliberately removed by policy; assistant_template tests exist as replacement; --assist flag correctly rejected
+2026-03-10T17:00:00Z | AGENT_2 | AI-02 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | AI-02 | REVIEW_PASS | covered by AI-01 policy removal; parse_prove_rejects_removed_assist_flag test confirms clean removal
+2026-03-10T17:00:00Z | AGENT_2 | AI-03 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | AI-03 | REVIEW_PASS | covered by AI-01 policy removal
+2026-03-10T17:00:00Z | AGENT_2 | AI-04 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | AI-04 | REVIEW_PASS | covered by AI-01 policy removal
+2026-03-10T17:00:00Z | AGENT_2 | AI-05 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | AI-05 | REVIEW_PASS | covered by AI-01 policy removal
+2026-03-10T17:00:00Z | AGENT_2 | INV-01 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | INV-01 | REVIEW_PASS | invariant_inference module cleanly extracted with 21 unit tests passing
+2026-03-10T17:00:00Z | AGENT_2 | INV-02 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | INV-02 | REVIEW_PASS | 4 candidate categories with CTI filtering; real LinearTerm/PredicateOp types
+2026-03-10T17:00:00Z | AGENT_2 | INV-03 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | INV-03 | REVIEW_PASS | Z3-backed init+consecution checks with proper scoring pipeline
+2026-03-10T17:00:00Z | AGENT_2 | INV-04 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | INV-04 | REVIEW_PASS | infer-invariants CLI command with --solver/--depth/--timeout/--format flags
+2026-03-10T17:00:00Z | AGENT_2 | INV-05 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | INV-05 | REVIEW_PASS | prove_safety_with_auto_strengthen pre-pass integrates discovered predicates into k-induction/PDR
+2026-03-10T17:00:00Z | AGENT_2 | INV-06 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | INV-06 | REVIEW_PASS | 8 E2E tests: solver parity, PDR compat, corpus robustness; all pass in 1.6s
+2026-03-10T17:00:00Z | AGENT_2 | TWIN-04 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | TWIN-04 | REVIEW_PASS | 12 adapter tests pass; CometBFT + etcd-raft + runtime adapters all functional
+2026-03-10T17:00:00Z | AGENT_2 | TWIN-05 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | TWIN-05 | REVIEW_PASS | conformance-active CLI tests pass; deterministic seed handling verified
+2026-03-10T17:00:00Z | AGENT_2 | TWIN-06 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | TWIN-06 | REVIEW_PASS | scenario corpus + replay CI gate tests pass
+2026-03-10T17:00:00Z | AGENT_2 | RECONF-02 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | RECONF-02 | REVIEW_PASS | Parameter.time_varying + fixed()/varying() constructors + 8 tests
+2026-03-10T17:00:00Z | AGENT_2 | RECONF-03 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | RECONF-03 | REVIEW_PASS | reconfigure lowering with auto time_varying inference; 4 tests including error path
+2026-03-10T17:00:00Z | AGENT_2 | RECONF-04 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | RECONF-04 | REVIEW_PASS | epoch-aware param_var_at_step + encode_lc_at_step + frame constraints; 4 tests
+2026-03-10T17:00:00Z | AGENT_2 | RECONF-05 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | RECONF-05 | REVIEW_PASS | 7 E2E reconfig tests (BMC, k-induction, PDR, buggy detection) all pass
+2026-03-10T17:00:00Z | AGENT_2 | REF-06 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | REF-06 | REVIEW_PASS | 30 IR + 15 SMT refinement tests pass; comprehensive topology and scaling coverage
+2026-03-10T17:00:00Z | AGENT_2 | X-02 | REVIEW_START | reviewing Agent 3
+2026-03-10T17:00:00Z | AGENT_2 | X-02 | REVIEW_PASS | schema_version fields present across all JSON outputs (CLI, conformance, playground)
+2026-03-10T17:00:00Z | AGENT_2 | TIME-01 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | TIME-01 | REVIEW_PASS | 3 DSL clock/timeout tests pass; parser handles declarations, guards, reset/tick
+2026-03-10T17:00:00Z | AGENT_2 | TIME-02 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | TIME-02 | REVIEW_PASS | 5 IR clock tests pass; clock variables, reset, tick model correct
+2026-03-10T17:00:00Z | AGENT_2 | TIME-03 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | TIME-03 | REVIEW_PASS | timeout guard and clock action lowering tests pass
+2026-03-10T17:00:00Z | AGENT_2 | TIME-04 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | TIME-04 | REVIEW_FAIL | no clock_encoding test exists in tarsier-smt; SMT timed constraints encoding not implemented on main
+2026-03-10T17:00:00Z | AGENT_2 | TIME-05 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | TIME-05 | REVIEW_PASS | fair_liveness timeout guard tests pass
+2026-03-10T17:00:00Z | AGENT_2 | DAG-01 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | DAG-01 | REVIEW_PASS | 2 DSL parse tests pass; root and parent-dependency parsing correct
+2026-03-10T17:00:00Z | AGENT_2 | DAG-02 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | DAG-02 | REVIEW_PASS | 10 IR DAG tests pass; rounds/edges representation correct
+2026-03-10T17:00:00Z | AGENT_2 | DAG-03 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | DAG-03 | REVIEW_PASS | 6 rejection tests pass; cycles, self-loops, unknown parents, duplicates all caught
+2026-03-10T17:00:00Z | AGENT_2 | DAG-04 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | DAG-04 | REVIEW_PASS | activation + parent constraints test passes
+2026-03-10T17:00:00Z | AGENT_2 | DAG-05 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | DAG-05 | REVIEW_PASS | 2 E2E tests pass; safe verification + invalid cycle rejection
+2026-03-10T17:00:00Z | AGENT_2 | EXP-01 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | EXP-01 | REVIEW_PASS | 3 engine proof_export tests pass; IR mapping from certificates correct
+2026-03-10T17:00:00Z | AGENT_2 | EXP-02 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | EXP-02 | REVIEW_PASS | proof_export_command_parses test passes; CLI wiring correct
+2026-03-10T17:00:00Z | AGENT_2 | EXP-03 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | EXP-03 | REVIEW_PASS | Lean backend with obligation-specific theorems, no True stubs
+2026-03-10T17:00:00Z | AGENT_2 | EXP-04 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | EXP-04 | REVIEW_PASS | Coq backend with obligation-specific lemmas, no True stubs
+2026-03-10T17:00:00Z | AGENT_2 | EXP-05 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | EXP-05 | REVIEW_PASS | golden tests + certcheck integration + gated compile smoke
+2026-03-10T17:00:00Z | AGENT_2 | X-01 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | X-01 | REVIEW_PASS | 4 LSP tests pass; keyword completions + hover docs for new DSL features
+2026-03-10T17:00:00Z | AGENT_2 | X-03 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | X-03 | REVIEW_PASS | MIGRATION.md and GETTING_STARTED.md updated with new features
+2026-03-10T17:00:00Z | AGENT_2 | X-04 | REVIEW_START | reviewing Agent 1
+2026-03-10T17:00:00Z | AGENT_2 | X-04 | REVIEW_PASS | 12 solver parity/perf tests pass (1 cvc5 ignored)
