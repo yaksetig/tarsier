@@ -55,8 +55,10 @@ SOUNDNESS_RULES: list[tuple[str, str, str]] = [
     ),
 ]
 
-# Cross-reference patterns in markdown: `docs/FILENAME.md` or `FILENAME.md`
+# Cross-reference patterns in markdown: `docs/FILENAME.md`.
 DOC_REF_PATTERN = re.compile(r"`(docs/[A-Z_]+\.md)`")
+# Markdown inline links: [label](target)
+MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 
 
 def load_docs() -> dict[str, str]:
@@ -89,11 +91,38 @@ def check_terminology(docs: dict[str, str], errors: list[str]) -> None:
 def check_cross_references(docs: dict[str, str], errors: list[str]) -> None:
     """Check that doc cross-references point to existing files."""
     for doc_name, text in docs.items():
+        doc_path = ROOT / doc_name
         for match in DOC_REF_PATTERN.finditer(text):
             ref = match.group(1)
             if not (ROOT / ref).exists():
                 errors.append(
                     f"{doc_name}: cross-reference `{ref}` does not exist"
+                )
+
+        for match in MARKDOWN_LINK_PATTERN.finditer(text):
+            raw_target = match.group(1).strip()
+            # Link titles (e.g. "path \"title\"") are uncommon in docs; only keep target token.
+            target = raw_target.split(maxsplit=1)[0].strip()
+            if target.startswith("<") and target.endswith(">"):
+                target = target[1:-1]
+            if not target:
+                continue
+            if target.startswith(("#", "http://", "https://", "mailto:", "tel:")):
+                continue
+
+            path_part = target.split("#", maxsplit=1)[0].split("?", maxsplit=1)[0]
+            if not path_part:
+                continue
+
+            if path_part.startswith("/"):
+                resolved = ROOT / path_part.lstrip("/")
+            else:
+                resolved = (doc_path.parent / path_part).resolve()
+
+            if not resolved.exists():
+                errors.append(
+                    f"{doc_name}: markdown link `{target}` resolves to missing path "
+                    f"`{resolved.relative_to(ROOT) if resolved.is_absolute() and ROOT in resolved.parents else resolved}`"
                 )
 
 

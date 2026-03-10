@@ -28,6 +28,9 @@ cargo test --workspace
 # Single crate
 cargo test -p tarsier-engine
 
+# Documentation consistency + link audit
+python3 .github/scripts/check_doc_consistency.py
+
 # Full local CI gate (requires just)
 just ci
 ```

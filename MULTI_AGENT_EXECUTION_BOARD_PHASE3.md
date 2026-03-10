@@ -255,3 +255,6 @@ Highest-priority dependency edges:
 `2026-03-10T20:52:10Z | AGENT_1 | EXAMPLE-03 | CHANGE | done_commit=dafcb2c`
 `2026-03-10T20:53:41Z | AGENT_1 | DOCS-04 | CLAIM | taking task`
 `2026-03-10T20:53:41Z | AGENT_1 | DOCS-04 | START | implementation started`
+`2026-03-10T20:56:23Z | AGENT_1 | DOCS-04 | PR_OPEN | branch=codex/agent1-docs-04-v1 pr=local summary=extend docs link audit to markdown links and add CLI help doc entry points`
+`2026-03-10T20:56:23Z | AGENT_1 | DOCS-04 | DONE | commit=pending tests=python3 .github/scripts/check_doc_consistency.py; cargo test -p tarsier-cli --test cli_feature_contract_default -- --nocapture; cargo run -q -p tarsier-cli -- --help | rg -n "Documentation entry points|docs/GETTING_STARTED.md|docs/LANGUAGE_REFERENCE.md|docs/ADVANCED_USAGE.md"`
+`2026-03-10T20:56:41Z | AGENT_1 | DOCS-04 | CHANGE | done_commit=312e609`
