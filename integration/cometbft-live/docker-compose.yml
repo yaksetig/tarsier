@@ -1,0 +1,23 @@
+services:
+  cometbft-node0:
+    image: cometbft/cometbft:v0.38.17
+    container_name: tarsier-cometbft-node0
+    environment:
+      CMTHOME: /comet
+    entrypoint: ["/bin/sh", "/harness/bootstrap.sh"]
+    volumes:
+      - cometbft-node0-data:/comet
+      - ./bootstrap:/harness:ro
+    ports:
+      - "26657:26657"
+      - "26656:26656"
+    healthcheck:
+      test: ["CMD", "cometbft", "status", "--node", "tcp://127.0.0.1:26657"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  cometbft-node0-data:
+    name: tarsier-cometbft-node0-data

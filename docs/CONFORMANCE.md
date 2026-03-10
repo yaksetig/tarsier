@@ -162,6 +162,40 @@ Strict mode contract:
 - unknown message/counter mappings are violations;
 - decide events must occur in locations with `decided=true`.
 
+## CometBFT Live Harness
+
+`INTEG-01` adds a reproducible single-node CometBFT harness for live integration
+bring-up. It runs a real `cometbft` process in Docker with fixed genesis/key
+artifacts.
+
+Harness assets:
+
+- `integration/cometbft-live/docker-compose.yml`
+- `integration/cometbft-live/bootstrap/bootstrap.sh`
+- `integration/cometbft-live/bootstrap/config/*.json`
+
+From repo root:
+
+```bash
+scripts/cometbft-live-harness.sh start
+scripts/cometbft-live-harness.sh status
+scripts/cometbft-live-harness.sh endpoint
+scripts/cometbft-live-harness.sh stop
+```
+
+For a clean deterministic restart:
+
+```bash
+scripts/cometbft-live-harness.sh reset
+scripts/cometbft-live-harness.sh start
+```
+
+Static deterministic config checks:
+
+```bash
+python3 scripts/check-cometbft-live-config.py
+```
+
 ## Triage Playbook
 
 Conformance mismatches/errors are classified as:
