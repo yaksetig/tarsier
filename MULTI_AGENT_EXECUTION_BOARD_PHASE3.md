@@ -193,3 +193,7 @@ Highest-priority dependency edges:
 `2026-03-10T20:03:04Z | AGENT_1 | CODEGEN-03 | PR_OPEN | branch=codex/agent1-codegen-03-v1 pr=local summary=add Go semantic validation suite using model-vs-generated trace oracle`
 `2026-03-10T20:03:04Z | AGENT_1 | CODEGEN-03 | DONE | commit=pending tests=cargo test -p tarsier-codegen --test semantic_go; cargo test -p tarsier-codegen trace_oracle; cargo clippy -p tarsier-codegen --test semantic_go -- -D warnings`
 `2026-03-10T20:03:11Z | AGENT_1 | CODEGEN-03 | CHANGE | done_commit=15c3f6c`
+`2026-03-10T20:04:40Z | AGENT_1 | CODEGEN-04 | CLAIM | taking task`
+`2026-03-10T20:04:40Z | AGENT_1 | CODEGEN-04 | START | implementation started`
+`2026-03-10T20:06:37Z | AGENT_1 | CODEGEN-04 | PR_OPEN | branch=codex/agent1-codegen-04-v1 pr=local summary=add CI codegen semantic parity gate and deterministic parity script`
+`2026-03-10T20:06:37Z | AGENT_1 | CODEGEN-04 | DONE | commit=pending tests=./scripts/codegen-semantic-parity.sh`

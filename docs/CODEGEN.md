@@ -120,6 +120,7 @@ Recommended local loop when touching codegen internals:
 ```bash
 cargo test -p tarsier-codegen
 cargo test -p tarsier-cli --test codegen_verified
+./scripts/codegen-semantic-parity.sh
 ```
 
 Quality bar for codegen changes:

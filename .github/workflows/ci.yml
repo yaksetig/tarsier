@@ -779,6 +779,23 @@ jobs:
       - name: Run codegen Go smoke tests
         run: cargo test --package tarsier-codegen --test integration smoke_go
 
+  codegen-semantic-parity:
+    runs-on: ubuntu-latest
+    needs: build-test
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Run codegen semantic parity suite
+        run: ./scripts/codegen-semantic-parity.sh
+
   sandbox-security-gate:
     runs-on: ubuntu-latest
     needs: build-test
@@ -1780,7 +1797,7 @@ jobs:
 
   test-summary:
     runs-on: ubuntu-latest
-    needs: [build-test, cross-platform-tests, lsp-integration-tests, conformance-tests, cvc5-parity]
+    needs: [build-test, cross-platform-tests, lsp-integration-tests, conformance-tests, cvc5-parity, codegen-semantic-parity]
     if: always()
     steps:
       - name: Collect Test Summary
@@ -1795,6 +1812,7 @@ jobs:
           | LSP integration | ${{ needs.lsp-integration-tests.result }} |
           | Conformance | ${{ needs.conformance-tests.result }} |
           | cvc5 parity | ${{ needs.cvc5-parity.result }} |
+          | Codegen semantic parity | ${{ needs.codegen-semantic-parity.result }} |
           SUMMARY
       - name: Fail if any required job failed
         if: contains(needs.*.result, 'failure')
