@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-ENGINE_SRC="crates/tarsier-engine/src"
+ENGINE_SRC="${ENGINE_SRC:-crates/tarsier-engine/src}"
 
 # Known allowlist entries (file:line patterns that are acceptable).
 # Each entry is a grep -F pattern matched against "file:line" output.
@@ -16,10 +16,15 @@ ALLOWLIST=(
 )
 
 # Search for panic-family calls, excluding test files entirely.
+# Keep inline comments in scope so real violations like
+# `value.expect(...) // rationale` are still caught.
 violations=$(
   grep -rn \
     -e '\.unwrap()' \
+    -e '\.unwrap_err()' \
+    -e '\.unwrap_unchecked()' \
     -e '\.expect(' \
+    -e '\.expect_err(' \
     -e 'panic!(' \
     -e 'unreachable!(' \
     -e 'unimplemented!(' \
@@ -30,13 +35,11 @@ violations=$(
   | grep -v '_tests\.rs:' \
   | grep -v 'test_.*\.rs:' \
   | grep -v 'property_pipeline_unit_tests' \
-  | grep -v '#\[cfg(test)\]' \
-  | grep -v '#\[test\]' \
+  | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*//' \
   | grep -v '\.unwrap_or' \
   | grep -v '\.unwrap_or_else' \
   | grep -v '\.unwrap_or_default' \
   | grep -v 'unwrap_none' \
-  | grep -v '// ' \
   || true
 )
 
