@@ -1,0 +1,38 @@
+name: Kernel Coq Prototype
+
+on:
+  push:
+    paths:
+      - "artifacts/kernel-semantics/kernel_semantics_v1.json"
+      - "artifacts/kernel-semantics/coq/**"
+      - ".github/scripts/export_kernel_semantics_coq.py"
+      - ".github/scripts/check_kernel_coq_prototype.py"
+      - ".github/workflows/kernel-coq-proof.yml"
+      - "docs/KERNEL_FORMALIZATION_RFC.md"
+      - "docs/KERNEL_SPEC.md"
+  pull_request:
+    paths:
+      - "artifacts/kernel-semantics/kernel_semantics_v1.json"
+      - "artifacts/kernel-semantics/coq/**"
+      - ".github/scripts/export_kernel_semantics_coq.py"
+      - ".github/scripts/check_kernel_coq_prototype.py"
+      - ".github/workflows/kernel-coq-proof.yml"
+      - "docs/KERNEL_FORMALIZATION_RFC.md"
+      - "docs/KERNEL_SPEC.md"
+
+jobs:
+  kernel-coq-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Coq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y coq
+
+      - name: Enforce Kernel Coq Prototype Contract
+        run: |
+          coqc --version
+          python3 .github/scripts/check_kernel_coq_prototype.py

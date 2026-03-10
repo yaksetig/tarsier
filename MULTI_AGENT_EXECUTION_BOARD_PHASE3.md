@@ -294,3 +294,8 @@ PY`
 `2026-03-10T21:28:10Z | AGENT_1 | CI-03 | PR_OPEN | branch=codex/agent1-ci-03-v1 pr=local summary=align branch-protection required-check guidance across testing and multi-solver docs`
 `2026-03-10T21:28:10Z | AGENT_1 | CI-03 | DONE | commit=pending tests=python3 - <<"PY" ... branch-protection doc assertions ... PY; python3 .github/scripts/check_doc_consistency.py`
 `2026-03-10T21:28:21Z | AGENT_1 | CI-03 | CHANGE | done_commit=6733342`
+`2026-03-10T21:29:42Z | AGENT_1 | KERN-04 | CLAIM | taking task`
+`2026-03-10T21:29:42Z | AGENT_1 | KERN-04 | START | implementation started`
+`2026-03-10T21:34:05Z | AGENT_1 | KERN-04 | PR_OPEN | branch=codex/agent1-kern-04-v1 pr=local summary=add Coq prototype theorem exporter/checker + CI workflow parity with Lean artifact flow`
+`2026-03-10T21:34:05Z | AGENT_1 | KERN-04 | DONE | commit=pending tests=python3 .github/scripts/check_kernel_coq_prototype.py --skip-coqc; python3 .github/scripts/check_kernel_semantics_artifact.py; python3 .github/scripts/check_kernel_spec_consistency.py; python3 .github/scripts/check_doc_consistency.py`
+`2026-03-10T21:34:24Z | AGENT_1 | KERN-04 | CHANGE | done_commit=2dc6529`
