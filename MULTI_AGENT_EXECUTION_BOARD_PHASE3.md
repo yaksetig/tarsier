@@ -197,3 +197,4 @@ Highest-priority dependency edges:
 `2026-03-10T20:04:40Z | AGENT_1 | CODEGEN-04 | START | implementation started`
 `2026-03-10T20:06:37Z | AGENT_1 | CODEGEN-04 | PR_OPEN | branch=codex/agent1-codegen-04-v1 pr=local summary=add CI codegen semantic parity gate and deterministic parity script`
 `2026-03-10T20:06:37Z | AGENT_1 | CODEGEN-04 | DONE | commit=pending tests=./scripts/codegen-semantic-parity.sh`
+`2026-03-10T20:06:47Z | AGENT_1 | CODEGEN-04 | CHANGE | done_commit=a14d552`
