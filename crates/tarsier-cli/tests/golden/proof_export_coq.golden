@@ -22,7 +22,15 @@ Definition obligations : list (string * string * string) := [
   ("init_implies_inv", "unsat", "(check-sat)");
 ].
 
-Lemma obligation_init_implies_inv : True.
-Proof. exact I. Qed.
+Definition obligation_statement (name expected smt2 : string) : Prop :=
+  In (name, expected, smt2) obligations.
+
+Definition obligation_init_implies_inv_statement : Prop :=
+  obligation_statement "init_implies_inv" "unsat" "(check-sat)".
+
+Lemma obligation_init_implies_inv : obligation_init_implies_inv_statement.
+Proof.
+  (* Proof skeleton: replay certificate evidence for this obligation. *)
+Admitted.
 
 End TarsierExport.
