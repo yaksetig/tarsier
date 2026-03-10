@@ -133,6 +133,7 @@ Highest-priority dependency edges:
 `2026-03-10T18:53:25Z | AGENT_2 | PANIC-01 | CLAIM | taking task`
 `2026-03-10T18:53:50Z | AGENT_1 | INTEG-01 | CLAIM | taking task`
 `2026-03-10T19:18:51Z | AGENT_1 | INTEG-02 | CLAIM | taking task`
+`2026-03-10T19:22:13Z | AGENT_1 | DOCS-03 | CLAIM | taking task`
 
 ---
 
@@ -149,6 +150,9 @@ Highest-priority dependency edges:
 `2026-03-10T19:18:51Z | AGENT_1 | INTEG-02 | START | implementation started`
 `2026-03-10T19:21:08Z | AGENT_1 | INTEG-02 | PR_OPEN | branch=codex/agent1-integ-02-v1 pr=https://github.com/yaksetig/tarsier/pull/new/codex/agent1-integ-02-v1 summary=deterministic etcd-raft docker-compose harness + config validator + docs`
 `2026-03-10T19:21:08Z | AGENT_1 | INTEG-02 | DONE | commit=f767aa2 tests=python3 scripts/check-etcd-raft-live-config.py; bash -n scripts/etcd-raft-live-harness.sh; docker compose -f integration/etcd-raft-live/docker-compose.yml config >/tmp/etcd_raft_live_compose.out; ./scripts/etcd-raft-live-harness.sh endpoint` 
+`2026-03-10T19:22:13Z | AGENT_1 | DOCS-03 | START | implementation started`
+`2026-03-10T19:26:59Z | AGENT_1 | DOCS-03 | PR_OPEN | branch=codex/agent1-docs-03-v1 pr=https://github.com/yaksetig/tarsier/pull/new/codex/agent1-docs-03-v1 summary=invariant inference debugging playbook + command cross-links`
+`2026-03-10T19:26:59Z | AGENT_1 | DOCS-03 | DONE | commit=8aeaea5 tests=cargo run -q -p tarsier-cli -- infer-invariants examples/library/reliable_broadcast_safe.trs --depth 4 --timeout 30 --format json > /tmp/docs03_infer.json; python3 -c \"import json; d=json.load(open('/tmp/docs03_infer.json')); assert d['schema_version']==1 and 'result' in d and 'inductive' in d and 'init_only' in d\"; cargo run -q -p tarsier-cli -- prove examples/library/reliable_broadcast_safe.trs --k 4 --engine kinduction --auto-strengthen --format json > /tmp/docs03_prove_auto.json; python3 -c \"import json; d=json.load(open('/tmp/docs03_prove_auto.json')); assert d.get('auto_strengthen') is True and d.get('mode')=='prove' and 'result' in d and 'details' in d\"` 
 
 ---
 
