@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "faults": [
+    {
+      "tick": 1,
+      "kind": "drop_message",
+      "channel": "Vote",
+      "from_process": 1,
+      "to_process": 2
+    },
+    {
+      "tick": 2,
+      "action": {
+        "kind": "heal_partition"
+      }
+    },
+    {
+      "tick": 2,
+      "kind": "spawn_twin",
+      "process_id": 7,
+      "twin_id": 7001
+    }
+  ]
+}

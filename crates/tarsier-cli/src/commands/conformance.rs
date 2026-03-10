@@ -950,6 +950,28 @@ mod active_tests {
     }
 
     #[test]
+    fn conformance_active_command_runtime_fixture_writes_expected_json_shape() {
+        let trace = active_fixture_path("runtime_faults_basic.json");
+        let out = tmp_path("tarsier_conformance_active_runtime");
+        run_conformance_active_command(&trace, "runtime", 5, "json", Some(&out))
+            .expect("conformance-active should succeed on runtime fixture");
+
+        let raw = fs::read_to_string(&out).expect("output JSON should be readable");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["adapter"], "runtime");
+        assert_eq!(value["seed"], 5);
+        assert_eq!(
+            value["faults"]
+                .as_array()
+                .expect("faults should be array")
+                .len(),
+            3
+        );
+        fs::remove_file(out).ok();
+    }
+
+    #[test]
     fn conformance_active_command_seed_changes_same_tick_order_for_corpus_fixture() {
         let trace = active_fixture_path("cometbft_faults_same_tick.json");
         let out_a = tmp_path("tarsier_conformance_active_seed_a");

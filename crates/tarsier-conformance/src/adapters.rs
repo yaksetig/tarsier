@@ -115,15 +115,16 @@ pub enum AdapterFaultAction {
 
 /// Parse adapter-specific active fault schedules into normalized actions.
 ///
-/// Currently implemented for `cometbft`; other adapters return a typed error
-/// until TWIN-04 follow-up work extends parity.
+/// Implemented for `runtime` and `cometbft`; `etcd-raft` remains TODO under
+/// follow-up parity work.
 pub fn adapt_active_faults(
     kind: AdapterKind,
     raw: &str,
 ) -> Result<Vec<ScheduledAdapterFault>, AdapterError> {
     match kind {
+        AdapterKind::Runtime => adapt_runtime_active_faults(raw),
         AdapterKind::CometBft => adapt_cometbft_active_faults(raw),
-        AdapterKind::Runtime | AdapterKind::EtcdRaft => Err(AdapterError::Invalid {
+        AdapterKind::EtcdRaft => Err(AdapterError::Invalid {
             family: kind.as_str(),
             message: "active-fault adapter not implemented for this family".into(),
         }),
@@ -323,6 +324,59 @@ fn convert_comet_node(node: CometBftNode) -> Result<ProcessTrace, AdapterError> 
         role,
         events,
     })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeActiveInput {
+    schema_version: u32,
+    faults: Vec<RuntimeActiveFault>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum RuntimeActiveFault {
+    Nested {
+        tick: u64,
+        action: AdapterFaultAction,
+    },
+    Flat {
+        tick: u64,
+        #[serde(flatten)]
+        action: AdapterFaultAction,
+    },
+}
+
+fn adapt_runtime_active_faults(raw: &str) -> Result<Vec<ScheduledAdapterFault>, AdapterError> {
+    let input: RuntimeActiveInput =
+        serde_json::from_str(raw).map_err(|source| AdapterError::Decode {
+            family: ADAPTER_RUNTIME,
+            source,
+        })?;
+    if input.schema_version != 1 {
+        return Err(AdapterError::SchemaVersion {
+            family: ADAPTER_RUNTIME,
+            got: input.schema_version,
+        });
+    }
+
+    let mut normalized = Vec::with_capacity(input.faults.len());
+    let mut last_tick = 0u64;
+    for (idx, fault) in input.faults.into_iter().enumerate() {
+        let scheduled = match fault {
+            RuntimeActiveFault::Nested { tick, action }
+            | RuntimeActiveFault::Flat { tick, action } => ScheduledAdapterFault { tick, action },
+        };
+        if idx > 0 && scheduled.tick < last_tick {
+            return Err(AdapterError::Invalid {
+                family: ADAPTER_RUNTIME,
+                message: "fault ticks must be nondecreasing".into(),
+            });
+        }
+        last_tick = scheduled.tick;
+        normalized.push(scheduled);
+    }
+    Ok(normalized)
 }
 
 #[derive(Debug, Deserialize)]
@@ -783,9 +837,57 @@ mod tests {
     }
 
     #[test]
-    fn active_fault_adapter_reports_unimplemented_families() {
-        let err = adapt_active_faults(AdapterKind::Runtime, r#"{"schema_version":1,"faults":[]}"#)
-            .expect_err("runtime active faults should be unsupported in TWIN-04");
+    fn runtime_active_fault_adapter_maps_nested_and_flat_forms() {
+        let raw = r#"{
+            "schema_version": 1,
+            "faults": [
+                {"tick":1,"kind":"drop_message","channel":"Vote","from_process":1,"to_process":2},
+                {"tick":2,"action":{"kind":"heal_partition"}},
+                {"tick":3,"kind":"spawn_twin","process_id":7,"twin_id":7001}
+            ]
+        }"#;
+        let mapped = adapt_active_faults(AdapterKind::Runtime, raw)
+            .expect("runtime active faults should parse");
+        assert_eq!(mapped.len(), 3);
+        assert!(matches!(
+            mapped[0].action,
+            AdapterFaultAction::DropMessage {
+                ref channel,
+                from_process: Some(1),
+                to_process: Some(2)
+            } if channel == "Vote"
+        ));
+        assert!(matches!(
+            mapped[1].action,
+            AdapterFaultAction::HealPartition
+        ));
+        assert!(matches!(
+            mapped[2].action,
+            AdapterFaultAction::SpawnTwin {
+                process_id: 7,
+                twin_id: 7001
+            }
+        ));
+    }
+
+    #[test]
+    fn runtime_active_fault_adapter_rejects_non_monotonic_ticks() {
+        let raw = r#"{
+            "schema_version": 1,
+            "faults": [
+                {"tick":4,"kind":"heal_partition"},
+                {"tick":2,"kind":"drop_message","channel":"Vote"}
+            ]
+        }"#;
+        let err = adapt_active_faults(AdapterKind::Runtime, raw)
+            .expect_err("non-monotonic ticks should fail");
+        assert!(format!("{err}").contains("nondecreasing"));
+    }
+
+    #[test]
+    fn active_fault_adapter_reports_unimplemented_etcd_family() {
+        let err = adapt_active_faults(AdapterKind::EtcdRaft, r#"{"schema_version":1,"faults":[]}"#)
+            .expect_err("etcd active faults should remain unsupported for TWNX-03");
         assert!(format!("{err}").contains("not implemented"));
     }
 }
