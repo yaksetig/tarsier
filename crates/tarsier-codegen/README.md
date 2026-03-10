@@ -25,6 +25,8 @@ formally verified model.
   certificate reference, verification status, and optional audit tag.
 - `rust_gen` module -- Rust-specific code generation backend.
 - `go_gen` module -- Go-specific code generation backend.
+- `trace_oracle` module -- Shared model-vs-generated trace oracle harness used
+  to validate Rust and Go generated surfaces against the same model contract.
 - `trace_hooks` module -- Generates runtime trace hook instrumentation for
   conformance checking.
 

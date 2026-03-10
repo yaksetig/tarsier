@@ -9,6 +9,7 @@ pub mod common;
 pub mod go_gen;
 pub mod rust_gen;
 pub mod trace_hooks;
+pub mod trace_oracle;
 
 use tarsier_dsl::ast;
 
