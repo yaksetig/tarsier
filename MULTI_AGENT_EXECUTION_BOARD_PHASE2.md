@@ -187,3 +187,71 @@ High-confidence no-overlap pairs:
 2026-03-10T12:09:50Z | 1 | DAGX-03 | BLOCKED | no ready Agent-1 lane TODO tasks; waiting dependency DAGX-01 (Agent-2 lane)
 2026-03-10T12:10:48Z | 1 | DAGX-05 | BLOCKED | no ready Agent-1 lane TODO tasks; blocked by DAGX-03 -> DAGX-01 dependency chain
 2026-03-10T12:11:22Z | 1 | DAGX-03 | BLOCKED | still no ready Agent-1 TODO; blocked on DAGX-01 completion in Agent-2 lane
+
+`2026-03-10T12:27:48Z | AGENT_2 | REFX-02 | CLAIM | taking task`
+
+`2026-03-10T12:27:49Z | AGENT_2 | REFX-02 | START | implementation started`
+2026-03-10T12:27:56Z | 1 | REFX-01 | REVIEW_START | reviewing commit=e728333 branch=codex/agent2-refx-01-v1
+2026-03-10T12:29:17Z | 1 | REFX-01 | REVIEW_PASS | validated; tests=cargo test -p tarsier-smt --test refinement_encoding_tests && cargo test -p tarsier-cli
+
+`2026-03-10T12:31:09Z | AGENT_2 | REFX-02 | DONE | commit=f2a95a0 branch=codex/agent2-refx-02-v1 tests=cargo test -p tarsier-smt --test refinement_encoding_tests && cargo test -p tarsier-smt refinement && cargo test -p tarsier-cli`
+
+`2026-03-10T12:31:35Z | AGENT_2 | REFX-03 | CLAIM | taking task`
+
+`2026-03-10T12:31:35Z | AGENT_2 | REFX-03 | START | implementation started`
+
+`2026-03-10T12:40:49Z | AGENT_2 | REFX-03 | DONE | commit=e948dd5 branch=codex/agent2-refx-03-v1 tests=cargo test -p tarsier-smt --test refinement_encoding_tests && cargo build`
+
+`2026-03-10T12:41:08Z | AGENT_2 | REFX-04 | CLAIM | taking task`
+
+`2026-03-10T12:41:08Z | AGENT_2 | REFX-04 | START | implementation started`
+
+`2026-03-10T12:43:06Z | AGENT_2 | REFX-04 | DONE | commit=a0a9ff2 branch=codex/agent2-refx-04-v1 tests=cargo test -p tarsier-cli`
+
+`2026-03-10T12:43:06Z | AGENT_2 | EQX-01 | CLAIM | taking task`
+
+`2026-03-10T12:43:06Z | AGENT_2 | EQX-01 | START | implementation started`
+
+`2026-03-10T12:47:27Z | AGENT_2 | EQX-01 | DONE | commit=9cf65eb branch=codex/agent2-eqx-01-v1 tests=cargo test -p tarsier-smt --test equivalence_encoding_tests && cargo test -p tarsier-smt equivalence && cargo test -p tarsier-cli -- equivalence`
+
+`2026-03-10T12:47:27Z | AGENT_2 | DAGX-01 | CLAIM | taking task (unblocks Agent 1 DAGX-03/DAGX-05)`
+
+`2026-03-10T12:47:27Z | AGENT_2 | DAGX-01 | START | implementation started`
+
+`2026-03-10T12:50:19Z | AGENT_2 | DAGX-01 | DONE | commit=d23ae7f branch=codex/agent2-dagx-01-v1 tests=cargo test -p tarsier-ir -- lower_dag_round && cargo build`
+
+`2026-03-10T12:50:19Z | AGENT_2 | EQX-02 | CLAIM | taking task`
+
+`2026-03-10T12:50:19Z | AGENT_2 | EQX-02 | START | implementation started`
+
+`2026-03-10T12:53:05Z | AGENT_2 | EQX-02 | DONE | commit=e2c519e branch=codex/agent2-eqx-02-v1 tests=cargo test -p tarsier-smt --test equivalence_encoding_tests && cargo test -p tarsier-smt --test refinement_encoding_tests -- witness_minimized && cargo test -p tarsier-cli -- equivalence`
+
+`2026-03-10T12:53:05Z | AGENT_2 | EQX-03 | CLAIM | taking task`
+
+`2026-03-10T12:53:05Z | AGENT_2 | EQX-03 | START | implementation started`
+
+`2026-03-10T12:53:05Z | AGENT_2 | EQX-03 | DONE | commit=e2c519e (covered by EQX-01+EQX-02) branch=codex/agent2-eqx-03-v1 tests=cargo test -p tarsier-cli -- equivalence`
+
+`2026-03-10T12:53:05Z | AGENT_2 | EQX-04 | CLAIM | taking task`
+
+`2026-03-10T12:53:05Z | AGENT_2 | EQX-04 | START | implementation started`
+
+`2026-03-10T12:53:05Z | AGENT_2 | EQX-04 | DONE | commit=e2c519e (covered by EQX-01+EQX-02: EquivalenceReport struct with serde Serialize, schema v2, skip_serializing_if for optional fields) branch=codex/agent2-eqx-03-v1 tests=cargo test -p tarsier-cli -- equivalence`
+
+`2026-03-10T12:55:00Z | AGENT_2 | DAGX-02 | CLAIM | taking task`
+
+`2026-03-10T12:55:00Z | AGENT_2 | DAGX-02 | START | implementation started`
+
+`2026-03-10T12:55:37Z | AGENT_2 | DAGX-02 | DONE | commit=b8055dd branch=codex/agent2-dagx-02-v1 tests=cargo test -p tarsier-smt -- dag && cargo build`
+
+`2026-03-10T12:55:37Z | AGENT_2 | REFX-05 | CLAIM | taking task`
+
+`2026-03-10T12:55:37Z | AGENT_2 | REFX-05 | START | implementation started`
+
+`2026-03-10T12:57:15Z | AGENT_2 | REFX-05 | DONE | commit=260409b branch=codex/agent2-refx-05-v1 tests=cargo test -p tarsier-smt --test solver_parity_perf_expansions`
+
+`2026-03-10T12:57:15Z | AGENT_2 | EQX-05 | CLAIM | taking task`
+
+`2026-03-10T12:57:15Z | AGENT_2 | EQX-05 | START | implementation started`
+
+`2026-03-10T12:58:14Z | AGENT_2 | EQX-05 | DONE | commit=3490a77 branch=codex/agent2-eqx-05-v1 tests=cargo test -p tarsier-smt --test equivalence_encoding_tests`
