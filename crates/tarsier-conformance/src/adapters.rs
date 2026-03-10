@@ -115,8 +115,7 @@ pub enum AdapterFaultAction {
 
 /// Parse adapter-specific active fault schedules into normalized actions.
 ///
-/// Implemented for `runtime` and `cometbft`; `etcd-raft` remains TODO under
-/// follow-up parity work.
+/// Implemented for `runtime`, `cometbft`, and `etcd-raft`.
 pub fn adapt_active_faults(
     kind: AdapterKind,
     raw: &str,
@@ -124,10 +123,7 @@ pub fn adapt_active_faults(
     match kind {
         AdapterKind::Runtime => adapt_runtime_active_faults(raw),
         AdapterKind::CometBft => adapt_cometbft_active_faults(raw),
-        AdapterKind::EtcdRaft => Err(AdapterError::Invalid {
-            family: kind.as_str(),
-            message: "active-fault adapter not implemented for this family".into(),
-        }),
+        AdapterKind::EtcdRaft => adapt_etcd_raft_active_faults(raw),
     }
 }
 
@@ -522,6 +518,155 @@ fn adapt_cometbft_active_faults(raw: &str) -> Result<Vec<ScheduledAdapterFault>,
     Ok(normalized)
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EtcdRaftActiveInput {
+    schema_version: u32,
+    faults: Vec<EtcdRaftActiveFault>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum EtcdRaftActiveFault {
+    DelayMessage {
+        tick: u64,
+        #[serde(alias = "msg")]
+        channel: String,
+        #[serde(default, alias = "from", alias = "from_peer")]
+        from_process: Option<u64>,
+        #[serde(default, alias = "to", alias = "to_peer")]
+        to_process: Option<u64>,
+        delay_ticks: u64,
+    },
+    DropMessage {
+        tick: u64,
+        #[serde(alias = "msg")]
+        channel: String,
+        #[serde(default, alias = "from", alias = "from_peer")]
+        from_process: Option<u64>,
+        #[serde(default, alias = "to", alias = "to_peer")]
+        to_process: Option<u64>,
+    },
+    ReorderChannel {
+        tick: u64,
+        #[serde(alias = "msg")]
+        channel: String,
+    },
+    PartitionLink {
+        tick: u64,
+        #[serde(alias = "peer_a")]
+        process_a: u64,
+        #[serde(alias = "peer_b")]
+        process_b: u64,
+    },
+    HealPartition {
+        tick: u64,
+    },
+    SpawnTwin {
+        tick: u64,
+        #[serde(alias = "peer_id")]
+        process_id: u64,
+        twin_id: u64,
+    },
+    RetireTwin {
+        tick: u64,
+        twin_id: u64,
+    },
+}
+
+fn adapt_etcd_raft_active_faults(raw: &str) -> Result<Vec<ScheduledAdapterFault>, AdapterError> {
+    let input: EtcdRaftActiveInput =
+        serde_json::from_str(raw).map_err(|source| AdapterError::Decode {
+            family: ADAPTER_ETCD_RAFT,
+            source,
+        })?;
+    if input.schema_version != 1 {
+        return Err(AdapterError::SchemaVersion {
+            family: ADAPTER_ETCD_RAFT,
+            got: input.schema_version,
+        });
+    }
+
+    let mut normalized = Vec::with_capacity(input.faults.len());
+    let mut last_tick = 0u64;
+    for (idx, fault) in input.faults.into_iter().enumerate() {
+        let scheduled = match fault {
+            EtcdRaftActiveFault::DelayMessage {
+                tick,
+                channel,
+                from_process,
+                to_process,
+                delay_ticks,
+            } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::DelayMessage {
+                    channel,
+                    from_process,
+                    to_process,
+                    delay_ticks,
+                },
+            },
+            EtcdRaftActiveFault::DropMessage {
+                tick,
+                channel,
+                from_process,
+                to_process,
+            } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::DropMessage {
+                    channel,
+                    from_process,
+                    to_process,
+                },
+            },
+            EtcdRaftActiveFault::ReorderChannel { tick, channel } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::ReorderChannel { channel },
+            },
+            EtcdRaftActiveFault::PartitionLink {
+                tick,
+                process_a,
+                process_b,
+            } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::PartitionLink {
+                    process_a,
+                    process_b,
+                },
+            },
+            EtcdRaftActiveFault::HealPartition { tick } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::HealPartition,
+            },
+            EtcdRaftActiveFault::SpawnTwin {
+                tick,
+                process_id,
+                twin_id,
+            } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::SpawnTwin {
+                    process_id,
+                    twin_id,
+                },
+            },
+            EtcdRaftActiveFault::RetireTwin { tick, twin_id } => ScheduledAdapterFault {
+                tick,
+                action: AdapterFaultAction::RetireTwin { twin_id },
+            },
+        };
+
+        if idx > 0 && scheduled.tick < last_tick {
+            return Err(AdapterError::Invalid {
+                family: ADAPTER_ETCD_RAFT,
+                message: "fault ticks must be nondecreasing".into(),
+            });
+        }
+        last_tick = scheduled.tick;
+        normalized.push(scheduled);
+    }
+    Ok(normalized)
+}
+
 struct EtcdRaftAdapter;
 
 impl TraceAdapter for EtcdRaftAdapter {
@@ -820,6 +965,49 @@ mod tests {
                 twin_id: 7001
             }
         ));
+    }
+
+    #[test]
+    fn etcd_raft_active_fault_adapter_maps_faults() {
+        let raw = r#"{
+            "schema_version": 1,
+            "faults": [
+                {"kind":"drop_message","tick":1,"msg":"Vote","from":1,"to":2},
+                {"kind":"spawn_twin","tick":3,"peer_id":7,"twin_id":7001}
+            ]
+        }"#;
+        let mapped = adapt_active_faults(AdapterKind::EtcdRaft, raw)
+            .expect("etcd-raft active faults should parse");
+        assert_eq!(mapped.len(), 2);
+        assert!(matches!(
+            mapped[0].action,
+            AdapterFaultAction::DropMessage {
+                ref channel,
+                from_process: Some(1),
+                to_process: Some(2)
+            } if channel == "Vote"
+        ));
+        assert!(matches!(
+            mapped[1].action,
+            AdapterFaultAction::SpawnTwin {
+                process_id: 7,
+                twin_id: 7001
+            }
+        ));
+    }
+
+    #[test]
+    fn etcd_raft_active_fault_adapter_rejects_non_monotonic_ticks() {
+        let raw = r#"{
+            "schema_version": 1,
+            "faults": [
+                {"kind":"heal_partition","tick":4},
+                {"kind":"drop_message","tick":2,"msg":"Vote"}
+            ]
+        }"#;
+        let err = adapt_active_faults(AdapterKind::EtcdRaft, raw)
+            .expect_err("non-monotonic ticks should fail");
+        assert!(format!("{err}").contains("nondecreasing"));
     }
 
     #[test]

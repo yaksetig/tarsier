@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "faults": [
+    { "kind": "drop_message", "tick": 1, "msg": "Vote", "from": 1, "to": 2 },
+    { "kind": "delay_message", "tick": 2, "msg": "AppendEntries", "from_peer": 2, "to_peer": 3, "delay_ticks": 2 },
+    { "kind": "partition_link", "tick": 3, "peer_a": 1, "peer_b": 3 },
+    { "kind": "heal_partition", "tick": 4 },
+    { "kind": "spawn_twin", "tick": 5, "peer_id": 2, "twin_id": 2001 },
+    { "kind": "retire_twin", "tick": 6, "twin_id": 2001 }
+  ]
+}
