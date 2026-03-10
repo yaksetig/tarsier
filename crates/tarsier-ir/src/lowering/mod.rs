@@ -1517,15 +1517,22 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
             }
         }
 
-        // 5b. Mark parameters targeted by reconfigure actions as time-varying.
+        // 5b. Mark parameters targeted by reconfigure actions as time-varying
+        //     and populate ReconfigurationSpec if any reconfigure actions exist.
         {
             let varying_ids: Vec<usize> = ta
                 .rules
                 .iter()
                 .flat_map(|r| r.param_updates.iter().map(|pu| pu.param.as_usize()))
                 .collect();
-            for id in varying_ids {
-                ta.parameters[id].time_varying = true;
+            for id in &varying_ids {
+                ta.parameters[*id].time_varying = true;
+            }
+            if !varying_ids.is_empty() {
+                ta.reconfiguration = Some(ReconfigurationSpec {
+                    semantics: ReconfigurationSemantics::NextStep,
+                    max_reconfigurations: 0, // unbounded by default
+                });
             }
         }
 

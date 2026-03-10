@@ -1116,7 +1116,40 @@ impl<'a> BmcEncoderBuilder<'a> {
                                     .eq(SmtTerm::var(param_var_at_step(k, pid))),
                             ),
                         );
+
+                        // RECONF-02 (GAP-2): at most one updating rule fires per step
+                        // to avoid contradictory parameter constraints.
+                        if update_rules.len() > 1 {
+                            let fire_indicators: Vec<SmtTerm> = update_rules
+                                .iter()
+                                .map(|&(r, _)| {
+                                    SmtTerm::Ite(
+                                        Box::new(SmtTerm::var(delta_var(k, r)).gt(SmtTerm::int(0))),
+                                        Box::new(SmtTerm::int(1)),
+                                        Box::new(SmtTerm::int(0)),
+                                    )
+                                })
+                                .collect();
+                            let total = sum_terms_balanced(fire_indicators);
+                            enc.assert_term(total.le(SmtTerm::int(1)));
+                        }
                     }
+                }
+
+                // RECONF-02 (GAP-1): re-assert resilience condition using
+                // epoch-aware parameter values at step k+1.
+                if let Some(ref rc) = ta.constraints.resilience_condition {
+                    let lhs = encode_lc_at_step(&rc.lhs, k + 1, time_varying_param_ids);
+                    let rhs = encode_lc_at_step(&rc.rhs, k + 1, time_varying_param_ids);
+                    let constraint = match rc.op {
+                        CmpOp::Gt => lhs.gt(rhs),
+                        CmpOp::Ge => lhs.ge(rhs),
+                        CmpOp::Lt => lhs.lt(rhs),
+                        CmpOp::Le => lhs.le(rhs),
+                        CmpOp::Eq => lhs.eq(rhs),
+                        CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
+                    };
+                    enc.assert_term(constraint);
                 }
             }
         }

@@ -1,0 +1,42 @@
+// RECONF-01 GAP-1 reproducer: resilience condition not re-checked after epoch.
+//
+// After reconfigure { t = t + 1; }, the resilience condition n > 3*t may be
+// violated. The solver currently does NOT detect this because resilience is
+// only asserted on initial parameter values (global p_i), not on per-step
+// epoch variables (p_i_k).
+//
+// Expected verdict after RECONF-02 fix: UNSAFE (resilience violation at step 1).
+// Current verdict: SAFE (false positive — resilience breach is invisible).
+
+protocol ResilienceBreakReproducer {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    message Vote;
+
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+        init waiting;
+
+        phase waiting {
+            when received >= 1 Vote => {
+                reconfigure {
+                    t = t + 1;
+                }
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
