@@ -7,13 +7,11 @@ use std::path::Path;
 use std::process;
 
 use serde::Serialize;
-use serde_json::json;
 use tarsier_dsl::parser::parse;
 use tarsier_ir::equivalence::build_equivalence_products;
 use tarsier_ir::lowering::lower;
 use tarsier_smt::backends::z3_backend::Z3Solver;
 use tarsier_smt::equivalence_encoder::{run_equivalence_solver, EquivalenceCheckResult};
-use tarsier_smt::refinement_encoder::RefinementWitness;
 
 /// Schema version for equivalence-check JSON output.
 pub const SCHEMA_VERSION: u32 = 2;
@@ -112,14 +110,14 @@ pub(crate) fn run_equivalence_check(
                     println!("Result: FORWARD DIVERGENCE (A has behavior B cannot match)");
                     if let Some(w) = witness {
                         println!();
-                        print_witness_text("Forward", &w.minimized(), &products.forward);
+                        super::witness_format::print_witness_text_with_direction("Forward", &w.minimized(), &products.forward);
                     }
                 }
                 EquivalenceCheckResult::BackwardDivergence { witness, .. } => {
                     println!("Result: BACKWARD DIVERGENCE (B has behavior A cannot match)");
                     if let Some(w) = witness {
                         println!();
-                        print_witness_text("Backward", &w.minimized(), &products.backward);
+                        super::witness_format::print_witness_text_with_direction("Backward", &w.minimized(), &products.backward);
                     }
                 }
                 EquivalenceCheckResult::BidirectionalDivergence {
@@ -130,11 +128,11 @@ pub(crate) fn run_equivalence_check(
                     println!("Result: BIDIRECTIONAL DIVERGENCE (neither protocol simulates the other)");
                     if let Some(w) = forward_witness {
                         println!();
-                        print_witness_text("Forward", &w.minimized(), &products.forward);
+                        super::witness_format::print_witness_text_with_direction("Forward", &w.minimized(), &products.forward);
                     }
                     if let Some(w) = backward_witness {
                         println!();
-                        print_witness_text("Backward", &w.minimized(), &products.backward);
+                        super::witness_format::print_witness_text_with_direction("Backward", &w.minimized(), &products.backward);
                     }
                 }
                 EquivalenceCheckResult::Unknown { reason, .. } => {
@@ -205,150 +203,20 @@ fn extract_witnesses(
 ) -> (Option<serde_json::Value>, Option<serde_json::Value>) {
     match result {
         EquivalenceCheckResult::ForwardDivergence { witness, .. } => {
-            (witness.as_ref().map(|w| witness_to_json(&w.minimized(), &products.forward)), None)
+            (witness.as_ref().map(|w| super::witness_format::witness_to_json_with_violation(&w.minimized(), &products.forward)), None)
         }
         EquivalenceCheckResult::BackwardDivergence { witness, .. } => {
-            (None, witness.as_ref().map(|w| witness_to_json(&w.minimized(), &products.backward)))
+            (None, witness.as_ref().map(|w| super::witness_format::witness_to_json_with_violation(&w.minimized(), &products.backward)))
         }
         EquivalenceCheckResult::BidirectionalDivergence {
             forward_witness,
             backward_witness,
             ..
         } => (
-            forward_witness.as_ref().map(|w| witness_to_json(&w.minimized(), &products.forward)),
-            backward_witness.as_ref().map(|w| witness_to_json(&w.minimized(), &products.backward)),
+            forward_witness.as_ref().map(|w| super::witness_format::witness_to_json_with_violation(&w.minimized(), &products.forward)),
+            backward_witness.as_ref().map(|w| super::witness_format::witness_to_json_with_violation(&w.minimized(), &products.backward)),
         ),
         _ => (None, None),
-    }
-}
-
-fn witness_to_json(
-    witness: &RefinementWitness,
-    product: &tarsier_ir::product::ProductAutomaton,
-) -> serde_json::Value {
-    let params: Vec<serde_json::Value> = witness
-        .parameter_values
-        .iter()
-        .map(|(idx, val)| {
-            let name = product
-                .parameters
-                .get(*idx)
-                .map(|p| p.name.as_str())
-                .unwrap_or("?");
-            json!({"index": idx, "name": name, "value": val})
-        })
-        .collect();
-
-    let steps: Vec<serde_json::Value> = witness
-        .trace
-        .iter()
-        .map(|step| {
-            let locs: Vec<serde_json::Value> = step
-                .location_counters
-                .iter()
-                .map(|(loc, count)| {
-                    json!({
-                        "concrete": loc.concrete.as_usize(),
-                        "abstract": loc.abstract_loc.as_usize(),
-                        "count": count,
-                    })
-                })
-                .collect();
-            let vars: Vec<serde_json::Value> = step
-                .shared_var_values
-                .iter()
-                .map(|(idx, val)| {
-                    let name = product
-                        .shared_vars
-                        .get(*idx)
-                        .map(|v| v.name.as_str())
-                        .unwrap_or("?");
-                    json!({"index": idx, "name": name, "value": val})
-                })
-                .collect();
-            let firings: Vec<serde_json::Value> = step
-                .rule_firings
-                .iter()
-                .map(|(idx, count)| json!({"rule": idx, "count": count}))
-                .collect();
-            json!({
-                "step": step.step,
-                "occupied_locations": locs,
-                "shared_vars": vars,
-                "rule_firings": firings,
-            })
-        })
-        .collect();
-
-    json!({
-        "violation_step": witness.violation_step,
-        "mismatch_location": {
-            "concrete": witness.mismatch_location.concrete.as_usize(),
-            "abstract": witness.mismatch_location.abstract_loc.as_usize(),
-        },
-        "parameters": params,
-        "trace": steps,
-    })
-}
-
-fn print_witness_text(
-    direction: &str,
-    witness: &RefinementWitness,
-    product: &tarsier_ir::product::ProductAutomaton,
-) {
-    println!("{direction} Witness Trace");
-    println!("{}", "-".repeat(direction.len() + 14));
-    println!(
-        "  Violation at step {}, mismatch (c={}, a={})",
-        witness.violation_step,
-        witness.mismatch_location.concrete.as_usize(),
-        witness.mismatch_location.abstract_loc.as_usize()
-    );
-
-    if !witness.parameter_values.is_empty() {
-        print!("  Parameters: ");
-        for (i, (idx, val)) in witness.parameter_values.iter().enumerate() {
-            let name = product
-                .parameters
-                .get(*idx)
-                .map(|p| p.name.as_str())
-                .unwrap_or("?");
-            if i > 0 {
-                print!(", ");
-            }
-            print!("{name}={val}");
-        }
-        println!();
-    }
-
-    for step in &witness.trace {
-        println!();
-        println!("  Step {}:", step.step);
-        if !step.location_counters.is_empty() {
-            print!("    Occupied: ");
-            for (i, (loc, count)) in step.location_counters.iter().enumerate() {
-                if i > 0 {
-                    print!(", ");
-                }
-                print!(
-                    "(c={}, a={})x{}",
-                    loc.concrete.as_usize(),
-                    loc.abstract_loc.as_usize(),
-                    count
-                );
-            }
-            println!();
-        }
-        if !step.rule_firings.is_empty() {
-            print!("    Rules fired: ");
-            for (i, (idx, count)) in step.rule_firings.iter().enumerate() {
-                if i > 0 {
-                    print!(", ");
-                }
-                print!("r{idx}x{count}");
-            }
-            println!();
-        }
     }
 }
 

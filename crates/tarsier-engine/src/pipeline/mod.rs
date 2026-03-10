@@ -52,6 +52,7 @@ use crate::result::{
     QUANTITATIVE_SCHEMA_VERSION,
 };
 
+/// Errors that can occur during the verification pipeline.
 #[derive(Debug, Error)]
 pub enum PipelineError {
     #[error("Parse error: {0}")]

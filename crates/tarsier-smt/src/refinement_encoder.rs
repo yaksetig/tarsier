@@ -7,12 +7,11 @@
 //! solver model provides a concrete counterexample trace.
 
 use tarsier_ir::product::{ProductAutomaton, ProductLocationId};
-use tarsier_ir::threshold_automaton::{
-    CmpOp, GuardAtom, LinearCombination, SharedVarId, UpdateKind,
-};
+use tarsier_ir::threshold_automaton::{GuardAtom, SharedVarId, UpdateKind};
 
 use tracing::info;
 
+use crate::encoding_helpers::{encode_linear_combination, encode_threshold_guard, sum_terms};
 use crate::solver::{SatResult, SmtSolver};
 use crate::sorts::SmtSort;
 use crate::terms::SmtTerm;
@@ -134,12 +133,13 @@ fn encode_initial_state(enc: &mut RefinementEncoding, product: &ProductAutomaton
 
     // Total processes across initial locations must be positive.
     if !product.initial_locations.is_empty() {
-        let init_sum = sum_of_vars(
+        let init_sum = sum_terms(
             product
                 .initial_locations
                 .iter()
                 .filter_map(|loc| product.location_idx(loc))
-                .map(|idx| prod_kappa(0, idx)),
+                .map(|idx| SmtTerm::var(prod_kappa(0, idx)))
+                .collect(),
         );
         enc.assert_term(SmtTerm::Ge(Box::new(init_sum), Box::new(SmtTerm::int(1))));
     }
@@ -220,7 +220,7 @@ fn encode_step_transition(enc: &mut RefinementEncoding, product: &ProductAutomat
 
         // Guard encoding: for each guard atom, delta > 0 implies atom holds.
         for atom in &rule.guard.atoms {
-            let guard_term = encode_guard_atom(atom, k, &product.parameters);
+            let guard_term = encode_guard_atom_prod(atom, k);
             // delta > 0 => guard
             enc.assert_term(SmtTerm::Implies(
                 Box::new(SmtTerm::Gt(
@@ -250,7 +250,7 @@ fn encode_step_transition(enc: &mut RefinementEncoding, product: &ProductAutomat
                         }
                         UpdateKind::Set(_lc) => {
                             // Set semantics: if delta > 0, var = lc. Encoded as implication.
-                            let lc_term = encode_lc(_lc, &product.parameters);
+                            let lc_term = encode_linear_combination(_lc, prod_param);
                             enc.assert_term(SmtTerm::Implies(
                                 Box::new(SmtTerm::Gt(
                                     Box::new(SmtTerm::var(prod_delta(k, r))),
@@ -276,7 +276,7 @@ fn encode_step_transition(enc: &mut RefinementEncoding, product: &ProductAutomat
                             );
                         }
                         UpdateKind::Set(_lc) => {
-                            let lc_term = encode_lc(_lc, &product.parameters);
+                            let lc_term = encode_linear_combination(_lc, prod_param);
                             enc.assert_term(SmtTerm::Implies(
                                 Box::new(SmtTerm::Gt(
                                     Box::new(SmtTerm::var(prod_delta(k, r))),
@@ -336,69 +336,22 @@ fn encode_mismatch_target(enc: &mut RefinementEncoding, product: &ProductAutomat
     enc.assert_term(SmtTerm::Or(mismatch_disjuncts));
 }
 
-/// Encode a guard atom into an SMT term.
-fn encode_guard_atom(
-    atom: &GuardAtom,
-    step: usize,
-    params: &[tarsier_ir::threshold_automaton::Parameter],
-) -> SmtTerm {
+/// Encode a guard atom into an SMT term using product-automaton naming.
+fn encode_guard_atom_prod(atom: &GuardAtom, step: usize) -> SmtTerm {
     match atom {
         GuardAtom::Threshold {
             vars,
             op,
             bound,
-            distinct: _,
+            distinct,
         } => {
-            // Sum of shared variables.
-            let lhs = if vars.is_empty() {
-                SmtTerm::int(0)
-            } else {
-                sum_of_vars(vars.iter().map(|v| prod_gamma(step, v.as_usize())))
-            };
-
-            let rhs = encode_lc(bound, params);
-
-            match op {
-                CmpOp::Ge => SmtTerm::Ge(Box::new(lhs), Box::new(rhs)),
-                CmpOp::Le => SmtTerm::Le(Box::new(lhs), Box::new(rhs)),
-                CmpOp::Gt => SmtTerm::Gt(Box::new(lhs), Box::new(rhs)),
-                CmpOp::Lt => SmtTerm::Lt(Box::new(lhs), Box::new(rhs)),
-                CmpOp::Eq => SmtTerm::Eq(Box::new(lhs), Box::new(rhs)),
-                CmpOp::Ne => SmtTerm::Not(Box::new(SmtTerm::Eq(Box::new(lhs), Box::new(rhs)))),
-            }
+            let var_terms: Vec<SmtTerm> = vars
+                .iter()
+                .map(|v| SmtTerm::var(prod_gamma(step, v.as_usize())))
+                .collect();
+            encode_threshold_guard(var_terms, *op, bound, *distinct, prod_param)
         }
     }
-}
-
-/// Encode a linear combination as an SMT term.
-fn encode_lc(
-    lc: &LinearCombination,
-    _params: &[tarsier_ir::threshold_automaton::Parameter],
-) -> SmtTerm {
-    let mut result = SmtTerm::int(lc.constant);
-    for &(coeff, param_id) in &lc.terms {
-        let param_term = SmtTerm::var(prod_param(param_id.as_usize()));
-        let scaled = if coeff == 1 {
-            param_term
-        } else {
-            SmtTerm::Mul(Box::new(SmtTerm::int(coeff)), Box::new(param_term))
-        };
-        result = SmtTerm::Add(Box::new(result), Box::new(scaled));
-    }
-    result
-}
-
-/// Helper: build a sum of variable references.
-fn sum_of_vars(names: impl Iterator<Item = String>) -> SmtTerm {
-    let mut terms: Vec<SmtTerm> = names.map(SmtTerm::var).collect();
-    if terms.is_empty() {
-        return SmtTerm::int(0);
-    }
-    let mut acc = terms.remove(0);
-    for t in terms {
-        acc = SmtTerm::Add(Box::new(acc), Box::new(t));
-    }
-    acc
 }
 
 /// A snapshot of the product automaton state at a single step.
@@ -469,7 +422,7 @@ impl RefinementWitness {
     }
 }
 
-/// Result of a refinement simulation check.
+/// Result of a bounded simulation-preservation check between two automata.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SimulationCheckResult {
     /// No mismatch reachable within the bound — simulation holds up to depth `k`.

@@ -301,6 +301,7 @@ pub struct IrCryptoObjectSpec {
 /// Represents a parameterized system where N processes move between locations
 /// according to threshold-guarded rules. Counter abstraction tracks how many
 /// processes are in each location rather than individual process states.
+/// Resilience, adversary-bound, and committee constraints for a threshold automaton.
 #[derive(Debug, Clone, Default)]
 pub struct ThresholdAutomatonConstraints {
     /// Resilience condition as a linear constraint.
@@ -311,6 +312,7 @@ pub struct ThresholdAutomatonConstraints {
     pub committees: Vec<IrCommitteeSpec>,
 }
 
+/// Fault model, timing, network, and delivery semantics for a threshold automaton.
 #[derive(Debug, Clone, Default)]
 pub struct ThresholdAutomatonSemantics {
     /// Fault model selected by the protocol.
@@ -335,6 +337,7 @@ pub struct ThresholdAutomatonSemantics {
     pub por_mode: PorMode,
 }
 
+/// Identity, key ownership, and per-message authentication policies.
 #[derive(Debug, Clone, Default)]
 pub struct ThresholdAutomatonSecurity {
     /// Role identity/key semantics (explicit or inferred defaults).
@@ -349,6 +352,7 @@ pub struct ThresholdAutomatonSecurity {
     pub crypto_objects: IndexMap<String, IrCryptoObjectSpec>,
 }
 
+/// A threshold automaton: the core IR for fault-tolerant distributed protocols.
 #[derive(Debug, Clone)]
 pub struct ThresholdAutomaton {
     /// Named locations (role, phase, local-var valuation).

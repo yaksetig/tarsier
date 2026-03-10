@@ -679,11 +679,11 @@ fn write_actions_go(
             Action::Reconfigure { updates } => {
                 writeln!(out, "{indent}// reconfigure (dynamic membership)")?;
                 for upd in updates {
+                    let val = render_expr(&upd.value, params, CodegenTarget::Go);
                     writeln!(
                         out,
-                        "{indent}// TODO: {param} = {val}",
-                        param = upd.param,
-                        val = upd.value
+                        "{indent}s.{} = {val}",
+                        to_pascal_case(&upd.param),
                     )?;
                 }
             }

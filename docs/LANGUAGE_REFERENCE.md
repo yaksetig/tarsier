@@ -934,6 +934,8 @@ dag_round r2 extends r0, r1;
 - Omitting `extends` creates a root round with no parents.
 - The DAG structure is validated during lowering: cycles are rejected, and parent references must refer to previously declared rounds.
 
+For common DAG patterns (diamond, multi-root, deep chain), validation rules, verification workflows, and migration guidance, see the [DAG Workflow Guide](DAG_WORKFLOWS.md).
+
 ### Example
 
 ```

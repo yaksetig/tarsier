@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use tarsier_ir::threshold_automaton::*;
 
+use crate::encoding_helpers;
 use crate::terms::SmtTerm;
 
 use super::variables::*;
@@ -607,73 +608,44 @@ pub(super) fn collect_message_counter_flags(ta: &ThresholdAutomaton) -> Vec<bool
 }
 
 /// Build a balanced arithmetic sum tree to avoid very deep left-associated terms.
-pub(super) fn sum_terms_balanced(mut terms: Vec<SmtTerm>) -> SmtTerm {
-    if terms.is_empty() {
-        return SmtTerm::int(0);
-    }
-    while terms.len() > 1 {
-        let mut next = Vec::with_capacity(terms.len().div_ceil(2));
-        let mut iter = terms.into_iter();
-        while let Some(lhs) = iter.next() {
-            if let Some(rhs) = iter.next() {
-                next.push(lhs.add(rhs));
-            } else {
-                next.push(lhs);
-            }
-        }
-        terms = next;
-    }
-    terms.pop().unwrap_or_else(|| SmtTerm::int(0))
+///
+/// Delegates to [`encoding_helpers::sum_terms`].
+pub(super) fn sum_terms_balanced(terms: Vec<SmtTerm>) -> SmtTerm {
+    encoding_helpers::sum_terms(terms)
 }
 
 /// Encode a linear combination as an SmtTerm.
+///
+/// Delegates to [`encoding_helpers::encode_linear_combination`] with the
+/// standard `p_i` naming convention.
 pub(super) fn encode_lc(lc: &LinearCombination) -> SmtTerm {
-    let mut terms = Vec::with_capacity(lc.terms.len() + usize::from(lc.constant != 0));
-    if lc.constant != 0 {
-        terms.push(SmtTerm::int(lc.constant));
-    }
-    for &(coeff, pid) in &lc.terms {
-        let param_term = SmtTerm::var(param_var(pid));
-        let scaled = if coeff == 1 {
-            param_term
-        } else {
-            SmtTerm::int(coeff).mul(param_term)
-        };
-        terms.push(scaled);
-    }
-    sum_terms_balanced(terms)
+    encoding_helpers::encode_linear_combination(lc, |i| param_var(i))
 }
 
 /// Encode a [`LinearCombination`] using step-dependent variables for time-varying
 /// parameters. Fixed parameters use global `p_i`; time-varying parameters use
 /// `p_i_step`.
+///
+/// Delegates to [`encoding_helpers::encode_linear_combination`] with a naming
+/// closure that selects between global and step-scoped parameter names.
 pub(super) fn encode_lc_at_step(
     lc: &LinearCombination,
     step: usize,
     time_varying_ids: &[usize],
 ) -> SmtTerm {
-    let mut terms = Vec::with_capacity(lc.terms.len() + usize::from(lc.constant != 0));
-    if lc.constant != 0 {
-        terms.push(SmtTerm::int(lc.constant));
-    }
-    for &(coeff, pid) in &lc.terms {
-        let pid_usize = pid.as_usize();
-        let param_term = if time_varying_ids.contains(&pid_usize) {
-            SmtTerm::var(param_var_at_step(step, pid))
+    encoding_helpers::encode_linear_combination(lc, |pid_usize| {
+        if time_varying_ids.contains(&pid_usize) {
+            param_var_at_step(step, pid_usize)
         } else {
-            SmtTerm::var(param_var(pid))
-        };
-        let scaled = if coeff == 1 {
-            param_term
-        } else {
-            SmtTerm::int(coeff).mul(param_term)
-        };
-        terms.push(scaled);
-    }
-    sum_terms_balanced(terms)
+            param_var(pid_usize)
+        }
+    })
 }
 
 /// Encode a threshold guard atom as an SmtTerm for a given step.
+///
+/// Delegates to [`encoding_helpers::encode_threshold_guard`] with the
+/// standard `g_k_v` / `p_i` naming conventions.
 pub(super) fn encode_threshold_guard_at_step(
     step: usize,
     vars: &[impl Copy + std::fmt::Display],
@@ -681,39 +653,18 @@ pub(super) fn encode_threshold_guard_at_step(
     bound: &LinearCombination,
     distinct: bool,
 ) -> SmtTerm {
-    let lhs = if distinct {
-        let terms: Vec<SmtTerm> = vars
-            .iter()
-            .map(|var| {
-                let gv = SmtTerm::var(gamma_var(step, *var));
-                SmtTerm::Ite(
-                    Box::new(gv.gt(SmtTerm::int(0))),
-                    Box::new(SmtTerm::int(1)),
-                    Box::new(SmtTerm::int(0)),
-                )
-            })
-            .collect();
-        sum_terms_balanced(terms)
-    } else {
-        let terms: Vec<SmtTerm> = vars
-            .iter()
-            .map(|var| SmtTerm::var(gamma_var(step, *var)))
-            .collect();
-        sum_terms_balanced(terms)
-    };
-    let rhs = encode_lc(bound);
-    match op {
-        CmpOp::Ge => lhs.ge(rhs),
-        CmpOp::Gt => lhs.gt(rhs),
-        CmpOp::Le => lhs.le(rhs),
-        CmpOp::Lt => lhs.lt(rhs),
-        CmpOp::Eq => lhs.eq(rhs),
-        CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
-    }
+    let var_terms: Vec<SmtTerm> = vars
+        .iter()
+        .map(|var| SmtTerm::var(gamma_var(step, *var)))
+        .collect();
+    encoding_helpers::encode_threshold_guard(var_terms, op, bound, distinct, |i| param_var(i))
 }
 
 /// Like [`encode_threshold_guard_at_step`] but uses step-dependent variables
 /// for time-varying parameters.
+///
+/// Delegates to [`encoding_helpers::encode_threshold_guard`] with a naming
+/// closure that selects between global and step-scoped parameter names.
 pub(super) fn encode_threshold_guard_at_step_epoch(
     step: usize,
     vars: &[impl Copy + std::fmt::Display],
@@ -722,35 +673,17 @@ pub(super) fn encode_threshold_guard_at_step_epoch(
     distinct: bool,
     time_varying_ids: &[usize],
 ) -> SmtTerm {
-    let lhs = if distinct {
-        let terms: Vec<SmtTerm> = vars
-            .iter()
-            .map(|var| {
-                let gv = SmtTerm::var(gamma_var(step, *var));
-                SmtTerm::Ite(
-                    Box::new(gv.gt(SmtTerm::int(0))),
-                    Box::new(SmtTerm::int(1)),
-                    Box::new(SmtTerm::int(0)),
-                )
-            })
-            .collect();
-        sum_terms_balanced(terms)
-    } else {
-        let terms: Vec<SmtTerm> = vars
-            .iter()
-            .map(|var| SmtTerm::var(gamma_var(step, *var)))
-            .collect();
-        sum_terms_balanced(terms)
-    };
-    let rhs = encode_lc_at_step(bound, step, time_varying_ids);
-    match op {
-        CmpOp::Ge => lhs.ge(rhs),
-        CmpOp::Gt => lhs.gt(rhs),
-        CmpOp::Le => lhs.le(rhs),
-        CmpOp::Lt => lhs.lt(rhs),
-        CmpOp::Eq => lhs.eq(rhs),
-        CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
-    }
+    let var_terms: Vec<SmtTerm> = vars
+        .iter()
+        .map(|var| SmtTerm::var(gamma_var(step, *var)))
+        .collect();
+    encoding_helpers::encode_threshold_guard(var_terms, op, bound, distinct, |pid_usize| {
+        if time_varying_ids.contains(&pid_usize) {
+            param_var_at_step(step, pid_usize)
+        } else {
+            param_var(pid_usize)
+        }
+    })
 }
 
 #[cfg(test)]

@@ -1188,6 +1188,81 @@ fn dag_round_safe_prove() {
 }
 
 // ===========================================================================
+// DAGX-04: Unbounded proof integration for DAG corpus
+// ===========================================================================
+
+#[test]
+fn dag_diamond_safe_prove_kinduction() {
+    let src = load_example("examples/experimental/dag_diamond_safe.trs");
+    let opts = default_options();
+    let result = pipeline::prove_safety(&src, "dag_diamond_safe.trs", &opts)
+        .expect("k-induction should complete");
+    match &result {
+        UnboundedSafetyResult::Safe { induction_k } => {
+            assert!(*induction_k >= 1);
+        }
+        other => panic!("diamond DAG should be safe via k-induction, got: {other}"),
+    }
+}
+
+#[test]
+fn dag_deep_chain_safe_prove_kinduction() {
+    let src = load_example("examples/experimental/dag_deep_chain_safe.trs");
+    let opts = default_options();
+    let result = pipeline::prove_safety(&src, "dag_deep_chain_safe.trs", &opts)
+        .expect("k-induction should complete");
+    match &result {
+        UnboundedSafetyResult::Safe { induction_k } => {
+            assert!(*induction_k >= 1);
+        }
+        other => panic!("deep chain DAG should be safe via k-induction, got: {other}"),
+    }
+}
+
+#[test]
+fn dag_multi_root_safe_prove_kinduction() {
+    let src = load_example("examples/experimental/dag_multi_root_safe.trs");
+    let opts = default_options();
+    let result = pipeline::prove_safety(&src, "dag_multi_root_safe.trs", &opts)
+        .expect("k-induction should complete");
+    match &result {
+        UnboundedSafetyResult::Safe { induction_k } => {
+            assert!(*induction_k >= 1);
+        }
+        other => panic!("multi-root DAG should be safe via k-induction, got: {other}"),
+    }
+}
+
+#[test]
+fn dag_corpus_perf_all_proofs_under_10s() {
+    use std::time::Instant;
+    let start = Instant::now();
+    let opts = default_options();
+
+    for (file, name) in [
+        ("examples/experimental/dag_round_alpha_safe.trs", "alpha"),
+        ("examples/experimental/dag_diamond_safe.trs", "diamond"),
+        ("examples/experimental/dag_deep_chain_safe.trs", "deep_chain"),
+        ("examples/experimental/dag_multi_root_safe.trs", "multi_root"),
+    ] {
+        let src = load_example(file);
+        let result = pipeline::prove_safety(&src, file, &opts)
+            .unwrap_or_else(|e| panic!("{name}: prove failed: {e}"));
+        assert!(
+            matches!(result, UnboundedSafetyResult::Safe { .. }),
+            "{name}: expected Safe, got: {result}"
+        );
+    }
+
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed.as_secs() < 10,
+        "DAG corpus proofs took {:.2}s (limit 10s)",
+        elapsed.as_secs_f64()
+    );
+}
+
+// ===========================================================================
 // Buggy protocol variants — verify the solver CATCHES real bugs
 // ===========================================================================
 

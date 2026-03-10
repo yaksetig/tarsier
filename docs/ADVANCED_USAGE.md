@@ -320,6 +320,26 @@ JSON reports include per-layer profiling under `layers[*].details.abstractions`:
 - `por_dynamic_ample`: deterministic effectiveness summary for CI gating
 - `lowerings[*]`: POR visibility including independent rule pairs, fallback state, and transition pruning stats
 
+## DAG Protocol Verification
+
+DAG-based consensus protocols (DAG-Rider, Bullshark, Narwhal) use `dag_round` declarations to model round dependency graphs. Verification uses the same commands as standard protocols:
+
+```bash
+# Bounded safety check
+tarsier analyze my_dag_protocol.trs --mode standard
+
+# Unbounded safety proof
+tarsier analyze my_dag_protocol.trs --mode proof
+
+# Refinement: compare DAG protocol against abstract spec
+tarsier refinement-check concrete_dag.trs --abstract-file abstract.trs --depth 12
+
+# Equivalence: compare two DAG protocol variants
+tarsier equivalence-check dag_v1.trs --other dag_v2.trs --depth 12
+```
+
+The DAG structure is validated at lowering time (cycle detection, self-loop rejection, connectivity checks). For the full guide including DAG patterns, validation rules, and migration instructions, see [DAG_WORKFLOWS.md](DAG_WORKFLOWS.md).
+
 ## CI Solver Pinning
 
 CI runs with pinned solver binaries:

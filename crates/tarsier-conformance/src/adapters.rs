@@ -66,6 +66,7 @@ pub trait TraceAdapter {
     fn adapt_json(&self, raw: &str) -> Result<RuntimeTrace, AdapterError>;
 }
 
+/// Convert a raw JSON execution trace into a normalized `RuntimeTrace` using the given adapter.
 pub fn adapt_trace(kind: AdapterKind, raw: &str) -> Result<RuntimeTrace, AdapterError> {
     match kind {
         AdapterKind::Runtime => RuntimeAdapter.adapt_json(raw),
@@ -1073,9 +1074,10 @@ mod tests {
     }
 
     #[test]
-    fn active_fault_adapter_reports_unimplemented_etcd_family() {
-        let err = adapt_active_faults(AdapterKind::EtcdRaft, r#"{"schema_version":1,"faults":[]}"#)
-            .expect_err("etcd active faults should remain unsupported for TWNX-03");
-        assert!(format!("{err}").contains("not implemented"));
+    fn etcd_raft_active_fault_adapter_accepts_empty_faults() {
+        let faults =
+            adapt_active_faults(AdapterKind::EtcdRaft, r#"{"schema_version":1,"faults":[]}"#)
+                .expect("empty etcd-raft fault list should succeed");
+        assert!(faults.is_empty());
     }
 }

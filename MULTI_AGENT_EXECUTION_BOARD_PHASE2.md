@@ -255,3 +255,21 @@ High-confidence no-overlap pairs:
 `2026-03-10T12:57:15Z | AGENT_2 | EQX-05 | START | implementation started`
 
 `2026-03-10T12:58:14Z | AGENT_2 | EQX-05 | DONE | commit=3490a77 branch=codex/agent2-eqx-05-v1 tests=cargo test -p tarsier-smt --test equivalence_encoding_tests`
+
+`2026-03-10T13:22:36Z | AGENT_2 | DAGX-03 | CLAIM | taking task (Agent 1 blocked, user requested)`
+
+`2026-03-10T13:22:36Z | AGENT_2 | DAGX-03 | START | implementation started`
+
+`2026-03-10T13:22:36Z | AGENT_2 | DAGX-03 | DONE | commit=d67dd85 branch=main tests=cargo test -p tarsier-engine --test end_to_end_pipeline -- dag && cargo test -p tarsier-dsl --test integration -- dag`
+
+`2026-03-10T13:22:36Z | AGENT_2 | DAGX-04 | CLAIM | taking task`
+
+`2026-03-10T13:22:36Z | AGENT_2 | DAGX-04 | START | implementation started`
+
+`2026-03-10T14:00:00Z | AGENT_2 | DAGX-04 | DONE | branch=main tests=cargo test -p tarsier-engine --test end_to_end_pipeline -- dag (16 passed, 0 failed) — k-induction prove tests for diamond/deep-chain/multi-root DAGs + perf baseline all pass`
+
+`2026-03-10T14:15:00Z | AGENT_2 | X2-01 | CLAIM | taking task — all dependencies satisfied`
+
+`2026-03-10T14:15:00Z | AGENT_2 | X2-01 | START | implementation started`
+
+`2026-03-10T14:30:00Z | AGENT_2 | X2-01 | DONE | branch=main — added 5 CI gates to ci.yml (Refinement Solver, Equivalence Solver, Solver Parity/Perf, Proof Export, DAG Hardening) + engine_bench/solver_perf benchmark smoke tests; all gates verified locally`

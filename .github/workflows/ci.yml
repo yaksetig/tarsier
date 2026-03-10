@@ -6,7 +6,6 @@ on:
 
 jobs:
   build-test:
-    if: vars.ENABLE_STRICT_CI == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -113,6 +112,8 @@ jobs:
           cargo bench --bench parser_bench -- --quick
           cargo bench --bench lowering_bench -- --quick
           cargo bench --bench encoder_bench -- --quick
+          cargo bench --bench engine_bench -- --quick
+          cargo bench --bench solver_perf -- --quick
 
       - name: Property Testing Gate
         env:
@@ -313,6 +314,93 @@ jobs:
             exit 1
           fi
           echo "Certcheck standalone replay coverage OK"
+
+      # ===================================================================
+      # Phase 2 CI Gates: Refinement / Equivalence / Twins / Proof-Export / DAG
+      # ===================================================================
+
+      - name: Refinement Solver Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          output=$(cargo test -p tarsier-smt --test refinement_encoding_tests -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -c '\.\.\.\ ok')
+          if [ "$count" -lt 10 ]; then
+            echo "ERROR: expected at least 10 refinement encoding tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count refinement encoding tests passed"
+          cargo test -p tarsier-cli -- refinement --nocapture
+          echo "Refinement CLI tests passed"
+
+      - name: Equivalence Solver Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          output=$(cargo test -p tarsier-smt --test equivalence_encoding_tests -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -c '\.\.\.\ ok')
+          if [ "$count" -lt 12 ]; then
+            echo "ERROR: expected at least 12 equivalence encoding tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count equivalence encoding tests passed"
+          cargo test -p tarsier-cli -- equivalence --nocapture
+          echo "Equivalence CLI tests passed"
+
+      - name: Solver Parity and Performance Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          output=$(cargo test -p tarsier-smt --test solver_parity_perf_expansions -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -c '\.\.\.\ ok')
+          if [ "$count" -lt 7 ]; then
+            echo "ERROR: expected at least 7 solver parity/perf tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count solver parity/perf tests passed"
+
+      - name: Proof Export Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          cargo test -p tarsier-cli render_lean_module_contains_expected_sections -- --nocapture
+          cargo test -p tarsier-cli render_coq_module_contains_expected_sections -- --nocapture
+          cargo test -p tarsier-cli render_lean_module_matches_golden -- --nocapture
+          cargo test -p tarsier-cli render_coq_module_matches_golden -- --nocapture
+          cargo test -p tarsier-cli collect_obligation_artifacts_preserves_hash_and_proof_fields -- --nocapture
+          cargo test -p tarsier-cli compile_smoke_gated_on_toolchain -- --nocapture
+          echo "Proof export gate passed"
+
+      - name: DAG Hardening Gate
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          # IR-level DAG validation tests
+          output=$(cargo test -p tarsier-ir -- lower_dag_round -- --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -c '\.\.\.\ ok')
+          if [ "$count" -lt 8 ]; then
+            echo "ERROR: expected at least 8 DAG IR lowering tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count DAG IR lowering tests passed"
+          # DSL roundtrip tests
+          cargo test -p tarsier-dsl --test integration -- dag --nocapture
+          # End-to-end DAG pipeline tests (BMC + k-induction)
+          output=$(cargo test -p tarsier-engine --test end_to_end_pipeline -- dag --nocapture 2>&1)
+          echo "$output"
+          count=$(echo "$output" | grep -c '\.\.\.\ ok')
+          if [ "$count" -lt 14 ]; then
+            echo "ERROR: expected at least 14 DAG end-to-end pipeline tests to pass, got $count"
+            exit 1
+          fi
+          echo "OK: $count DAG end-to-end pipeline tests passed"
+          # SMT DAG encoding tests
+          cargo test -p tarsier-smt -- dag --nocapture
+          echo "DAG hardening gate passed"
 
   cross-tool-real-bymc-gate:
     runs-on: ubuntu-latest
