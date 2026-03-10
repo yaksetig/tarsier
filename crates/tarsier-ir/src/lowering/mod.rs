@@ -1734,6 +1734,7 @@ fn validate_dag_rounds(rounds: &[IrDagRoundSpec]) -> Result<(), LoweringError> {
         return Ok(());
     }
 
+    // 1. Check for duplicate names.
     let mut round_index: HashMap<&str, usize> = HashMap::new();
     for (idx, round) in rounds.iter().enumerate() {
         if round_index.insert(round.name.as_str(), idx).is_some() {
@@ -1744,17 +1745,49 @@ fn validate_dag_rounds(rounds: &[IrDagRoundSpec]) -> Result<(), LoweringError> {
         }
     }
 
+    // 2. Check for self-loops.
+    for round in rounds {
+        if round.parent_rounds.contains(&round.name) {
+            return Err(LoweringError::Unsupported(format!(
+                "dag_round '{}' lists itself as a parent (self-loop)",
+                round.name
+            )));
+        }
+    }
+
+    // 3. Check for unknown parents.
     for round in rounds {
         for parent in &round.parent_rounds {
             if !round_index.contains_key(parent.as_str()) {
                 return Err(LoweringError::Unsupported(format!(
-                    "dag_round '{}' references unknown parent '{}'",
+                    "dag_round '{}' references unknown parent '{}'; \
+                     declared rounds: [{}]",
+                    round.name,
+                    parent,
+                    rounds
+                        .iter()
+                        .map(|r| r.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )));
+            }
+        }
+    }
+
+    // 4. Check for duplicate parents in a single round.
+    for round in rounds {
+        let mut seen = HashSet::new();
+        for parent in &round.parent_rounds {
+            if !seen.insert(parent.as_str()) {
+                return Err(LoweringError::Unsupported(format!(
+                    "dag_round '{}' lists parent '{}' more than once",
                     round.name, parent
                 )));
             }
         }
     }
 
+    // 5. Cycle detection via DFS.
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum VisitState {
         Visiting,
@@ -1763,6 +1796,7 @@ fn validate_dag_rounds(rounds: &[IrDagRoundSpec]) -> Result<(), LoweringError> {
 
     fn dfs<'a>(
         node: &'a str,
+        path: &mut Vec<&'a str>,
         rounds: &'a [IrDagRoundSpec],
         idx: &HashMap<&'a str, usize>,
         state: &mut HashMap<&'a str, VisitState>,
@@ -1770,25 +1804,83 @@ fn validate_dag_rounds(rounds: &[IrDagRoundSpec]) -> Result<(), LoweringError> {
         if let Some(existing) = state.get(node) {
             return match existing {
                 VisitState::Done => Ok(()),
-                VisitState::Visiting => Err(LoweringError::Unsupported(format!(
-                    "dag_round dependency graph contains a cycle involving '{}'",
-                    node
-                ))),
+                VisitState::Visiting => {
+                    // Build cycle path for actionable error.
+                    let cycle_start = path.iter().position(|&n| n == node).unwrap_or(0);
+                    let cycle: Vec<&str> = path[cycle_start..].to_vec();
+                    Err(LoweringError::Unsupported(format!(
+                        "dag_round dependency cycle: {} → {}",
+                        cycle.join(" → "),
+                        node
+                    )))
+                }
             };
         }
 
         state.insert(node, VisitState::Visiting);
+        path.push(node);
         let round = &rounds[idx[node]];
         for parent in &round.parent_rounds {
-            dfs(parent.as_str(), rounds, idx, state)?;
+            dfs(parent.as_str(), path, rounds, idx, state)?;
         }
+        path.pop();
         state.insert(node, VisitState::Done);
         Ok(())
     }
 
     let mut state: HashMap<&str, VisitState> = HashMap::new();
     for round in rounds {
-        dfs(round.name.as_str(), rounds, &round_index, &mut state)?;
+        let mut path = Vec::new();
+        dfs(round.name.as_str(), &mut path, rounds, &round_index, &mut state)?;
+    }
+
+    // 6. Require at least one root (no parents).
+    let roots: Vec<&str> = rounds
+        .iter()
+        .filter(|r| r.parent_rounds.is_empty())
+        .map(|r| r.name.as_str())
+        .collect();
+    if roots.is_empty() {
+        return Err(LoweringError::Unsupported(
+            "dag_round graph has no root rounds (every round has parents); \
+             at least one root round with no parents is required"
+                .into(),
+        ));
+    }
+
+    // 7. Check connectivity: every non-root round must be reachable from some root.
+    let mut reachable: HashSet<&str> = HashSet::new();
+    // Build child→parent adjacency for reverse traversal (parent→children).
+    let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
+    for round in rounds {
+        children.entry(round.name.as_str()).or_default();
+        for parent in &round.parent_rounds {
+            children
+                .entry(parent.as_str())
+                .or_default()
+                .push(round.name.as_str());
+        }
+    }
+    // BFS from roots.
+    let mut queue: Vec<&str> = roots.clone();
+    while let Some(node) = queue.pop() {
+        if reachable.insert(node) {
+            if let Some(kids) = children.get(node) {
+                queue.extend(kids.iter());
+            }
+        }
+    }
+    let unreachable: Vec<&str> = rounds
+        .iter()
+        .filter(|r| !reachable.contains(r.name.as_str()))
+        .map(|r| r.name.as_str())
+        .collect();
+    if !unreachable.is_empty() {
+        return Err(LoweringError::Unsupported(format!(
+            "dag_round(s) [{}] are not reachable from any root round [{}]",
+            unreachable.join(", "),
+            roots.join(", ")
+        )));
     }
 
     Ok(())

@@ -2378,6 +2378,136 @@ role Replica {
 }
 
 #[test]
+fn lower_dag_round_rejects_self_loop() {
+    let src = r#"
+protocol DagRoundSelfLoop {
+params n, t;
+resilience: n > 3*t;
+dag_round r0 extends r0;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    let prog = parse(src, "dag_round_self_loop.trs").unwrap();
+    let err = lower(&prog).expect_err("lowering should reject self-loop");
+    match err {
+        LoweringError::Unsupported(msg) => assert!(
+            msg.contains("self-loop"),
+            "expected self-loop error, got: {msg}"
+        ),
+        other => panic!("expected Unsupported, got {:?}", other),
+    }
+}
+
+#[test]
+fn lower_dag_round_rejects_duplicate_parents() {
+    let src = r#"
+protocol DagRoundDuplicateParent {
+params n, t;
+resilience: n > 3*t;
+dag_round r0;
+dag_round r1 extends r0, r0;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    let prog = parse(src, "dag_round_dup_parent.trs").unwrap();
+    let err = lower(&prog).expect_err("lowering should reject duplicate parents");
+    match err {
+        LoweringError::Unsupported(msg) => assert!(
+            msg.contains("more than once"),
+            "expected duplicate parent error, got: {msg}"
+        ),
+        other => panic!("expected Unsupported, got {:?}", other),
+    }
+}
+
+#[test]
+fn lower_dag_round_rejects_no_roots() {
+    let src = r#"
+protocol DagRoundNoRoot {
+params n, t;
+resilience: n > 3*t;
+dag_round r0 extends r1;
+dag_round r1 extends r0;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    let prog = parse(src, "dag_round_no_root.trs").unwrap();
+    let err = lower(&prog).expect_err("lowering should reject rootless graph");
+    // Will hit either cycle or no-root error (cycle comes first in validation order)
+    match err {
+        LoweringError::Unsupported(msg) => assert!(
+            msg.contains("cycle") || msg.contains("no root"),
+            "expected cycle or no-root error, got: {msg}"
+        ),
+        other => panic!("expected Unsupported, got {:?}", other),
+    }
+}
+
+#[test]
+fn lower_dag_round_unknown_parent_shows_declared_rounds() {
+    let src = r#"
+protocol DagRoundUnknownParent2 {
+params n, t;
+resilience: n > 3*t;
+dag_round r0;
+dag_round r1 extends r0, missing;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    let prog = parse(src, "dag_round_unknown_parent2.trs").unwrap();
+    let err = lower(&prog).expect_err("lowering should reject unknown parent");
+    match err {
+        LoweringError::Unsupported(msg) => {
+            assert!(msg.contains("unknown parent"), "got: {msg}");
+            assert!(
+                msg.contains("declared rounds:"),
+                "should list declared rounds, got: {msg}"
+            );
+        }
+        other => panic!("expected Unsupported, got {:?}", other),
+    }
+}
+
+#[test]
+fn lower_dag_round_cycle_shows_path() {
+    let src = r#"
+protocol DagRoundCyclePath {
+params n, t;
+resilience: n > 3*t;
+dag_round r0;
+dag_round r1 extends r0;
+dag_round r2 extends r1;
+dag_round r3 extends r2, r1;
+message Vote;
+role Replica {
+    init idle;
+    phase idle {}
+}
+}
+"#;
+    // This is a valid DAG (diamond pattern), should pass validation.
+    let prog = parse(src, "dag_round_diamond.trs").unwrap();
+    let ta = lower(&prog).expect("diamond DAG should be valid");
+    assert_eq!(ta.dag_rounds.len(), 4);
+}
+
+#[test]
 fn lower_byzantine_adversary_model() {
     let src = r#"
 protocol ByzantineCfg {
