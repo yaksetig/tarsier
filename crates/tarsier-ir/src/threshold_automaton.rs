@@ -855,6 +855,14 @@ impl ThresholdAutomaton {
             }
         }
 
+        if let Some(spec) = &self.reconfiguration {
+            if spec.semantics != ReconfigurationSemantics::NextStep {
+                return Err(ValidationError::UnsupportedReconfigurationSemantics {
+                    semantics: spec.semantics,
+                });
+            }
+        }
+
         Ok(())
     }
 }
@@ -918,6 +926,10 @@ pub enum ValidationError {
     },
     #[error("Resilience condition references invalid parameter {param_id} (max: {max})")]
     InvalidResilienceParam { param_id: ParamId, max: usize },
+    #[error(
+        "Unsupported reconfiguration semantics '{semantics}'; only 'next_step' is implemented"
+    )]
+    UnsupportedReconfigurationSemantics { semantics: ReconfigurationSemantics },
     #[error("Rule {rule_id} param_update targets invalid parameter {param_id} (max: {max})")]
     InvalidParamUpdateTarget {
         rule_id: RuleId,
@@ -2179,6 +2191,26 @@ mod tests {
         assert!(!matches!(imm, ReconfigurationSemantics::NextStep));
     }
 
+    #[test]
+    fn validate_reconfiguration_immediate_semantics_rejected() {
+        let mut ta = minimal_ta();
+        let t_id = ta.add_parameter(Parameter::varying("epoch_t".to_string()));
+        ta.rules[0].param_updates.push(ParamUpdate {
+            param: t_id,
+            value: LinearCombination::constant(1),
+        });
+        ta.reconfiguration = Some(ReconfigurationSpec {
+            semantics: ReconfigurationSemantics::Immediate,
+            max_reconfigurations: 0,
+        });
+
+        let err = ta.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            ValidationError::UnsupportedReconfigurationSemantics { .. }
+        ));
+    }
+
     // --- Builder method tests ---
 
     #[test]
@@ -2289,7 +2321,7 @@ mod tests {
     fn num_accessors_return_correct_counts() {
         let ta = minimal_ta();
         assert_eq!(ta.num_parameters(), 3); // n, t, f
-        assert_eq!(ta.num_locations(), 2);   // Init, Done
+        assert_eq!(ta.num_locations(), 2); // Init, Done
         assert_eq!(ta.num_shared_vars(), 1); // msg_count
         assert_eq!(ta.num_rules(), 1);
     }
