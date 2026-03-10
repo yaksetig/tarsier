@@ -36,6 +36,29 @@ curl -fsS http://127.0.0.1:7878/api/health
 docker compose -f playground/deploy/docker-compose.yml down
 ```
 
+## Compose Smoke Check (PLAY-03)
+
+Fast config validation (CI-friendly):
+
+```bash
+./scripts/playground-compose-smoke.sh config
+```
+
+Live local smoke (starts stack, waits for `/api/health`, then tears down):
+
+```bash
+./scripts/playground-compose-smoke.sh smoke
+```
+
+Manual operator helpers:
+
+```bash
+./scripts/playground-compose-smoke.sh start
+./scripts/playground-compose-smoke.sh wait
+./scripts/playground-compose-smoke.sh status
+./scripts/playground-compose-smoke.sh stop
+```
+
 ## Hosted Deployment (behind proxy)
 
 1. Set security-related env vars in `playground/deploy/.env`:
@@ -73,6 +96,8 @@ docker compose -f playground/deploy/docker-compose.yml --profile proxy up -d --b
 ## Operational Notes
 
 - Monitor container health and restart counts (`docker compose ps`).
+- CI now runs `./scripts/playground-compose-smoke.sh config` in `.github/workflows/ci.yml`
+  as a non-flaky compose contract check.
 - Capture logs for both services during incidents:
 
 ```bash

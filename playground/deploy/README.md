@@ -24,6 +24,13 @@ Enable proxy profile:
 docker compose -f playground/deploy/docker-compose.yml --profile proxy up -d --build
 ```
 
+Smoke-check compose config + optional live endpoint:
+
+```bash
+./scripts/playground-compose-smoke.sh config
+./scripts/playground-compose-smoke.sh smoke
+```
+
 Stop:
 
 ```bash
