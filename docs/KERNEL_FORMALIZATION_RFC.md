@@ -96,6 +96,10 @@ The exported semantics artifact (`KERN-02`) must include:
 
 Deliverable:
 - machine-readable semantics artifact that both Lean/Coq adapters can ingest.
+- initial artifact path: `artifacts/kernel-semantics/kernel_semantics_v1.json`
+- initial schema path: `docs/kernel-semantics-schema-v1.json`
+- initial exporter entrypoint:
+  `cargo run -p tarsier-proof-kernel --bin kernel-semantics-export -- --out artifacts/kernel-semantics/kernel_semantics_v1.json`
 
 Acceptance criteria:
 - artifact covers all current kernel error-code classes;

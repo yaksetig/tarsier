@@ -271,3 +271,5 @@ print("kernel_rfc_sections_ok")
 PY`
 `2026-03-10T21:00:07Z | AGENT_1 | KERN-02 | CLAIM | taking task`
 `2026-03-10T21:00:07Z | AGENT_1 | KERN-02 | START | implementation started`
+`2026-03-10T21:08:31Z | AGENT_1 | KERN-02 | PR_OPEN | branch=codex/agent1-kern-02-v1 pr=local summary=add code-backed kernel semantics export artifact + schema + CI drift checks`
+`2026-03-10T21:08:31Z | AGENT_1 | KERN-02 | DONE | commit=pending tests=python3 .github/scripts/check_kernel_spec_consistency.py; python3 .github/scripts/check_kernel_semantics_artifact.py; cargo test -p tarsier-proof-kernel -- --nocapture; cargo run -q -p tarsier-proof-kernel --bin kernel-semantics-export -- --out /tmp/kernel_semantics_v1.json; diff -u artifacts/kernel-semantics/kernel_semantics_v1.json /tmp/kernel_semantics_v1.json; python3 .github/scripts/check_doc_consistency.py`
