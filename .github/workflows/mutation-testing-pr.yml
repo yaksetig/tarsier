@@ -1,0 +1,73 @@
+name: Mutation Testing (PR)
+
+on:
+  pull_request:
+    paths:
+      - 'crates/tarsier-smt/src/**'
+      - 'crates/tarsier-prob/src/**'
+      - 'crates/tarsier-engine/src/**'
+      - 'crates/tarsier-ir/src/**'
+
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  CARGO_TERM_COLOR: always
+  # PR-targeted mutation score threshold. Intentionally lower than nightly
+  # to avoid blocking PRs on pre-existing surviving mutants.
+  MUTATION_SCORE_MIN: "60"
+
+jobs:
+  mutation-test-pr:
+    runs-on: ubuntu-latest
+    # Budget: keep PR cycle time reasonable. The nightly job has no limit.
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants
+
+      - name: Detect changed crates
+        id: changed
+        run: |
+          # Only mutate crates whose source files were touched in this PR.
+          changed_crates=""
+          for crate in tarsier-smt tarsier-prob tarsier-engine tarsier-ir; do
+            if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "crates/${crate}/src/"; then
+              changed_crates="${changed_crates} -p ${crate}"
+            fi
+          done
+          echo "crates=${changed_crates}" >> "$GITHUB_OUTPUT"
+          echo "Targeted crates: ${changed_crates:-none}"
+
+      - name: Run targeted mutation testing
+        if: steps.changed.outputs.crates != ''
+        run: |
+          cargo mutants --no-shuffle --timeout=120 -j 2 \
+            ${{ steps.changed.outputs.crates }} \
+          || true
+
+      - name: Mutation score quality gate
+        if: steps.changed.outputs.crates != ''
+        run: python .github/scripts/check_mutation_score.py
+
+      - name: Skip (no targeted crates changed)
+        if: steps.changed.outputs.crates == ''
+        run: echo "No mutation-tested crates changed in this PR. Skipping."
+
+      - name: Upload mutation testing results
+        if: always() && steps.changed.outputs.crates != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-testing-pr-results
+          path: mutants.out/
+          retention-days: 7

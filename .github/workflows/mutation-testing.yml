@@ -2,8 +2,8 @@ name: Mutation Testing
 
 on:
   schedule:
-    # Run weekly: Saturday at 04:00 UTC
-    - cron: "0 4 * * 6"
+    # Run nightly at 04:00 UTC for full mutation campaign
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
 env:
