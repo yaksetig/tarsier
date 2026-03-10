@@ -256,6 +256,34 @@ Static deterministic config checks:
 python3 scripts/check-etcd-raft-live-config.py
 ```
 
+## etcd-raft Active Conformance E2E (INTEG-04)
+
+`INTEG-04` adds an end-to-end active conformance smoke path that exercises:
+
+1. live etcd harness health (`scripts/etcd-raft-live-harness.sh start`);
+2. `tarsier conformance-active` schedule replay to a live endpoint contract;
+3. deterministic trace assertions over emitted `start/tick/fault/stop` events.
+
+Fixture-only contract check (no Docker required):
+
+```bash
+./scripts/etcd-raft-conformance-active-smoke.sh assert-fixture
+```
+
+Full end-to-end smoke (requires Docker + local toolchain):
+
+```bash
+./scripts/etcd-raft-conformance-active-smoke.sh smoke
+```
+
+The smoke script verifies:
+
+- adapter is `etcd-raft`;
+- schema version and seed are stable;
+- expected fault/tick counts are deterministic;
+- live contract metadata is `tarsier.active.v1`;
+- endpoint receives the exact deterministic `start -> tick/fault* -> stop` sequence.
+
 ## Triage Playbook
 
 Conformance mismatches/errors are classified as:
