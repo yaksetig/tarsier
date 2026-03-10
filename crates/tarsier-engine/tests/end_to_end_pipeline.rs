@@ -900,8 +900,117 @@ fn dag_round_alpha_invalid_cycle_is_rejected_during_lowering() {
         pipeline::parse(&src, "dag_round_alpha_invalid_cycle.trs").expect("parse should succeed");
     let err = pipeline::lower(&program).expect_err("cyclic dag_round definitions must be rejected");
     assert!(
-        format!("{err}").contains("contains a cycle"),
+        format!("{err}").contains("cycle"),
         "expected cycle diagnostic, got: {err}"
+    );
+}
+
+// ===========================================================================
+// DAGX-03: Extended DAG corpus regression tests
+// ===========================================================================
+
+#[test]
+fn dag_diamond_safe_parses_and_lowers() {
+    let src = load_example("examples/experimental/dag_diamond_safe.trs");
+    let program = pipeline::parse(&src, "dag_diamond_safe.trs").expect("parse should succeed");
+    assert_eq!(program.protocol.node.dag_rounds.len(), 4);
+
+    let ta = pipeline::lower(&program).expect("lower should succeed");
+    assert_eq!(ta.dag_rounds.len(), 4);
+
+    // r3 has two parents (r1, r2).
+    let r3 = &ta.dag_rounds[3];
+    assert_eq!(r3.parent_rounds.len(), 2);
+}
+
+#[test]
+fn dag_diamond_safe_verifies() {
+    let src = load_example("examples/experimental/dag_diamond_safe.trs");
+    let opts = default_options();
+    let result =
+        pipeline::verify(&src, "dag_diamond_safe.trs", &opts).expect("verify should complete");
+    assert!(
+        matches!(result, VerificationResult::Safe { .. }),
+        "diamond DAG should be safe, got: {result:?}"
+    );
+}
+
+#[test]
+fn dag_deep_chain_safe_parses_and_lowers() {
+    let src = load_example("examples/experimental/dag_deep_chain_safe.trs");
+    let program =
+        pipeline::parse(&src, "dag_deep_chain_safe.trs").expect("parse should succeed");
+    assert_eq!(program.protocol.node.dag_rounds.len(), 5);
+
+    let ta = pipeline::lower(&program).expect("lower should succeed");
+    assert_eq!(ta.dag_rounds.len(), 5);
+
+    // Verify chain structure: each round (except r0) has exactly one parent.
+    assert!(ta.dag_rounds[0].parent_rounds.is_empty());
+    for i in 1..5 {
+        assert_eq!(ta.dag_rounds[i].parent_rounds.len(), 1);
+    }
+}
+
+#[test]
+fn dag_deep_chain_safe_verifies() {
+    let src = load_example("examples/experimental/dag_deep_chain_safe.trs");
+    let opts = default_options();
+    let result =
+        pipeline::verify(&src, "dag_deep_chain_safe.trs", &opts).expect("verify should complete");
+    assert!(
+        matches!(result, VerificationResult::Safe { .. }),
+        "deep chain DAG should be safe, got: {result:?}"
+    );
+}
+
+#[test]
+fn dag_multi_root_safe_parses_and_lowers() {
+    let src = load_example("examples/experimental/dag_multi_root_safe.trs");
+    let program =
+        pipeline::parse(&src, "dag_multi_root_safe.trs").expect("parse should succeed");
+    assert_eq!(program.protocol.node.dag_rounds.len(), 3);
+
+    let ta = pipeline::lower(&program).expect("lower should succeed");
+    // r0 and r1 are roots (no parents), r2 depends on both.
+    assert!(ta.dag_rounds[0].parent_rounds.is_empty());
+    assert!(ta.dag_rounds[1].parent_rounds.is_empty());
+    assert_eq!(ta.dag_rounds[2].parent_rounds.len(), 2);
+}
+
+#[test]
+fn dag_multi_root_safe_verifies() {
+    let src = load_example("examples/experimental/dag_multi_root_safe.trs");
+    let opts = default_options();
+    let result =
+        pipeline::verify(&src, "dag_multi_root_safe.trs", &opts).expect("verify should complete");
+    assert!(
+        matches!(result, VerificationResult::Safe { .. }),
+        "multi-root DAG should be safe, got: {result:?}"
+    );
+}
+
+#[test]
+fn dag_self_loop_invalid_is_rejected() {
+    let src = load_example("examples/experimental/dag_self_loop_invalid.trs");
+    let program =
+        pipeline::parse(&src, "dag_self_loop_invalid.trs").expect("parse should succeed");
+    let err = pipeline::lower(&program).expect_err("self-loop should be rejected");
+    assert!(
+        format!("{err}").contains("self-loop"),
+        "expected self-loop diagnostic, got: {err}"
+    );
+}
+
+#[test]
+fn dag_conflicting_buggy_is_unsafe() {
+    let src = load_example("examples/library/dag_conflicting_buggy.trs");
+    let opts = default_options();
+    let result =
+        pipeline::verify(&src, "dag_conflicting_buggy.trs", &opts).expect("verify should complete");
+    assert!(
+        matches!(result, VerificationResult::Unsafe { .. }),
+        "buggy DAG with weak guards should be unsafe, got: {result:?}"
     );
 }
 

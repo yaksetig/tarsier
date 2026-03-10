@@ -1,0 +1,19 @@
+// Invalid DAG: self-loop (r0 extends itself).
+// Should be rejected during lowering.
+protocol DagSelfLoopInvalid {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    dag_round r0 extends r0;
+
+    role Node {
+        var decided: bool = false;
+        init idle;
+        phase idle {}
+    }
+
+    property inv: invariant {
+        forall p: Node. p.decided == false
+    }
+}

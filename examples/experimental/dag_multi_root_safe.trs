@@ -1,0 +1,29 @@
+// DAG with multiple independent roots that merge later.
+// r0 and r1 are both roots; r2 depends on both.
+protocol DagMultiRootSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    dag_round r0;
+    dag_round r1;
+    dag_round r2 extends r0, r1;
+
+    message Vote;
+
+    role Node {
+        var decided: bool = false;
+        init propose;
+
+        phase propose {
+            when received >= n - t Vote => {
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+
+    property inv: invariant {
+        forall p: Node. p.decided == false
+    }
+}

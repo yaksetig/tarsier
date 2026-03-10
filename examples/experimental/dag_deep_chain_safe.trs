@@ -1,0 +1,23 @@
+// Deep DAG chain: r0 → r1 → r2 → r3 → r4.
+// Tests that deep parent chains are handled correctly.
+protocol DagDeepChainSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+
+    dag_round r0;
+    dag_round r1 extends r0;
+    dag_round r2 extends r1;
+    dag_round r3 extends r2;
+    dag_round r4 extends r3;
+
+    role Node {
+        var decided: bool = false;
+        init idle;
+        phase idle {}
+    }
+
+    property inv: invariant {
+        forall p: Node. p.decided == false
+    }
+}

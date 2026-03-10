@@ -347,6 +347,35 @@ roundtrip_test!(
     )
 );
 
+roundtrip_test!(
+    roundtrip_exp_dag_diamond_safe,
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/experimental/dag_diamond_safe.trs"
+    )
+);
+roundtrip_test!(
+    roundtrip_exp_dag_deep_chain_safe,
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/experimental/dag_deep_chain_safe.trs"
+    )
+);
+roundtrip_test!(
+    roundtrip_exp_dag_multi_root_safe,
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/experimental/dag_multi_root_safe.trs"
+    )
+);
+roundtrip_test!(
+    roundtrip_exp_dag_self_loop_invalid,
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/experimental/dag_self_loop_invalid.trs"
+    )
+);
+
 // Buggy examples (should still parse successfully, bugs are semantic)
 roundtrip_test!(
     roundtrip_lib_reliable_broadcast_buggy,
