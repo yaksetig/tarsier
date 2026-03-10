@@ -273,3 +273,49 @@ High-confidence no-overlap pairs:
 `2026-03-10T14:15:00Z | AGENT_2 | X2-01 | START | implementation started`
 
 `2026-03-10T14:30:00Z | AGENT_2 | X2-01 | DONE | branch=main — added 5 CI gates to ci.yml (Refinement Solver, Equivalence Solver, Solver Parity/Perf, Proof Export, DAG Hardening) + engine_bench/solver_perf benchmark smoke tests; all gates verified locally`
+
+`2026-03-10T15:00:00Z | AGENT_2 | DAGX-05 | CLAIM | taking task — Agent 1 blocked, dependencies satisfied`
+
+`2026-03-10T15:00:00Z | AGENT_2 | DAGX-05 | START | implementation started`
+
+`2026-03-10T15:00:00Z | AGENT_2 | DAGX-05 | DONE | branch=main commit=d07a8d8 — docs/DAG_WORKFLOWS.md + LANGUAGE_REFERENCE.md cross-ref + ADVANCED_USAGE.md DAG section`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-01 | REVIEW_START | reviewing Agent 1 commit=3914b74`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-01 | REVIEW_PASS | 4/4 tests pass; active.rs is fully functional with deterministic fault execution, proper error propagation, and good observability`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-02 | REVIEW_START | reviewing Agent 1 commit=78d26a2`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-02 | REVIEW_PASS | 4/4 tests pass; runtime adapter handles nested+flat fault forms, schema validation, nondecreasing tick enforcement`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-03 | REVIEW_START | reviewing Agent 1 commit=44a8a6d`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-03 | REVIEW_PASS | 3/3 tests pass; etcd-raft adapter covers 7 fault types with proper serde aliases and tick ordering`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-04 | REVIEW_START | reviewing Agent 1 commit=6d97726`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-04 | REVIEW_PASS | 2/2 tests pass; live HTTP mode with reqwest, structured event protocol, real TCP mock server validation`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-05 | REVIEW_START | reviewing Agent 1 commit=f75e327`
+
+`2026-03-10T16:00:00Z | AGENT_2 | TWNX-05 | REVIEW_PASS | 5/5 tests pass; cross-adapter corpus matrix, determinism verification, seed-variation ordering tests`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-01 | REVIEW_START | reviewing Agent 1 commit=0b38c8b`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-01 | REVIEW_PASS | 3/3 engine tests + 2 CLI tests pass; obligation-to-certificate evidence mapping with proper attach_by_name matching`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-02 | REVIEW_START | reviewing Agent 1 commit=a4f5194`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-02 | REVIEW_PASS | tests pass; Lean output emits obligation-specific theorem statements, explicitly asserts no True stubs`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-03 | REVIEW_START | reviewing Agent 1 commit=b4432d4`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-03 | REVIEW_PASS | tests pass; Coq output emits obligation-specific lemma skeletons, explicitly asserts no True stubs`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-04 | REVIEW_START | reviewing Agent 1 commit=3d8cf87`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-04 | REVIEW_PASS | tests pass; certcheck alignment with bundle integrity check, obligation artifacts preserve hash/proof fields`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-05 | REVIEW_START | reviewing Agent 1 commit=372f4c6`
+
+`2026-03-10T16:00:00Z | AGENT_2 | EXPX-05 | REVIEW_PASS | 13/13 CLI proof-export tests pass; golden file exact match, compile-smoke properly gated on lean/coqc availability`
