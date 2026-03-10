@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use miette::IntoDiagnostic;
 use serde::Serialize;
@@ -766,6 +766,35 @@ struct ConformanceActiveReport {
     adapter: String,
     seed: u64,
     faults: Vec<tarsier_conformance::adapters::ScheduledAdapterFault>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    live: Option<ConformanceActiveLiveReport>,
+}
+
+#[derive(Debug, Serialize)]
+struct ConformanceActiveLiveReport {
+    endpoint: String,
+    contract: String,
+    events_sent: u64,
+    final_tick: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+enum LiveAdapterEnvelope {
+    Start {
+        adapter: String,
+        seed: u64,
+    },
+    Tick {
+        tick: u64,
+    },
+    Fault {
+        tick: u64,
+        action: tarsier_conformance::adapters::AdapterFaultAction,
+    },
+    Stop {
+        final_tick: u64,
+    },
 }
 
 fn splitmix64(mut x: u64) -> u64 {
@@ -803,6 +832,8 @@ pub(crate) fn run_conformance_active_command(
     seed: u64,
     format: &str,
     out: Option<&PathBuf>,
+    live_endpoint: Option<&str>,
+    live_timeout_ms: u64,
 ) -> miette::Result<()> {
     let output_format = parse_output_format(format)?;
     let adapter_kind = parse_conformance_adapter(adapter)?;
@@ -810,12 +841,24 @@ pub(crate) fn run_conformance_active_command(
     let mapped = tarsier_conformance::adapters::adapt_active_faults(adapter_kind, &trace_source)
         .map_err(|e| miette::miette!("Active trace adapter error: {e}"))?;
     let scheduled = schedule_faults_deterministically(mapped, seed);
+    let live = if let Some(endpoint) = live_endpoint {
+        Some(run_conformance_active_live_mode(
+            endpoint,
+            adapter_kind.as_str(),
+            seed,
+            &scheduled,
+            live_timeout_ms,
+        )?)
+    } else {
+        None
+    };
 
     let report = ConformanceActiveReport {
         schema_version: 1,
         adapter: adapter_kind.as_str().to_string(),
         seed,
         faults: scheduled,
+        live,
     };
     let report_json_value = serde_json::to_value(&report).into_diagnostic()?;
     let report_json = serde_json::to_string_pretty(&report_json_value).into_diagnostic()?;
@@ -842,17 +885,111 @@ pub(crate) fn run_conformance_active_command(
                     action.replace('\n', "")
                 );
             }
+            if let Some(live) = &report.live {
+                println!(
+                    "  live endpoint={} contract={} events_sent={} final_tick={}",
+                    live.endpoint, live.contract, live.events_sent, live.final_tick
+                );
+            }
         }
     }
 
     Ok(())
 }
 
+fn post_live_adapter_event(
+    client: &reqwest::blocking::Client,
+    endpoint: &str,
+    payload: &LiveAdapterEnvelope,
+) -> miette::Result<()> {
+    let response = client
+        .post(endpoint)
+        .header("connection", "close")
+        .json(payload)
+        .send()
+        .into_diagnostic()?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().unwrap_or_default();
+        miette::bail!(
+            "live endpoint '{}' rejected event with status {}: {}",
+            endpoint,
+            status.as_u16(),
+            body.trim()
+        );
+    }
+    Ok(())
+}
+
+fn run_conformance_active_live_mode(
+    endpoint: &str,
+    adapter: &str,
+    seed: u64,
+    scheduled: &[tarsier_conformance::adapters::ScheduledAdapterFault],
+    timeout_ms: u64,
+) -> miette::Result<ConformanceActiveLiveReport> {
+    let timeout = Duration::from_millis(timeout_ms.max(1));
+    let client = reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .build()
+        .into_diagnostic()?;
+
+    let mut events_sent = 0u64;
+    post_live_adapter_event(
+        &client,
+        endpoint,
+        &LiveAdapterEnvelope::Start {
+            adapter: adapter.to_string(),
+            seed,
+        },
+    )?;
+    events_sent += 1;
+
+    let mut current_tick: Option<u64> = None;
+    let mut final_tick = 0u64;
+    for fault in scheduled {
+        if current_tick != Some(fault.tick) {
+            post_live_adapter_event(
+                &client,
+                endpoint,
+                &LiveAdapterEnvelope::Tick { tick: fault.tick },
+            )?;
+            events_sent += 1;
+            current_tick = Some(fault.tick);
+        }
+
+        post_live_adapter_event(
+            &client,
+            endpoint,
+            &LiveAdapterEnvelope::Fault {
+                tick: fault.tick,
+                action: fault.action.clone(),
+            },
+        )?;
+        events_sent += 1;
+        final_tick = fault.tick;
+    }
+
+    post_live_adapter_event(&client, endpoint, &LiveAdapterEnvelope::Stop { final_tick })?;
+    events_sent += 1;
+
+    Ok(ConformanceActiveLiveReport {
+        endpoint: endpoint.to_string(),
+        contract: "tarsier.active.v1".to_string(),
+        events_sent,
+        final_tick,
+    })
+}
+
 #[cfg(test)]
 mod active_tests {
     use super::*;
     use std::fs;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tarsier_conformance::adapters::{AdapterFaultAction, ScheduledAdapterFault};
 
@@ -868,6 +1005,95 @@ mod active_tests {
             .expect("time should be available")
             .as_nanos();
         std::env::temp_dir().join(format!("{prefix}_{}_{}.json", std::process::id(), nanos))
+    }
+
+    fn find_header_end(buf: &[u8]) -> Option<usize> {
+        buf.windows(4).position(|window| window == b"\r\n\r\n")
+    }
+
+    fn read_http_json_body(stream: &mut TcpStream) -> serde_json::Value {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 1024];
+        let header_end = loop {
+            let read = stream
+                .read(&mut chunk)
+                .expect("request read should succeed");
+            if read == 0 {
+                break 0;
+            }
+            buf.extend_from_slice(&chunk[..read]);
+            if let Some(pos) = find_header_end(&buf) {
+                break pos + 4;
+            }
+        };
+
+        let headers = String::from_utf8_lossy(&buf[..header_end]);
+        let content_len = headers
+            .lines()
+            .find_map(|line| {
+                line.split_once(':').and_then(|(name, value)| {
+                    if name.trim().eq_ignore_ascii_case("content-length") {
+                        value.trim().parse::<usize>().ok()
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or(0);
+
+        while buf.len() < header_end + content_len {
+            let read = stream
+                .read(&mut chunk)
+                .expect("request body read should succeed");
+            if read == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..read]);
+        }
+
+        let body = &buf[header_end..header_end + content_len];
+        serde_json::from_slice(body).expect("request body should be valid JSON")
+    }
+
+    fn spawn_mock_live_endpoint(
+        expected_requests: usize,
+        ok_status: bool,
+    ) -> (
+        String,
+        Arc<Mutex<Vec<serde_json::Value>>>,
+        thread::JoinHandle<()>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("listener should bind");
+        let addr = listener
+            .local_addr()
+            .expect("local addr should be available");
+        let url = format!("http://{addr}/active");
+        let received = Arc::new(Mutex::new(Vec::new()));
+        let received_clone = Arc::clone(&received);
+
+        let handle = thread::spawn(move || {
+            for _ in 0..expected_requests {
+                let (mut stream, _) = listener.accept().expect("request should connect");
+                let body = read_http_json_body(&mut stream);
+                received_clone.lock().expect("mutex should lock").push(body);
+
+                let (status, body) = if ok_status {
+                    ("200 OK", "{\"status\":\"ok\"}")
+                } else {
+                    ("500 Internal Server Error", "{\"status\":\"error\"}")
+                };
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("response should be writable");
+            }
+        });
+
+        (url, received, handle)
     }
 
     #[test]
@@ -931,7 +1157,7 @@ mod active_tests {
     fn conformance_active_command_corpus_fixture_writes_expected_json_shape() {
         let trace = active_fixture_path("cometbft_faults_basic.json");
         let out = tmp_path("tarsier_conformance_active");
-        run_conformance_active_command(&trace, "cometbft", 11, "json", Some(&out))
+        run_conformance_active_command(&trace, "cometbft", 11, "json", Some(&out), None, 5000)
             .expect("conformance-active should succeed on corpus fixture");
 
         let raw = fs::read_to_string(&out).expect("output JSON should be readable");
@@ -999,9 +1225,9 @@ mod active_tests {
         let out_a = tmp_path("tarsier_conformance_active_seed_a");
         let out_b = tmp_path("tarsier_conformance_active_seed_b");
 
-        run_conformance_active_command(&trace, "cometbft", 1, "json", Some(&out_a))
+        run_conformance_active_command(&trace, "cometbft", 1, "json", Some(&out_a), None, 5000)
             .expect("seed 1 run should pass");
-        run_conformance_active_command(&trace, "cometbft", 2, "json", Some(&out_b))
+        run_conformance_active_command(&trace, "cometbft", 2, "json", Some(&out_b), None, 5000)
             .expect("seed 2 run should pass");
 
         let a: serde_json::Value =
@@ -1028,5 +1254,59 @@ mod active_tests {
 
         fs::remove_file(out_a).ok();
         fs::remove_file(out_b).ok();
+    }
+
+    #[test]
+    fn conformance_active_live_mode_posts_contract_events() {
+        let trace = active_fixture_path("cometbft_faults_basic.json");
+        let out = tmp_path("tarsier_conformance_active_live");
+        // 1 start + 6 tick + 6 fault + 1 stop
+        let (endpoint, received, handle) = spawn_mock_live_endpoint(14, true);
+
+        run_conformance_active_command(
+            &trace,
+            "cometbft",
+            11,
+            "json",
+            Some(&out),
+            Some(&endpoint),
+            5000,
+        )
+        .expect("live conformance-active should succeed on mock endpoint");
+
+        handle.join().expect("mock endpoint should join");
+
+        let requests = received.lock().expect("mutex should lock");
+        assert_eq!(requests.len(), 14);
+        assert_eq!(requests[0]["op"], "start");
+        assert_eq!(requests[0]["adapter"], "cometbft");
+        assert_eq!(requests[13]["op"], "stop");
+        assert_eq!(requests[13]["final_tick"], 6);
+
+        let raw = fs::read_to_string(&out).expect("output JSON should be readable");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
+        assert_eq!(value["live"]["endpoint"], endpoint);
+        assert_eq!(value["live"]["contract"], "tarsier.active.v1");
+        assert_eq!(value["live"]["events_sent"], 14);
+        assert_eq!(value["live"]["final_tick"], 6);
+        fs::remove_file(out).ok();
+    }
+
+    #[test]
+    fn conformance_active_live_mode_reports_endpoint_errors() {
+        let trace = active_fixture_path("cometbft_faults_basic.json");
+        let (endpoint, _received, handle) = spawn_mock_live_endpoint(1, false);
+        let err = run_conformance_active_command(
+            &trace,
+            "cometbft",
+            11,
+            "json",
+            None,
+            Some(&endpoint),
+            5000,
+        )
+        .expect_err("live endpoint 500 should fail");
+        handle.join().expect("mock endpoint should join");
+        assert!(format!("{err}").contains("rejected event"));
     }
 }

@@ -2398,6 +2398,7 @@ dependencies = [
  "miette",
  "notify",
  "ratatui",
+ "reqwest",
  "ring",
  "serde",
  "serde_json",

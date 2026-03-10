@@ -922,6 +922,12 @@ pub(crate) enum Commands {
         /// Optional path to write active schedule JSON
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Optional live adapter endpoint (HTTP). When set, scheduled faults are replayed to this endpoint.
+        #[arg(long)]
+        live_endpoint: Option<String>,
+        /// Per-request timeout for live endpoint calls in milliseconds.
+        #[arg(long, default_value_t = 5000)]
+        live_timeout_ms: u64,
     },
 
     /// Check refinement (simulation preservation) between a concrete and abstract protocol

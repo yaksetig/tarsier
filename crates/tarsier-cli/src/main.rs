@@ -628,6 +628,8 @@ fn run() -> miette::Result<()> {
             seed,
             format,
             out,
+            live_endpoint,
+            live_timeout_ms,
         } => {
             commands::conformance::run_conformance_active_command(
                 &trace,
@@ -635,6 +637,8 @@ fn run() -> miette::Result<()> {
                 seed,
                 &format,
                 out.as_ref(),
+                live_endpoint.as_deref(),
+                live_timeout_ms,
             )?;
         }
         Commands::Codegen {
