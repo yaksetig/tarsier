@@ -515,13 +515,26 @@ impl<'a> BmcEncoderBuilder<'a> {
             // - Activation flags are booleans encoded as Int in {0,1}.
             // - Activation is monotonic over time.
             // - Child activation at step k+1 requires each parent active at step k.
+            // - Activation delta: dag_delta_{k}_{rid} = next - curr (0 or 1).
+            //   This variable is 1 exactly on the step when the round activates,
+            //   useful for witness extraction and rule conditioning.
             for (rid, parents) in dag_parent_indices.iter().enumerate() {
                 let curr = dag_round_active_var(k, rid);
                 let next = dag_round_active_var(k + 1, rid);
                 enc.declare(next.clone(), SmtSort::Int);
                 enc.assert_term(SmtTerm::var(next.clone()).ge(SmtTerm::int(0)));
                 enc.assert_term(SmtTerm::var(next.clone()).le(SmtTerm::int(1)));
-                enc.assert_term(SmtTerm::var(next.clone()).ge(SmtTerm::var(curr)));
+                enc.assert_term(SmtTerm::var(next.clone()).ge(SmtTerm::var(curr.clone())));
+
+                // Activation delta variable.
+                let delta_name = format!("dag_delta_{k}_{rid}");
+                enc.declare(delta_name.clone(), SmtSort::Int);
+                enc.assert_term(
+                    SmtTerm::var(delta_name.clone()).eq(
+                        SmtTerm::var(next.clone()).sub(SmtTerm::var(curr)),
+                    ),
+                );
+
                 for parent_id in parents {
                     enc.assert_term(
                         SmtTerm::var(next.clone())
@@ -4605,6 +4618,133 @@ protocol BuggyBroadcast {
                 .iter()
                 .any(|a| a.contains("(<= dag_active_2_1 dag_active_1_0)")),
             "child DAG round activation must depend on prior parent activation"
+        );
+
+        // Verify delta variables exist.
+        assert!(
+            declarations.contains("dag_delta_0_0"),
+            "should declare dag activation delta"
+        );
+        assert!(
+            declarations.contains("dag_delta_0_1"),
+            "should declare dag activation delta for child"
+        );
+    }
+
+    #[test]
+    fn dag_round_delta_equals_next_minus_curr() {
+        let mut ta = make_simple_ta();
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r0".into(),
+            parent_rounds: vec![],
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
+        let encoding = encode_bmc(&cs, &property, 1);
+
+        let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
+        // dag_delta_0_0 = dag_active_1_0 - dag_active_0_0
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("dag_delta_0_0") && a.contains("dag_active_1_0")),
+            "delta should be defined as next - curr; assertions: {:?}",
+            assertions.iter().filter(|a| a.contains("dag_delta")).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn dag_round_multi_parent_all_parents_constrain_child() {
+        let mut ta = make_simple_ta();
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r0".into(),
+            parent_rounds: vec![],
+        });
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r1".into(),
+            parent_rounds: vec![],
+        });
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r2".into(),
+            parent_rounds: vec!["r0".into(), "r1".into()],
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
+        let encoding = encode_bmc(&cs, &property, 2);
+
+        let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
+        // r2 (index 2) needs both r0 (index 0) and r1 (index 1) active.
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("dag_active_1_2") && a.contains("dag_active_0_0")),
+            "child r2 should depend on parent r0"
+        );
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("dag_active_1_2") && a.contains("dag_active_0_1")),
+            "child r2 should depend on parent r1"
+        );
+    }
+
+    #[test]
+    fn dag_round_deep_chain_produces_correct_constraint_count() {
+        let mut ta = make_simple_ta();
+        // Chain: r0 → r1 → r2 → r3
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r0".into(),
+            parent_rounds: vec![],
+        });
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r1".into(),
+            parent_rounds: vec!["r0".into()],
+        });
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r2".into(),
+            parent_rounds: vec!["r1".into()],
+        });
+        ta.dag_rounds.push(IrDagRoundSpec {
+            name: "r3".into(),
+            parent_rounds: vec!["r2".into()],
+        });
+
+        let cs: CounterSystem = ta.into();
+        let property = SafetyProperty::Agreement {
+            conflicting_pairs: vec![],
+        };
+        let encoding = encode_bmc(&cs, &property, 5);
+
+        let declarations: std::collections::HashSet<_> = encoding
+            .declarations
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect();
+
+        // 4 rounds × 6 steps (0..=5) for active vars
+        let dag_active_count = declarations
+            .iter()
+            .filter(|d| d.starts_with("dag_active_"))
+            .count();
+        assert_eq!(
+            dag_active_count, 24,
+            "4 rounds × 6 steps = 24 active vars"
+        );
+
+        // 4 rounds × 5 deltas (0..4)
+        let dag_delta_count = declarations
+            .iter()
+            .filter(|d| d.starts_with("dag_delta_"))
+            .count();
+        assert_eq!(
+            dag_delta_count, 20,
+            "4 rounds × 5 steps = 20 delta vars"
         );
     }
 
