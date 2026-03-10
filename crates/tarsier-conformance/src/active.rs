@@ -355,4 +355,108 @@ mod tests {
             NetworkFaultAction::RetireTwin { twin_id: 99 }
         ));
     }
+
+    #[test]
+    fn adapter_fault_action_to_network_all_variants() {
+        // DropMessage
+        let drop = AdapterFaultAction::DropMessage {
+            channel: "vote".into(),
+            from_process: Some(1),
+            to_process: Some(2),
+        };
+        let net_drop = adapter_fault_action_to_network(&drop);
+        assert!(matches!(
+            net_drop,
+            NetworkFaultAction::DropMessage {
+                ref channel,
+                from_process: Some(1),
+                to_process: Some(2),
+            } if channel == "vote"
+        ));
+
+        // ReorderChannel
+        let reorder = AdapterFaultAction::ReorderChannel {
+            channel: "ack".into(),
+        };
+        let net_reorder = adapter_fault_action_to_network(&reorder);
+        assert!(matches!(
+            net_reorder,
+            NetworkFaultAction::ReorderChannel { ref channel } if channel == "ack"
+        ));
+
+        // PartitionLink
+        let partition = AdapterFaultAction::PartitionLink {
+            process_a: 3,
+            process_b: 4,
+        };
+        let net_partition = adapter_fault_action_to_network(&partition);
+        assert!(matches!(
+            net_partition,
+            NetworkFaultAction::PartitionLink {
+                process_a: 3,
+                process_b: 4,
+            }
+        ));
+
+        // HealPartition
+        let heal = AdapterFaultAction::HealPartition;
+        assert!(matches!(
+            adapter_fault_action_to_network(&heal),
+            NetworkFaultAction::HealPartition
+        ));
+
+        // SpawnTwin
+        let spawn = AdapterFaultAction::SpawnTwin {
+            process_id: 5,
+            twin_id: 50,
+        };
+        assert!(matches!(
+            adapter_fault_action_to_network(&spawn),
+            NetworkFaultAction::SpawnTwin {
+                process_id: 5,
+                twin_id: 50,
+            }
+        ));
+    }
+
+    #[test]
+    fn execute_scheduled_faults_empty_inputs() {
+        let report = execute_scheduled_faults(&[], &[]).unwrap();
+        assert_eq!(report.final_tick, 0);
+        assert!(report.applied_faults.is_empty());
+        assert!(report.delivered_messages.is_empty());
+        assert!(report.dropped_messages.is_empty());
+        assert!(report.pending_messages.is_empty());
+    }
+
+    #[test]
+    fn execute_scheduled_faults_messages_only() {
+        let messages = vec![
+            ScheduledShimMessage {
+                tick: 0,
+                message: ShimMessage {
+                    message_id: 1,
+                    channel: "vote".into(),
+                    from_process: 1,
+                    to_process: 2,
+                    payload: "hello".into(),
+                },
+            },
+            ScheduledShimMessage {
+                tick: 1,
+                message: ShimMessage {
+                    message_id: 2,
+                    channel: "vote".into(),
+                    from_process: 2,
+                    to_process: 1,
+                    payload: "world".into(),
+                },
+            },
+        ];
+
+        let report = execute_scheduled_faults(&[], &messages).unwrap();
+        assert_eq!(report.final_tick, 1);
+        assert_eq!(report.delivered_messages.len(), 2);
+        assert!(report.applied_faults.is_empty());
+    }
 }

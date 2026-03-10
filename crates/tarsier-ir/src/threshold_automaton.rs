@@ -2178,4 +2178,225 @@ mod tests {
         assert!(!matches!(next, ReconfigurationSemantics::Immediate));
         assert!(!matches!(imm, ReconfigurationSemantics::NextStep));
     }
+
+    // --- Builder method tests ---
+
+    #[test]
+    fn add_location_returns_sequential_ids() {
+        let mut ta = ThresholdAutomaton::new();
+        let id0 = ta.add_location(Location {
+            name: "L0".into(),
+            role: "R".into(),
+            phase: "p".into(),
+            local_vars: IndexMap::new(),
+        });
+        let id1 = ta.add_location(Location {
+            name: "L1".into(),
+            role: "R".into(),
+            phase: "q".into(),
+            local_vars: IndexMap::new(),
+        });
+        assert_eq!(id0, LocationId::from(0));
+        assert_eq!(id1, LocationId::from(1));
+        assert_eq!(ta.num_locations(), 2);
+        assert_eq!(ta.locations[id0.as_usize()].name, "L0");
+        assert_eq!(ta.locations[id1.as_usize()].name, "L1");
+    }
+
+    #[test]
+    fn add_shared_var_returns_sequential_ids() {
+        let mut ta = ThresholdAutomaton::new();
+        let v0 = ta.add_shared_var(SharedVar {
+            name: "cnt_A".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: false,
+            distinct_role: None,
+        });
+        let v1 = ta.add_shared_var(SharedVar {
+            name: "cnt_B".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: true,
+            distinct_role: Some("R".into()),
+        });
+        assert_eq!(v0, SharedVarId::from(0));
+        assert_eq!(v1, SharedVarId::from(1));
+        assert_eq!(ta.num_shared_vars(), 2);
+        assert!(ta.shared_vars[v1.as_usize()].distinct);
+    }
+
+    #[test]
+    fn add_parameter_returns_sequential_ids() {
+        let mut ta = ThresholdAutomaton::new();
+        let p0 = ta.add_parameter(Parameter {
+            name: "n".into(),
+            time_varying: false,
+        });
+        let p1 = ta.add_parameter(Parameter::varying("epoch".to_string()));
+        assert_eq!(p0, ParamId::from(0));
+        assert_eq!(p1, ParamId::from(1));
+        assert_eq!(ta.num_parameters(), 2);
+        assert!(!ta.parameters[p0.as_usize()].time_varying);
+        assert!(ta.parameters[p1.as_usize()].time_varying);
+    }
+
+    #[test]
+    fn add_rule_returns_sequential_ids() {
+        let mut ta = ThresholdAutomaton::new();
+        let l0 = ta.add_location(Location {
+            name: "A".into(),
+            role: "R".into(),
+            phase: "p".into(),
+            local_vars: IndexMap::new(),
+        });
+        let l1 = ta.add_location(Location {
+            name: "B".into(),
+            role: "R".into(),
+            phase: "q".into(),
+            local_vars: IndexMap::new(),
+        });
+        let r0 = ta.add_rule(Rule {
+            from: l0,
+            to: l1,
+            guard: Guard::trivial(),
+            updates: vec![],
+            collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
+            param_updates: vec![],
+        });
+        assert_eq!(r0, RuleId::from(0));
+        assert_eq!(ta.num_rules(), 1);
+        assert_eq!(ta.rules[r0.as_usize()].from, l0);
+        assert_eq!(ta.rules[r0.as_usize()].to, l1);
+    }
+
+    #[test]
+    fn add_collection_and_find_by_name() {
+        let mut ta = ThresholdAutomaton::new();
+        let cid = ta.add_collection(IrCollectionSpec {
+            name: "log".into(),
+            kind: IrCollectionKind::Log,
+            element_type: "int".into(),
+            capacity: LinearCombination::constant(100),
+            queue_model: QueueModel::default(),
+        });
+        assert_eq!(cid, CollectionId::from(0));
+        assert_eq!(ta.find_collection_by_name("log"), Some(cid));
+        assert_eq!(ta.find_collection_by_name("other"), None);
+    }
+
+    #[test]
+    fn num_accessors_return_correct_counts() {
+        let ta = minimal_ta();
+        assert_eq!(ta.num_parameters(), 3); // n, t, f
+        assert_eq!(ta.num_locations(), 2);   // Init, Done
+        assert_eq!(ta.num_shared_vars(), 1); // msg_count
+        assert_eq!(ta.num_rules(), 1);
+    }
+
+    // --- LinearCombination tests ---
+
+    #[test]
+    fn linear_combination_scale() {
+        let p = ParamId::from(0);
+        let lc = LinearCombination {
+            constant: 3,
+            terms: vec![(2, p)],
+        };
+        let scaled = lc.scale(4);
+        assert_eq!(scaled.constant, 12);
+        assert_eq!(scaled.terms, vec![(8, p)]);
+    }
+
+    #[test]
+    fn linear_combination_scale_by_zero() {
+        let p = ParamId::from(0);
+        let lc = LinearCombination {
+            constant: 5,
+            terms: vec![(3, p)],
+        };
+        let scaled = lc.scale(0);
+        assert_eq!(scaled.constant, 0);
+        assert_eq!(scaled.terms, vec![(0, p)]);
+    }
+
+    #[test]
+    fn linear_combination_scale_negative() {
+        let p = ParamId::from(0);
+        let lc = LinearCombination {
+            constant: 2,
+            terms: vec![(3, p)],
+        };
+        let scaled = lc.scale(-1);
+        assert_eq!(scaled.constant, -2);
+        assert_eq!(scaled.terms, vec![(-3, p)]);
+    }
+
+    #[test]
+    fn linear_combination_sub() {
+        let p0 = ParamId::from(0);
+        let p1 = ParamId::from(1);
+        let a = LinearCombination {
+            constant: 10,
+            terms: vec![(3, p0)],
+        };
+        let b = LinearCombination {
+            constant: 4,
+            terms: vec![(1, p1)],
+        };
+        let result = a.sub(&b);
+        assert_eq!(result.constant, 6);
+        assert_eq!(result.terms.len(), 2);
+    }
+
+    #[test]
+    fn linear_combination_display() {
+        let p0 = ParamId::from(0);
+        let lc = LinearCombination::constant(5);
+        assert_eq!(format!("{lc}"), "5");
+
+        let lc2 = LinearCombination::param(p0);
+        let display = format!("{lc2}");
+        assert!(!display.is_empty());
+    }
+
+    // --- Guard construction tests ---
+
+    #[test]
+    fn guard_trivial_has_empty_atoms() {
+        let g = Guard::trivial();
+        assert!(g.atoms.is_empty());
+    }
+
+    #[test]
+    fn guard_single_has_one_atom() {
+        let atom = GuardAtom::Threshold {
+            vars: vec![SharedVarId::from(0)],
+            op: CmpOp::Ge,
+            bound: LinearCombination::constant(1),
+            distinct: false,
+        };
+        let g = Guard::single(atom.clone());
+        assert_eq!(g.atoms.len(), 1);
+    }
+
+    // --- find_location_by_name ---
+
+    #[test]
+    fn find_location_by_name_works() {
+        let ta = minimal_ta();
+        assert_eq!(ta.find_location_by_name("Init"), Some(LocationId::from(0)));
+        assert_eq!(ta.find_location_by_name("Done"), Some(LocationId::from(1)));
+        assert_eq!(ta.find_location_by_name("Missing"), None);
+    }
+
+    // --- find_param_by_name ---
+
+    #[test]
+    fn find_param_by_name_works() {
+        let ta = minimal_ta();
+        assert!(ta.find_param_by_name("n").is_some());
+        assert!(ta.find_param_by_name("t").is_some());
+        assert!(ta.find_param_by_name("missing").is_none());
+    }
 }

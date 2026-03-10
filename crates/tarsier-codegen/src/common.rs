@@ -321,4 +321,304 @@ mod tests {
         assert!(names.contains("n"));
         assert!(names.contains("f"));
     }
+
+    // --- render_linear_expr additional coverage ---
+
+    #[test]
+    fn render_linear_expr_sub() {
+        let params: HashSet<String> = ["n".into()].into_iter().collect();
+        let expr = LinearExpr::Sub(
+            Box::new(LinearExpr::Var("n".into())),
+            Box::new(LinearExpr::Const(1)),
+        );
+        assert_eq!(
+            render_linear_expr(&expr, &params, CodegenTarget::Rust),
+            "(config.n - 1)"
+        );
+    }
+
+    #[test]
+    fn render_linear_expr_go_target() {
+        let params: HashSet<String> = ["n".into()].into_iter().collect();
+        let expr = LinearExpr::Add(
+            Box::new(LinearExpr::Mul(2, Box::new(LinearExpr::Var("n".into())))),
+            Box::new(LinearExpr::Const(1)),
+        );
+        assert_eq!(
+            render_linear_expr(&expr, &params, CodegenTarget::Go),
+            "((2 * config.N) + 1)"
+        );
+    }
+
+    #[test]
+    fn render_linear_expr_const_only() {
+        let params = HashSet::new();
+        assert_eq!(
+            render_linear_expr(&LinearExpr::Const(42), &params, CodegenTarget::Rust),
+            "42"
+        );
+    }
+
+    // --- render_expr additional coverage ---
+
+    #[test]
+    fn render_expr_arithmetic_ops() {
+        let params = HashSet::new();
+        let sub = Expr::Sub(Box::new(Expr::IntLit(10)), Box::new(Expr::IntLit(3)));
+        assert_eq!(render_expr(&sub, &params, CodegenTarget::Rust), "(10 - 3)");
+
+        let mul = Expr::Mul(Box::new(Expr::IntLit(4)), Box::new(Expr::IntLit(5)));
+        assert_eq!(render_expr(&mul, &params, CodegenTarget::Rust), "(4 * 5)");
+
+        let div = Expr::Div(Box::new(Expr::IntLit(10)), Box::new(Expr::IntLit(2)));
+        assert_eq!(render_expr(&div, &params, CodegenTarget::Rust), "(10 / 2)");
+    }
+
+    #[test]
+    fn render_expr_not() {
+        let params = HashSet::new();
+        let not = Expr::Not(Box::new(Expr::BoolLit(true)));
+        assert_eq!(render_expr(&not, &params, CodegenTarget::Rust), "!true");
+        assert_eq!(render_expr(&not, &params, CodegenTarget::Go), "!true");
+    }
+
+    #[test]
+    fn render_expr_index_rust_and_go() {
+        let params: HashSet<String> = ["log".into()].into_iter().collect();
+        let idx = Expr::Index("log".into(), Box::new(Expr::IntLit(0)));
+        assert_eq!(
+            render_expr(&idx, &params, CodegenTarget::Rust),
+            "config.log[0]"
+        );
+        assert_eq!(
+            render_expr(&idx, &params, CodegenTarget::Go),
+            "config.Log[0]"
+        );
+
+        // Local collection (not a param)
+        let params2 = HashSet::new();
+        let idx2 = Expr::Index("buf".into(), Box::new(Expr::IntLit(1)));
+        assert_eq!(
+            render_expr(&idx2, &params2, CodegenTarget::Rust),
+            "self.buf[1]"
+        );
+        assert_eq!(
+            render_expr(&idx2, &params2, CodegenTarget::Go),
+            "s.Buf[1]"
+        );
+    }
+
+    #[test]
+    fn render_expr_len_rust_and_go() {
+        let params = HashSet::new();
+        let len = Expr::Len("queue".into());
+        assert_eq!(
+            render_expr(&len, &params, CodegenTarget::Rust),
+            "self.queue.len()"
+        );
+        assert_eq!(
+            render_expr(&len, &params, CodegenTarget::Go),
+            "len(s.Queue)"
+        );
+    }
+
+    #[test]
+    fn render_expr_nested_arithmetic() {
+        let params = HashSet::new();
+        // (1 + 2) * (3 - 4)
+        let expr = Expr::Mul(
+            Box::new(Expr::Add(
+                Box::new(Expr::IntLit(1)),
+                Box::new(Expr::IntLit(2)),
+            )),
+            Box::new(Expr::Sub(
+                Box::new(Expr::IntLit(3)),
+                Box::new(Expr::IntLit(4)),
+            )),
+        );
+        assert_eq!(
+            render_expr(&expr, &params, CodegenTarget::Rust),
+            "((1 + 2) * (3 - 4))"
+        );
+    }
+
+    // --- var_accessor coverage ---
+
+    #[test]
+    fn var_accessor_param_vs_local() {
+        let params: HashSet<String> = ["n".into()].into_iter().collect();
+        assert_eq!(var_accessor("n", &params, CodegenTarget::Rust), "config.n");
+        assert_eq!(var_accessor("n", &params, CodegenTarget::Go), "config.N");
+        assert_eq!(
+            var_accessor("count", &params, CodegenTarget::Rust),
+            "self.count"
+        );
+        assert_eq!(
+            var_accessor("count", &params, CodegenTarget::Go),
+            "s.Count"
+        );
+    }
+
+    // --- uses_distinct_guards / uses_filtered_guards ---
+
+    #[test]
+    fn uses_distinct_guards_detects_distinct_flag() {
+        use tarsier_dsl::ast::*;
+        let mut protocol = ProtocolDecl {
+            name: "Test".into(),
+            imports: vec![],
+            refines: None,
+            modules: vec![],
+            enums: vec![],
+            parameters: vec![],
+            resilience: None,
+            pacemaker: None,
+            adversary: vec![],
+            identities: vec![],
+            channels: vec![],
+            equivocation_policies: vec![],
+            committees: vec![],
+            dag_rounds: vec![],
+            collections: vec![],
+            clocks: vec![],
+            messages: vec![],
+            crypto_objects: vec![],
+            roles: vec![],
+            properties: vec![],
+        };
+
+        // No roles → false
+        assert!(!uses_distinct_guards(&protocol));
+
+        // Role with non-distinct guard → false
+        protocol.roles.push(Spanned {
+            node: RoleDecl {
+                name: "V".into(),
+                is_leader: false,
+                vars: vec![],
+                init_phase: None,
+                phases: vec![Spanned {
+                    node: PhaseDecl {
+                        name: "init".into(),
+                        transitions: vec![Spanned {
+                            node: TransitionRule {
+                                guard: GuardExpr::Threshold(ThresholdGuard {
+                                    message_type: "Vote".into(),
+                                    op: CmpOp::Ge,
+                                    threshold: LinearExpr::Const(1),
+                                    distinct: false,
+                                    distinct_role: None,
+                                    message_args: vec![],
+                                }),
+                                actions: vec![],
+                            },
+                            span: Span::new(0, 0),
+                        }],
+                    },
+                    span: Span::new(0, 0),
+                }],
+            },
+            span: Span::new(0, 0),
+        });
+        assert!(!uses_distinct_guards(&protocol));
+
+        // Add distinct guard in And → true
+        protocol.roles[0].node.phases[0].node.transitions.push(Spanned {
+            node: TransitionRule {
+                guard: GuardExpr::And(
+                    Box::new(GuardExpr::BoolVar("ready".into())),
+                    Box::new(GuardExpr::Threshold(ThresholdGuard {
+                        message_type: "Ack".into(),
+                        op: CmpOp::Ge,
+                        threshold: LinearExpr::Const(1),
+                        distinct: true,
+                        distinct_role: None,
+                        message_args: vec![],
+                    })),
+                ),
+                actions: vec![],
+            },
+            span: Span::new(0, 0),
+        });
+        assert!(uses_distinct_guards(&protocol));
+    }
+
+    #[test]
+    fn uses_filtered_guards_detects_message_args() {
+        use tarsier_dsl::ast::*;
+        let protocol = ProtocolDecl {
+            name: "Test".into(),
+            imports: vec![],
+            refines: None,
+            modules: vec![],
+            enums: vec![],
+            parameters: vec![],
+            resilience: None,
+            pacemaker: None,
+            adversary: vec![],
+            identities: vec![],
+            channels: vec![],
+            equivocation_policies: vec![],
+            committees: vec![],
+            dag_rounds: vec![],
+            collections: vec![],
+            clocks: vec![],
+            messages: vec![],
+            crypto_objects: vec![],
+            roles: vec![Spanned {
+                node: RoleDecl {
+                    name: "V".into(),
+                    is_leader: false,
+                    vars: vec![],
+                    init_phase: None,
+                    phases: vec![Spanned {
+                        node: PhaseDecl {
+                            name: "init".into(),
+                            transitions: vec![Spanned {
+                                node: TransitionRule {
+                                    guard: GuardExpr::Threshold(ThresholdGuard {
+                                        message_type: "Vote".into(),
+                                        op: CmpOp::Ge,
+                                        threshold: LinearExpr::Const(1),
+                                        distinct: false,
+                                        distinct_role: None,
+                                        message_args: vec![("view".into(), Expr::IntLit(1))],
+                                    }),
+                                    actions: vec![],
+                                },
+                                span: Span::new(0, 0),
+                            }],
+                        },
+                        span: Span::new(0, 0),
+                    }],
+                },
+                span: Span::new(0, 0),
+            }],
+            properties: vec![],
+        };
+        assert!(uses_filtered_guards(&protocol));
+    }
+
+    #[test]
+    fn to_pascal_case_empty_and_single_char() {
+        assert_eq!(to_pascal_case(""), "");
+        assert_eq!(to_pascal_case("_"), "");
+        assert_eq!(to_pascal_case("x"), "X");
+    }
+
+    #[test]
+    fn to_snake_case_empty_and_single_char() {
+        assert_eq!(to_snake_case(""), "");
+        assert_eq!(to_snake_case("A"), "a");
+    }
+
+    #[test]
+    fn render_cmp_op_all_variants() {
+        assert_eq!(render_cmp_op(&CmpOp::Ge), ">=");
+        assert_eq!(render_cmp_op(&CmpOp::Le), "<=");
+        assert_eq!(render_cmp_op(&CmpOp::Gt), ">");
+        assert_eq!(render_cmp_op(&CmpOp::Lt), "<");
+        assert_eq!(render_cmp_op(&CmpOp::Eq), "==");
+        assert_eq!(render_cmp_op(&CmpOp::Ne), "!=");
+    }
 }
