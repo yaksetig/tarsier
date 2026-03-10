@@ -202,3 +202,4 @@ Highest-priority dependency edges:
 `2026-03-10T20:07:07Z | AGENT_1 | INTEG-03 | START | implementation started`
 `2026-03-10T20:09:43Z | AGENT_1 | INTEG-03 | PR_OPEN | branch=codex/agent1-integ-03-v1 pr=local summary=add cometbft active conformance e2e smoke script with deterministic trace assertions and docs`
 `2026-03-10T20:09:43Z | AGENT_1 | INTEG-03 | DONE | commit=pending tests=bash -n scripts/cometbft-conformance-active-smoke.sh; ./scripts/cometbft-conformance-active-smoke.sh assert-fixture; python3 scripts/check-cometbft-live-config.py; rg -n "INTEG-03|cometbft-conformance-active-smoke" docs/CONFORMANCE.md integration/cometbft-live/README.md`
+`2026-03-10T20:09:52Z | AGENT_1 | INTEG-03 | CHANGE | done_commit=4793fd4`
