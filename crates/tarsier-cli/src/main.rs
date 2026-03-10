@@ -436,12 +436,14 @@ fn run() -> miette::Result<()> {
             abstract_file,
             depth,
             format,
+            timeout,
         } => {
             commands::refinement::run_refinement_check(
                 &file,
                 abstract_file.as_deref(),
                 depth,
                 &format,
+                timeout,
             )?;
         }
         Commands::EquivalenceCheck {

@@ -1,9 +1,11 @@
 //! `refinement-check` CLI command handler.
 //!
 //! Parses concrete and abstract protocols, builds the product automaton,
-//! and reports the result. Full solver integration is deferred to engine wiring.
+//! encodes bounded simulation obligations, and runs the Z3 solver to produce
+//! a SAT/UNSAT/UNKNOWN verdict with optional witness extraction.
 
 use std::path::Path;
+use std::process;
 
 use serde_json::json;
 use tarsier_dsl::parser::parse;
@@ -19,6 +21,7 @@ pub(crate) fn run_refinement_check(
     abstract_path_override: Option<&Path>,
     depth: usize,
     format: &str,
+    timeout_secs: u64,
 ) -> miette::Result<()> {
     // 1. Parse concrete protocol.
     let concrete_src = std::fs::read_to_string(concrete_path)
@@ -63,16 +66,17 @@ pub(crate) fn run_refinement_check(
         build_product(&concrete_ta, &abstract_ta, &relation).map_err(|e| miette::miette!("{e}"))?;
 
     // 7. Run solver.
-    let mut solver = Z3Solver::with_timeout_secs(60);
+    let mut solver = Z3Solver::with_timeout_secs(timeout_secs);
     let result = run_refinement_solver(&mut solver, &product, depth)
         .map_err(|e| miette::miette!("solver error: {e}"))?;
 
     // 8. Report.
     let base_report = json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "concrete": concrete_path.display().to_string(),
         "abstract": abstract_path.display().to_string(),
         "depth": depth,
+        "timeout_secs": timeout_secs,
         "product_locations": product.num_locations(),
         "product_rules": product.num_rules(),
         "mismatch_locations": product.mismatch_locations.len(),
@@ -118,6 +122,7 @@ pub(crate) fn run_refinement_check(
             println!("Concrete: {}", concrete_path.display());
             println!("Abstract: {}", abstract_path.display());
             println!("Depth:    {depth}");
+            println!("Timeout:  {timeout_secs}s");
             println!();
             println!("Product automaton:");
             println!("  Locations:  {}", product.num_locations());
@@ -157,7 +162,12 @@ pub(crate) fn run_refinement_check(
         }
     }
 
-    Ok(())
+    // Exit with appropriate code: 0=holds, 1=violated, 2=unknown
+    match &result {
+        SimulationCheckResult::SimulationHolds { .. } => Ok(()),
+        SimulationCheckResult::SimulationViolated { .. } => process::exit(1),
+        SimulationCheckResult::Unknown { .. } => process::exit(2),
+    }
 }
 
 /// Convert a witness to JSON for structured output.
