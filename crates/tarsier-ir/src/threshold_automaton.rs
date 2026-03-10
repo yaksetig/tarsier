@@ -442,19 +442,14 @@ impl fmt::Display for IrCollectionKind {
 /// Tracks head (dequeue position) and tail (enqueue position) indices
 /// to enforce FIFO ordering and capacity constraints. The queue occupancy
 /// is `tail - head`, bounded by the collection's `capacity`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum QueueModel {
     /// Not a queue — used for log and sequence collections.
+    #[default]
     None,
     /// Unbounded-index FIFO queue: head and tail are monotonically increasing
     /// integers. Occupancy = tail - head, bounded by capacity.
     LinearFifo,
-}
-
-impl Default for QueueModel {
-    fn default() -> Self {
-        QueueModel::None
-    }
 }
 
 /// Bounded log or sequence specification in the IR.

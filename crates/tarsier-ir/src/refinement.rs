@@ -66,18 +66,13 @@ impl RefinementMapping {
 }
 
 /// Simulation relation kind — determines how the product automaton is constructed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SimulationKind {
     /// Forward simulation: every concrete step can be matched by an abstract step.
+    #[default]
     Forward,
     /// Backward simulation: every abstract step can be matched by a concrete step.
     Backward,
-}
-
-impl Default for SimulationKind {
-    fn default() -> Self {
-        SimulationKind::Forward
-    }
 }
 
 /// Stub for a refinement relation between two threshold automata.
