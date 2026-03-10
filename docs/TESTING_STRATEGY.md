@@ -167,3 +167,23 @@ CI gates:
 Quality bar:
 - Benchmark reports must preserve schema compatibility and include deterministic replay metadata.
 - Regressions must be triaged with artifact evidence before budget thresholds are relaxed.
+
+## 10) Mutation Testing Gates (PR + Nightly)
+
+Purpose:
+- Detect weak assertions and survivable behavioral regressions in critical crates.
+- Enforce a practical PR mutation quality gate while preserving a broader nightly campaign.
+
+CI gates:
+- PR targeted gate: `.github/workflows/mutation-testing-pr.yml`
+  - Scope: `tarsier-engine` and `tarsier-ir`
+  - Budget: `--timeout=180 -j 2`, job timeout `60` minutes
+  - Threshold: `MUTATION_SCORE_MIN=65`
+- Nightly full campaign: `.github/workflows/mutation-testing.yml`
+  - Scope: `tarsier-smt`, `tarsier-prob`, `tarsier-engine`, `tarsier-ir`
+  - Threshold: `MUTATION_SCORE_MIN=70`
+  - Schedule: nightly at `03:00 UTC`
+
+Quality gate script:
+- `.github/scripts/check_mutation_score.py` reads `mutants.out/outcomes.json`
+  and fails when score `< MUTATION_SCORE_MIN`.

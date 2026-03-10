@@ -1,0 +1,57 @@
+name: Mutation Testing (PR Targeted)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/scripts/check_mutation_score.py"
+      - ".github/workflows/mutation-testing*.yml"
+  workflow_dispatch:
+
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  CARGO_TERM_COLOR: always
+  # Slightly lower than nightly full-corpus runs to keep PR latency practical.
+  MUTATION_SCORE_MIN: "65"
+
+jobs:
+  mutation-test-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants
+
+      - name: Run targeted mutation testing for PR gating
+        run: |
+          cargo mutants --no-shuffle --timeout=180 -j 2 \
+            -p tarsier-engine \
+            -p tarsier-ir \
+          || true
+
+      - name: Mutation score quality gate
+        run: python3 .github/scripts/check_mutation_score.py
+
+      - name: Upload mutation testing results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-testing-pr-results
+          path: mutants.out/
+          retention-days: 14
