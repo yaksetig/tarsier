@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "name": "example-matrix-fast",
+  "description": "Fast regression subset spanning key example-matrix feature families.",
+  "entries": [
+    {
+      "id": "enum_safe",
+      "file": "examples/library/voting_enum_phases.trs",
+      "expected": "safe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "enum_unsafe",
+      "file": "examples/library/voting_enum_buggy.trs",
+      "expected": "unsafe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "clock_safe",
+      "file": "examples/library/clock_timeout_safe.trs",
+      "expected": "safe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "clock_unsafe",
+      "file": "examples/library/clock_premature_buggy.trs",
+      "expected": "unsafe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "bounded_log_unsafe",
+      "file": "examples/library/bounded_log_overflow_buggy.trs",
+      "expected": "unsafe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "committee_safe",
+      "file": "examples/library/algorand_vote_cert.trs",
+      "expected": "safe",
+      "depth": 2,
+      "soundness": "strict"
+    },
+    {
+      "id": "committee_unsafe",
+      "file": "examples/library/committee_weak_bound_buggy.trs",
+      "expected": "unsafe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "filtered_guard_safe",
+      "file": "examples/library/filtered_guard_safe.trs",
+      "expected": "safe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "filtered_guard_unsafe",
+      "file": "examples/library/filtered_guard_buggy.trs",
+      "expected": "unsafe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "pacemaker_safe",
+      "file": "examples/pbft_faithful_liveness.trs",
+      "expected": "safe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "pacemaker_unsafe",
+      "file": "examples/library/pacemaker_stuck_buggy.trs",
+      "expected": "unsafe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "leader_unsafe",
+      "file": "examples/library/leader_equivocation_buggy.trs",
+      "expected": "unsafe",
+      "depth": 4,
+      "soundness": "strict"
+    },
+    {
+      "id": "crash_recovery_unsafe",
+      "file": "examples/crash_recovery_amnesia_buggy.trs",
+      "expected": "unsafe",
+      "depth": 4,
+      "soundness": "permissive"
+    }
+  ]
+}
