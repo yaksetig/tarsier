@@ -41,6 +41,42 @@ fn assert_rust_compiles(name: &str, code: &str) {
     );
 }
 
+fn assert_rust_executes(name: &str, generated_code: &str, harness_main: &str) {
+    let dir = std::env::temp_dir().join(format!("tarsier_runtime_{name}_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let src_path = dir.join(format!("{name}.rs"));
+    let bin_path = dir.join(name);
+    let mut combined = String::new();
+    combined.push_str(generated_code);
+    combined.push('\n');
+    combined.push_str(harness_main);
+    std::fs::write(&src_path, combined).unwrap();
+
+    let compile = Command::new("rustc")
+        .args(["--edition", "2021"])
+        .arg(&src_path)
+        .arg("-o")
+        .arg(&bin_path)
+        .output()
+        .expect("failed to run rustc for runtime execution test");
+    if !compile.status.success() {
+        let stderr = String::from_utf8_lossy(&compile.stderr);
+        let _ = std::fs::remove_dir_all(&dir);
+        panic!("runtime compile failed for {name}:\n{stderr}");
+    }
+
+    let run = Command::new(&bin_path)
+        .output()
+        .expect("failed to run generated runtime binary");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        run.status.success(),
+        "generated runtime binary failed for {name}:\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+}
+
 fn assert_go_compiles(name: &str, code: &str) {
     let go_check = Command::new("go").arg("version").output();
     if go_check.is_err() || !go_check.as_ref().unwrap().status.success() {
@@ -76,6 +112,100 @@ fn assert_go_compiles(name: &str, code: &str) {
         output.status.success(),
         "go build failed for {name}:\n{stderr}"
     );
+}
+
+// ==================== Runtime execution tests ====================
+
+#[test]
+fn runtime_generated_rust_state_machine_executes_transition() {
+    let source = r#"
+protocol RuntimeExec {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    message Ping;
+    role Node {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Ping => {
+                decided = true;
+                decide 1;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property inv: invariant {
+        forall p: Node. p.decided == p.decided
+    }
+}
+"#;
+    let code = parse_and_generate_rust(source);
+    let harness = r#"
+fn main() {
+    let mut state = NodeState::new();
+    let cfg = Config { n: 4, t: 1, f: 1 };
+    assert!(matches!(state.phase, NodePhase::Start));
+    assert!(!state.decided);
+
+    let env = Envelope {
+        sender: 7,
+        message: Message::Ping(PingMsg),
+    };
+    let (outgoing, decision) = state.handle_message(env, &cfg);
+    assert!(outgoing.is_empty());
+    assert!(state.decided);
+    assert!(matches!(state.phase, NodePhase::Done));
+    let d = decision.expect("expected decision after threshold-1 Ping");
+    assert_eq!(d.value, 1);
+}
+"#;
+    assert_rust_executes("runtime_exec_transition", &code, harness);
+}
+
+#[test]
+fn runtime_generated_rust_state_machine_keeps_waiting_when_guard_unsatisfied() {
+    let source = r#"
+protocol RuntimeNoFire {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; }
+    message Ping;
+    role Node {
+        var decided: bool = false;
+        init start;
+        phase start {
+            when received >= 2 Ping => {
+                decided = true;
+                decide 1;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property inv: invariant {
+        forall p: Node. p.decided == p.decided
+    }
+}
+"#;
+    let code = parse_and_generate_rust(source);
+    let harness = r#"
+fn main() {
+    let mut state = NodeState::new();
+    let cfg = Config { n: 4, t: 1, f: 1 };
+
+    let first = Envelope {
+        sender: 1,
+        message: Message::Ping(PingMsg),
+    };
+    let (_outgoing, decision) = state.handle_message(first, &cfg);
+    assert!(decision.is_none(), "guard should remain unsatisfied at count=1");
+    assert!(matches!(state.phase, NodePhase::Start));
+    assert!(!state.decided);
+}
+"#;
+    assert_rust_executes("runtime_exec_no_fire", &code, harness);
 }
 
 // ==================== Rust smoke tests ====================
