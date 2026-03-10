@@ -364,11 +364,22 @@ fn render_coq_module(ir: &ProofExportIr) -> String {
     }
     out.push_str("].\n\n");
 
+    out.push_str("Definition obligation_statement (name expected smt2 : string) : Prop :=\n");
+    out.push_str("  In (name, expected, smt2) obligations.\n\n");
+
     for ob in &ir.obligations {
         let lemma_name = coq_ident_from_name(&ob.name);
+        let statement_name = format!("{lemma_name}_statement");
         out.push_str(&format!(
-            "Lemma {} : True.\nProof. exact I. Qed.\n\n",
-            lemma_name
+            "Definition {} : Prop :=\n  obligation_statement \"{}\" \"{}\" \"{}\".\n\n",
+            statement_name,
+            coq_escape(&ob.name),
+            coq_escape(&ob.expected),
+            coq_escape(&ob.smt2)
+        ));
+        out.push_str(&format!(
+            "Lemma {} : {}.\nProof.\n  (* Proof skeleton: replay certificate evidence for this obligation. *)\nAdmitted.\n\n",
+            lemma_name, statement_name
         ));
     }
     out.push_str("End TarsierExport.\n");
@@ -493,7 +504,14 @@ mod tests {
         assert!(coq.contains("Module TarsierExport."));
         assert!(coq.contains("Definition protocol_file : string := \"pbft.trs\"."));
         assert!(coq.contains("Definition obligations : list (string * string * string)"));
-        assert!(coq.contains("Lemma obligation_init_implies_inv : True."));
+        assert!(
+            coq.contains("Definition obligation_statement (name expected smt2 : string) : Prop :=")
+        );
+        assert!(coq.contains("Definition obligation_init_implies_inv_statement : Prop :="));
+        assert!(coq.contains(
+            "Lemma obligation_init_implies_inv : obligation_init_implies_inv_statement."
+        ));
+        assert!(!coq.contains("Lemma obligation_init_implies_inv : True."));
     }
 
     #[test]
