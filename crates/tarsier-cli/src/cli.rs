@@ -12,6 +12,10 @@ pub(crate) const CLI_LONG_ABOUT: &str =
     3. tarsier visualize my_protocol.trs --check verify\n\n\
     Advanced (optional):\n  \
     - tarsier prove my_protocol.trs --k 12\n\n\
+    Documentation entry points:\n  \
+    - docs/GETTING_STARTED.md (quickstart)\n  \
+    - docs/LANGUAGE_REFERENCE.md (DSL)\n  \
+    - docs/ADVANCED_USAGE.md (governance/CI)\n\n\
     Use --goal to select what to check (bughunt, safety, safety+liveness, release).\n\
     Use --profile to select expertise level (beginner, pro, governance).";
 
@@ -24,6 +28,10 @@ pub(crate) const CLI_LONG_ABOUT: &str =
     3. tarsier visualize my_protocol.trs --check verify\n\n\
     Governance (optional):\n  \
     - tarsier certify-safety my_protocol.trs --out certs/my_protocol\n\n\
+    Documentation entry points:\n  \
+    - docs/GETTING_STARTED.md (quickstart)\n  \
+    - docs/LANGUAGE_REFERENCE.md (DSL)\n  \
+    - docs/ADVANCED_USAGE.md (governance/CI)\n\n\
     Use --goal to select what to check (bughunt, safety, safety+liveness, release).\n\
     Use --profile to select expertise level (beginner, pro, governance).";
 
