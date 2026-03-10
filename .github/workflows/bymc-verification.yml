@@ -1,11 +1,11 @@
-# Optional real ByMC verification workflow.
-# Does NOT block PRs — fully opt-in via manual trigger or weekly schedule.
+# Full real ByMC parity workflow.
+# Runs nightly and stays available for manual replay.
 name: ByMC Verification
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 6 * * 1'  # Weekly: Monday 06:00 UTC
+    - cron: "0 2 * * *"  # Nightly: 02:00 UTC
 
 jobs:
   build-bymc-image:
@@ -47,12 +47,20 @@ jobs:
         run: |
           chmod +x benchmarks/bymc/run_bymc.sh
           python3 benchmarks/cross_tool_runner.py \
+            --manifest benchmarks/cross_tool_scenarios/scenario_manifest.json \
             --skip-build \
-            --tools bymc \
+            --tools tarsier,bymc \
             --bymc-binary benchmarks/bymc/run_bymc.sh \
             --bymc-mode real \
             --timeout 300 \
             --out /tmp/cross-tool-real-bymc.json
+
+      - name: Validate real external execution contract
+        run: |
+          python3 .github/scripts/check_cross_tool_external_execution.py \
+            /tmp/cross-tool-real-bymc.json \
+            --required-tools tarsier,bymc \
+            --require-real-tools bymc
 
       - name: Verdict parity check
         run: python3 .github/scripts/check_cross_tool_verdict_parity.py /tmp/cross-tool-real-bymc.json

@@ -1,0 +1,68 @@
+name: ByMC Parity (PR Targeted)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "benchmarks/**"
+      - "examples/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/scripts/check_cross_tool_external_execution.py"
+      - ".github/scripts/check_cross_tool_verdict_parity.py"
+      - ".github/workflows/bymc-*.yml"
+  workflow_dispatch:
+
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bymc-parity-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build ByMC Docker image
+        run: bash benchmarks/bymc/build-docker.sh
+
+      - name: Run cross-tool real ByMC targeted smoke parity
+        run: |
+          python3 benchmarks/cross_tool_runner.py \
+            --manifest benchmarks/cross_tool_scenarios/scenario_manifest_real_bymc_smoke.json \
+            --tools tarsier,bymc \
+            --bymc-binary benchmarks/bymc/run_bymc.sh \
+            --bymc-mode real \
+            --timeout 180 \
+            --out artifacts/cross-tool-real-bymc-pr-report.json
+
+      - name: Validate real external execution contract
+        run: |
+          python3 ./.github/scripts/check_cross_tool_external_execution.py \
+            artifacts/cross-tool-real-bymc-pr-report.json \
+            --required-tools tarsier,bymc \
+            --require-real-tools bymc
+
+      - name: Cross-tool verdict parity check
+        run: |
+          python3 ./.github/scripts/check_cross_tool_verdict_parity.py \
+            artifacts/cross-tool-real-bymc-pr-report.json
+
+      - name: Upload ByMC PR parity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-tool-real-bymc-pr-report
+          path: artifacts/cross-tool-real-bymc-pr-report.json
+          retention-days: 14

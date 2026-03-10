@@ -187,3 +187,25 @@ CI gates:
 Quality gate script:
 - `.github/scripts/check_mutation_score.py` reads `mutants.out/outcomes.json`
   and fails when score `< MUTATION_SCORE_MIN`.
+
+## 11) ByMC Parity Gates (PR + Nightly)
+
+Purpose:
+- Enforce real ByMC execution parity in PRs with a bounded targeted corpus.
+- Preserve a broader nightly full-manifest parity run for drift detection.
+
+CI gates:
+- PR targeted gate: `.github/workflows/bymc-parity-pr.yml`
+  - Manifest: `benchmarks/cross_tool_scenarios/scenario_manifest_real_bymc_smoke.json`
+  - Tools: `tarsier,bymc` with `--bymc-mode real`
+  - Budget: workflow timeout `45` minutes, runner timeout `180` seconds per scenario
+- Nightly full parity: `.github/workflows/bymc-verification.yml`
+  - Manifest: `benchmarks/cross_tool_scenarios/scenario_manifest.json`
+  - Tools: `tarsier,bymc` with `--bymc-mode real`
+  - Schedule: nightly at `02:00 UTC`
+
+Contract checks:
+- `.github/scripts/check_cross_tool_external_execution.py`
+  validates required tools are present and real ByMC execution occurred.
+- `.github/scripts/check_cross_tool_verdict_parity.py`
+  fails on verdict mismatch across tools.
