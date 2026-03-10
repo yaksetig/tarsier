@@ -260,3 +260,5 @@ Highest-priority dependency edges:
 `2026-03-10T20:56:41Z | AGENT_1 | DOCS-04 | CHANGE | done_commit=312e609`
 `2026-03-10T20:57:06Z | AGENT_1 | KERN-01 | CLAIM | taking task`
 `2026-03-10T20:57:06Z | AGENT_1 | KERN-01 | START | implementation started`
+`2026-03-10T20:58:39Z | AGENT_1 | KERN-01 | PR_OPEN | branch=codex/agent1-kern-01-v1 pr=local summary=add kernel formalization RFC with semantics/threat model/theorem milestones`
+`2026-03-10T20:58:39Z | AGENT_1 | KERN-01 | DONE | commit=pending tests=python3 .github/scripts/check_doc_consistency.py; python3 .github/scripts/check_kernel_spec_consistency.py; python3 - <<\'PY\' ... KERNEL_FORMALIZATION_RFC sections check ... PY`
