@@ -7,6 +7,7 @@
 use std::path::Path;
 use std::process;
 
+use serde::Serialize;
 use serde_json::json;
 use tarsier_dsl::parser::parse;
 use tarsier_ir::lowering::lower;
@@ -14,6 +15,39 @@ use tarsier_ir::product::build_product;
 use tarsier_ir::refinement::{RefinementMapping, RefinementRelation};
 use tarsier_smt::backends::z3_backend::Z3Solver;
 use tarsier_smt::refinement_encoder::{run_refinement_solver, SimulationCheckResult};
+
+/// Schema version for the refinement-check JSON output.
+pub const SCHEMA_VERSION: u32 = 3;
+
+/// Structured refinement-check report (JSON-serializable).
+#[derive(Debug, Clone, Serialize)]
+pub struct RefinementReport {
+    pub schema_version: u32,
+    pub concrete: String,
+    #[serde(rename = "abstract")]
+    pub abstract_path: String,
+    pub depth: usize,
+    pub timeout_secs: u64,
+    pub product_locations: usize,
+    pub product_rules: usize,
+    pub mismatch_locations: usize,
+    pub result: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub violation_step: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub violation_detail: Option<ViolationDetail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unknown_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub witness: Option<serde_json::Value>,
+}
+
+/// Violation location detail.
+#[derive(Debug, Clone, Serialize)]
+pub struct ViolationDetail {
+    pub concrete_location: usize,
+    pub abstract_location: usize,
+}
 
 /// Run the refinement-check command.
 pub(crate) fn run_refinement_check(
@@ -70,64 +104,34 @@ pub(crate) fn run_refinement_check(
     let result = run_refinement_solver(&mut solver, &product, depth)
         .map_err(|e| miette::miette!("solver error: {e}"))?;
 
-    // 8. Report.
-    let base_report = json!({
-        "schema_version": 3,
-        "concrete": concrete_path.display().to_string(),
-        "abstract": abstract_path.display().to_string(),
-        "depth": depth,
-        "timeout_secs": timeout_secs,
-        "product_locations": product.num_locations(),
-        "product_rules": product.num_rules(),
-        "mismatch_locations": product.mismatch_locations.len(),
-    });
+    // 8. Build structured report.
+    let report = build_report(
+        concrete_path,
+        &abstract_path,
+        depth,
+        timeout_secs,
+        &product,
+        &result,
+    );
 
     match format {
         "json" => {
-            let mut report = base_report;
-            match &result {
-                SimulationCheckResult::SimulationHolds { .. } => {
-                    report["result"] = json!(if product.mismatch_locations.is_empty() {
-                        "trivially_holds"
-                    } else {
-                        "simulation_holds"
-                    });
-                }
-                SimulationCheckResult::SimulationViolated {
-                    violation_step,
-                    mismatch_location,
-                    witness,
-                    ..
-                } => {
-                    report["result"] = json!("simulation_violated");
-                    report["violation_step"] = json!(violation_step);
-                    report["violation_detail"] = json!(format!(
-                        "concrete={}, abstract={}",
-                        mismatch_location.concrete.as_usize(),
-                        mismatch_location.abstract_loc.as_usize()
-                    ));
-                    if let Some(w) = witness {
-                        report["witness"] = witness_to_json(w, &product);
-                    }
-                }
-                SimulationCheckResult::Unknown { reason, .. } => {
-                    report["result"] = json!(format!("unknown: {reason}"));
-                }
-            }
-            println!("{}", report);
+            let json = serde_json::to_string_pretty(&report)
+                .unwrap_or_else(|e| format!("{{\"error\": \"{e}\"}}"));
+            println!("{json}");
         }
         _ => {
             println!("Refinement Check Report");
             println!("=======================");
-            println!("Concrete: {}", concrete_path.display());
-            println!("Abstract: {}", abstract_path.display());
-            println!("Depth:    {depth}");
-            println!("Timeout:  {timeout_secs}s");
+            println!("Concrete: {}", report.concrete);
+            println!("Abstract: {}", report.abstract_path);
+            println!("Depth:    {}", report.depth);
+            println!("Timeout:  {}s", report.timeout_secs);
             println!();
             println!("Product automaton:");
-            println!("  Locations:  {}", product.num_locations());
-            println!("  Rules:      {}", product.num_rules());
-            println!("  Mismatches: {}", product.mismatch_locations.len());
+            println!("  Locations:  {}", report.product_locations);
+            println!("  Rules:      {}", report.product_rules);
+            println!("  Mismatches: {}", report.mismatch_locations);
             println!();
             match &result {
                 SimulationCheckResult::SimulationHolds { .. } => {
@@ -168,6 +172,64 @@ pub(crate) fn run_refinement_check(
         SimulationCheckResult::SimulationViolated { .. } => process::exit(1),
         SimulationCheckResult::Unknown { .. } => process::exit(2),
     }
+}
+
+/// Build a structured report from the solver result.
+fn build_report(
+    concrete_path: &Path,
+    abstract_path: &Path,
+    depth: usize,
+    timeout_secs: u64,
+    product: &tarsier_ir::product::ProductAutomaton,
+    result: &SimulationCheckResult,
+) -> RefinementReport {
+    let mut report = RefinementReport {
+        schema_version: SCHEMA_VERSION,
+        concrete: concrete_path.display().to_string(),
+        abstract_path: abstract_path.display().to_string(),
+        depth,
+        timeout_secs,
+        product_locations: product.num_locations(),
+        product_rules: product.num_rules(),
+        mismatch_locations: product.mismatch_locations.len(),
+        result: String::new(),
+        violation_step: None,
+        violation_detail: None,
+        unknown_reason: None,
+        witness: None,
+    };
+
+    match result {
+        SimulationCheckResult::SimulationHolds { .. } => {
+            report.result = if product.mismatch_locations.is_empty() {
+                "trivially_holds".into()
+            } else {
+                "simulation_holds".into()
+            };
+        }
+        SimulationCheckResult::SimulationViolated {
+            violation_step,
+            mismatch_location,
+            witness,
+            ..
+        } => {
+            report.result = "simulation_violated".into();
+            report.violation_step = Some(*violation_step);
+            report.violation_detail = Some(ViolationDetail {
+                concrete_location: mismatch_location.concrete.as_usize(),
+                abstract_location: mismatch_location.abstract_loc.as_usize(),
+            });
+            if let Some(w) = witness {
+                report.witness = Some(witness_to_json(w, product));
+            }
+        }
+        SimulationCheckResult::Unknown { reason, .. } => {
+            report.result = "unknown".into();
+            report.unknown_reason = Some(reason.clone());
+        }
+    }
+
+    report
 }
 
 /// Convert a witness to JSON for structured output.
@@ -308,6 +370,118 @@ fn print_witness_text(
             }
             println!();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_holds_report() -> RefinementReport {
+        RefinementReport {
+            schema_version: SCHEMA_VERSION,
+            concrete: "concrete.trs".into(),
+            abstract_path: "abstract.trs".into(),
+            depth: 10,
+            timeout_secs: 60,
+            product_locations: 4,
+            product_rules: 3,
+            mismatch_locations: 0,
+            result: "trivially_holds".into(),
+            violation_step: None,
+            violation_detail: None,
+            unknown_reason: None,
+            witness: None,
+        }
+    }
+
+    #[test]
+    fn schema_version_is_current() {
+        assert_eq!(SCHEMA_VERSION, 3);
+    }
+
+    #[test]
+    fn report_serializes_holds() {
+        let report = sample_holds_report();
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["schema_version"], 3);
+        assert_eq!(json["result"], "trivially_holds");
+        assert_eq!(json["abstract"], "abstract.trs");
+        assert!(json.get("violation_step").is_none());
+        assert!(json.get("violation_detail").is_none());
+        assert!(json.get("unknown_reason").is_none());
+        assert!(json.get("witness").is_none());
+    }
+
+    #[test]
+    fn report_serializes_violated() {
+        let report = RefinementReport {
+            result: "simulation_violated".into(),
+            violation_step: Some(3),
+            violation_detail: Some(ViolationDetail {
+                concrete_location: 1,
+                abstract_location: 2,
+            }),
+            ..sample_holds_report()
+        };
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["result"], "simulation_violated");
+        assert_eq!(json["violation_step"], 3);
+        assert_eq!(json["violation_detail"]["concrete_location"], 1);
+        assert_eq!(json["violation_detail"]["abstract_location"], 2);
+    }
+
+    #[test]
+    fn report_serializes_unknown() {
+        let report = RefinementReport {
+            result: "unknown".into(),
+            unknown_reason: Some("timeout".into()),
+            ..sample_holds_report()
+        };
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["result"], "unknown");
+        assert_eq!(json["unknown_reason"], "timeout");
+    }
+
+    #[test]
+    fn report_has_required_fields() {
+        let report = sample_holds_report();
+        let json = serde_json::to_value(&report).unwrap();
+        let obj = json.as_object().unwrap();
+        for field in &[
+            "schema_version",
+            "concrete",
+            "abstract",
+            "depth",
+            "timeout_secs",
+            "product_locations",
+            "product_rules",
+            "mismatch_locations",
+            "result",
+        ] {
+            assert!(obj.contains_key(*field), "missing required field: {field}");
+        }
+    }
+
+    #[test]
+    fn report_omits_none_fields() {
+        let report = sample_holds_report();
+        let json_str = serde_json::to_string(&report).unwrap();
+        assert!(!json_str.contains("violation_step"));
+        assert!(!json_str.contains("violation_detail"));
+        assert!(!json_str.contains("unknown_reason"));
+        assert!(!json_str.contains("witness"));
+    }
+
+    #[test]
+    fn violation_detail_structured() {
+        let detail = ViolationDetail {
+            concrete_location: 5,
+            abstract_location: 3,
+        };
+        let json = serde_json::to_value(&detail).unwrap();
+        assert_eq!(json["concrete_location"], 5);
+        assert_eq!(json["abstract_location"], 3);
     }
 }
 
