@@ -1,0 +1,45 @@
+use std::fs;
+use std::path::PathBuf;
+
+fn main() {
+    let mut out: Option<PathBuf> = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--out" => {
+                let Some(path) = args.next() else {
+                    eprintln!("missing value for --out");
+                    std::process::exit(2);
+                };
+                out = Some(PathBuf::from(path));
+            }
+            "-h" | "--help" => {
+                eprintln!(
+                    "Usage: cargo run -p tarsier-proof-kernel --bin kernel-semantics-export -- \
+                     [--out <path>]"
+                );
+                return;
+            }
+            other => {
+                eprintln!("unknown argument: {other}");
+                std::process::exit(2);
+            }
+        }
+    }
+
+    let artifact = tarsier_proof_kernel::kernel_semantics_artifact_v1();
+    let json = serde_json::to_string_pretty(&artifact)
+        .expect("kernel semantics artifact should serialize to JSON");
+
+    if let Some(path) = out {
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent).expect("failed to create output directory");
+            }
+        }
+        fs::write(&path, format!("{json}\n")).expect("failed to write output file");
+        eprintln!("wrote {}", path.display());
+    } else {
+        println!("{json}");
+    }
+}

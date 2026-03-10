@@ -71,12 +71,38 @@ def extract_obligation_profiles_from_rust(src: str) -> dict[tuple[str, str], lis
         }
     """
     profiles: dict[tuple[str, str], list[str]] = {}
-    # Match the kind/engine pair, then capture everything until the closing ];
-    pattern = re.compile(
+
+    # Preferred pattern: shared profile constants.
+    constant_pattern = re.compile(
+        r'const\s+(PROFILE_[A-Z_]+)\s*:\s*&\[\s*&str\s*\]\s*=\s*&\[(.*?)\];',
+        re.DOTALL
+    )
+    profile_constants: dict[str, list[str]] = {}
+    for m in constant_pattern.finditer(src):
+        const_name = m.group(1)
+        names = re.findall(r'"(\w+)"', m.group(2))
+        if names:
+            profile_constants[const_name] = names
+
+    map_pattern = re.compile(
+        r'\("(\w+)",\s*"(\w+)"\)\s*=>\s*\{[^}]*?profile\s*=\s*Some\((PROFILE_[A-Z_]+)\);',
+        re.DOTALL
+    )
+    for m in map_pattern.finditer(src):
+        kind, engine, const_name = m.group(1), m.group(2), m.group(3)
+        names = profile_constants.get(const_name)
+        if names:
+            profiles[(kind, engine)] = names
+
+    if profiles:
+        return profiles
+
+    # Backward-compatible fallback: inline arrays in match arms.
+    inline_pattern = re.compile(
         r'\("(\w+)",\s*"(\w+)"\)\s*=>\s*\{[^}]*?profile\s*=\s*Some\(\s*&\[(.*?)\]\[?\.\.\]?',
         re.DOTALL
     )
-    for m in pattern.finditer(src):
+    for m in inline_pattern.finditer(src):
         kind, engine = m.group(1), m.group(2)
         names_raw = m.group(3)
         names = re.findall(r'"(\w+)"', names_raw)

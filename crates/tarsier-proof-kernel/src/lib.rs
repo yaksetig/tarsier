@@ -22,7 +22,8 @@ pub const CERTIFICATE_SCHEMA_VERSION: u32 = 2;
 /// Documentation path for the certificate schema contract.
 pub const CERTIFICATE_SCHEMA_DOC_PATH: &str = "docs/CERTIFICATE_SCHEMA.md";
 
-const CERTIFICATE_HASH_DOMAIN_TAG: &str = "tarsier-certificate-v2\n";
+/// Domain-tag prefix used by bundle hash computation.
+pub const CERTIFICATE_HASH_DOMAIN_TAG: &str = "tarsier-certificate-v2\n";
 
 /// Certificate bundle metadata loaded from `certificate.json`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -99,6 +100,92 @@ impl BundleIntegrityReport {
         self.issues.is_empty()
     }
 }
+
+/// Stable machine-readable obligation profile for checker semantics export.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KernelObligationProfile {
+    /// Certificate kind admitted by this profile.
+    pub kind: String,
+    /// Proof engine admitted by this profile.
+    pub proof_engine: String,
+    /// Required obligation names for the profile.
+    pub required_obligations: Vec<String>,
+    /// Whether induction/frame depth metadata is required.
+    pub requires_induction_k: bool,
+    /// Required fairness values for this profile (`None` when forbidden).
+    pub fairness: Option<Vec<String>>,
+}
+
+/// Stable machine-readable governance profile row for semantics export.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KernelGovernanceProfile {
+    /// Governance profile name (`standard`, `reinforced`, `high-assurance`).
+    pub name: String,
+    /// Minimum independent solver count.
+    pub min_solvers: usize,
+    /// Whether proof files are required.
+    pub require_proofs: bool,
+    /// Whether an external proof checker is required.
+    pub require_proof_checker: bool,
+    /// Whether foundational proof-path controls are required.
+    pub require_foundational_proof_path: bool,
+}
+
+/// Exported checker-semantics artifact consumed by downstream formalization tools.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KernelSemanticsArtifact {
+    /// Schema version for this export payload.
+    pub schema_version: u32,
+    /// Certificate metadata schema version accepted by the kernel.
+    pub certificate_schema_version: u32,
+    /// Domain tag used in bundle hash derivation.
+    pub certificate_hash_domain_tag: String,
+    /// Whether checker behavior is fail-closed.
+    pub fail_closed: bool,
+    /// Reference doc path for the certificate schema contract.
+    pub certificate_schema_doc_path: String,
+    /// Structural obligation profiles by `(kind, proof_engine)`.
+    pub obligation_profiles: Vec<KernelObligationProfile>,
+    /// Governance profile floors used by certcheck.
+    pub governance_profiles: Vec<KernelGovernanceProfile>,
+    /// Stable set of checker issue codes.
+    pub issue_codes: Vec<String>,
+}
+
+/// Canonical checker issue codes (spec section 8 / kernel source).
+pub const KERNEL_ERROR_CODES: &[&str] = &[
+    "bundle_hash_mismatch",
+    "check_sat_count",
+    "disallowed_commands",
+    "duplicate_obligation_file",
+    "duplicate_obligation_name",
+    "empty_obligations",
+    "exit_count",
+    "invalid_command_order",
+    "invalid_expected",
+    "invalid_expected_for_proof",
+    "invalid_kind",
+    "invalid_obligation_extension",
+    "invalid_proof_engine",
+    "missing_assert",
+    "missing_bundle_hash",
+    "missing_file",
+    "missing_induction_k",
+    "missing_obligation_hash",
+    "missing_or_invalid_fairness",
+    "missing_proof_file",
+    "missing_proof_hash",
+    "missing_required_obligation",
+    "obligation_hash_mismatch",
+    "orphan_proof_hash",
+    "proof_hash_mismatch",
+    "schema_version",
+    "symlink_escape",
+    "unexpected_fairness",
+    "unexpected_obligation_name",
+    "unsafe_path",
+    "unsafe_proof_path",
+];
 
 #[derive(Debug, Error)]
 pub enum ProofKernelError {
@@ -547,6 +634,84 @@ pub fn check_bundle_integrity(
     Ok(BundleIntegrityReport { metadata, issues })
 }
 
+const PROFILE_SAFETY_KINDUCTION: &[&str] = &["base_case", "inductive_step"];
+const PROFILE_SAFETY_PDR: &[&str] = &[
+    "init_implies_inv",
+    "inv_and_transition_implies_inv_prime",
+    "inv_implies_safe",
+];
+const PROFILE_FAIR_LIVENESS_PDR: &[&str] = &[
+    "init_implies_inv",
+    "inv_and_transition_implies_inv_prime",
+    "inv_implies_no_fair_bad",
+];
+
+/// Build the canonical v1 checker-semantics artifact for formalization pipelines.
+pub fn kernel_semantics_artifact_v1() -> KernelSemanticsArtifact {
+    let governance_rows = [
+        ("standard", GovernanceProfile::Standard),
+        ("reinforced", GovernanceProfile::Reinforced),
+        ("high-assurance", GovernanceProfile::HighAssurance),
+    ];
+
+    KernelSemanticsArtifact {
+        schema_version: 1,
+        certificate_schema_version: CERTIFICATE_SCHEMA_VERSION,
+        certificate_hash_domain_tag: CERTIFICATE_HASH_DOMAIN_TAG.to_string(),
+        fail_closed: true,
+        certificate_schema_doc_path: CERTIFICATE_SCHEMA_DOC_PATH.to_string(),
+        obligation_profiles: vec![
+            KernelObligationProfile {
+                kind: "safety_proof".to_string(),
+                proof_engine: "kinduction".to_string(),
+                required_obligations: PROFILE_SAFETY_KINDUCTION
+                    .iter()
+                    .map(|v| (*v).to_string())
+                    .collect(),
+                requires_induction_k: true,
+                fairness: None,
+            },
+            KernelObligationProfile {
+                kind: "safety_proof".to_string(),
+                proof_engine: "pdr".to_string(),
+                required_obligations: PROFILE_SAFETY_PDR
+                    .iter()
+                    .map(|v| (*v).to_string())
+                    .collect(),
+                requires_induction_k: true,
+                fairness: None,
+            },
+            KernelObligationProfile {
+                kind: "fair_liveness_proof".to_string(),
+                proof_engine: "pdr".to_string(),
+                required_obligations: PROFILE_FAIR_LIVENESS_PDR
+                    .iter()
+                    .map(|v| (*v).to_string())
+                    .collect(),
+                requires_induction_k: true,
+                fairness: Some(vec!["weak".to_string(), "strong".to_string()]),
+            },
+        ],
+        governance_profiles: governance_rows
+            .iter()
+            .map(|(name, profile)| {
+                let req = profile.requirements();
+                KernelGovernanceProfile {
+                    name: (*name).to_string(),
+                    min_solvers: req.min_solvers,
+                    require_proofs: req.require_proofs,
+                    require_proof_checker: req.require_proof_checker,
+                    require_foundational_proof_path: req.require_foundational_proof_path,
+                }
+            })
+            .collect(),
+        issue_codes: KERNEL_ERROR_CODES
+            .iter()
+            .map(|code| (*code).to_string())
+            .collect(),
+    }
+}
+
 fn expected_obligation_names_for_profile(
     metadata: &CertificateMetadata,
     issues: &mut Vec<BundleCheckIssue>,
@@ -554,25 +719,13 @@ fn expected_obligation_names_for_profile(
     let mut profile = None;
     match (metadata.kind.as_str(), metadata.proof_engine.as_str()) {
         ("safety_proof", "kinduction") => {
-            profile = Some(&["base_case", "inductive_step"][..]);
+            profile = Some(PROFILE_SAFETY_KINDUCTION);
         }
         ("safety_proof", "pdr") => {
-            profile = Some(
-                &[
-                    "init_implies_inv",
-                    "inv_and_transition_implies_inv_prime",
-                    "inv_implies_safe",
-                ][..],
-            );
+            profile = Some(PROFILE_SAFETY_PDR);
         }
         ("fair_liveness_proof", "pdr") => {
-            profile = Some(
-                &[
-                    "init_implies_inv",
-                    "inv_and_transition_implies_inv_prime",
-                    "inv_implies_no_fair_bad",
-                ][..],
-            );
+            profile = Some(PROFILE_FAIR_LIVENESS_PDR);
         }
         ("fair_liveness_proof", other_engine) => {
             issues.push(BundleCheckIssue {
@@ -1863,80 +2016,138 @@ mod tests {
 
     // --- Kernel spec consistency canary ---
 
-    /// All error codes emitted by check_bundle_integrity, used to detect
-    /// spec drift. If a new error code is added to the kernel, this list
-    /// must be updated, and docs/KERNEL_SPEC.md must be updated to match.
-    const ALL_ERROR_CODES: &[&str] = &[
-        "bundle_hash_mismatch",
-        "check_sat_count",
-        "disallowed_commands",
-        "duplicate_obligation_file",
-        "duplicate_obligation_name",
-        "empty_obligations",
-        "exit_count",
-        "invalid_command_order",
-        "invalid_expected",
-        "invalid_expected_for_proof",
-        "invalid_kind",
-        "invalid_obligation_extension",
-        "invalid_proof_engine",
-        "missing_assert",
-        "missing_bundle_hash",
-        "missing_file",
-        "missing_induction_k",
-        "missing_obligation_hash",
-        "missing_or_invalid_fairness",
-        "missing_proof_file",
-        "missing_proof_hash",
-        "missing_required_obligation",
-        "obligation_hash_mismatch",
-        "orphan_proof_hash",
-        "proof_hash_mismatch",
-        "schema_version",
-        "symlink_escape",
-        "unexpected_fairness",
-        "unexpected_obligation_name",
-        "unsafe_path",
-        "unsafe_proof_path",
-    ];
-
     #[test]
     fn kernel_error_code_count_matches_spec() {
         // If this test fails, a new error code was added to the kernel
-        // but ALL_ERROR_CODES (and docs/KERNEL_SPEC.md) was not updated.
+        // but KERNEL_ERROR_CODES (and docs/KERNEL_SPEC.md) was not updated.
         assert_eq!(
-            ALL_ERROR_CODES.len(),
+            KERNEL_ERROR_CODES.len(),
             31,
             "Expected 31 error codes per KERNEL_SPEC.md Section 8. \
-             If you added a new error code, update ALL_ERROR_CODES, \
+             If you added a new error code, update KERNEL_ERROR_CODES, \
              docs/KERNEL_SPEC.md, and this assertion."
         );
         // Verify no duplicates
-        let mut sorted = ALL_ERROR_CODES.to_vec();
+        let mut sorted = KERNEL_ERROR_CODES.to_vec();
         sorted.sort();
         sorted.dedup();
         assert_eq!(
             sorted.len(),
-            ALL_ERROR_CODES.len(),
-            "ALL_ERROR_CODES contains duplicates"
+            KERNEL_ERROR_CODES.len(),
+            "KERNEL_ERROR_CODES contains duplicates"
         );
     }
 
     #[test]
     fn kernel_error_codes_are_all_exercised_in_source() {
-        // Verify that every error code in ALL_ERROR_CODES appears in a
+        // Verify that every error code in KERNEL_ERROR_CODES appears in a
         // `code: "..."` pattern in the source. This is a compile-time
         // cross-check that the list is not stale.
         let src = include_str!("lib.rs");
-        for code in ALL_ERROR_CODES {
+        for code in KERNEL_ERROR_CODES {
             let pattern = format!("code: \"{}\"", code);
             assert!(
                 src.contains(&pattern),
-                "Error code '{}' is in ALL_ERROR_CODES but not found as `code: \"{}\"` in source",
+                "Error code '{}' is in KERNEL_ERROR_CODES but not found as `code: \"{}\"` in source",
                 code,
                 code
             );
         }
+    }
+
+    #[test]
+    fn kernel_semantics_artifact_v1_has_expected_shape() {
+        let artifact = kernel_semantics_artifact_v1();
+        assert_eq!(artifact.schema_version, 1);
+        assert_eq!(
+            artifact.certificate_schema_version,
+            CERTIFICATE_SCHEMA_VERSION
+        );
+        assert_eq!(
+            artifact.certificate_hash_domain_tag,
+            CERTIFICATE_HASH_DOMAIN_TAG
+        );
+        assert!(artifact.fail_closed);
+        assert_eq!(
+            artifact.certificate_schema_doc_path,
+            CERTIFICATE_SCHEMA_DOC_PATH
+        );
+        assert_eq!(artifact.obligation_profiles.len(), 3);
+        assert_eq!(artifact.governance_profiles.len(), 3);
+        assert_eq!(artifact.issue_codes.len(), KERNEL_ERROR_CODES.len());
+        assert_eq!(
+            artifact.issue_codes,
+            KERNEL_ERROR_CODES
+                .iter()
+                .map(|code| (*code).to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn kernel_semantics_artifact_profiles_align_with_validator() {
+        let artifact = kernel_semantics_artifact_v1();
+        for profile in artifact.obligation_profiles {
+            let fairness = if profile.kind == "fair_liveness_proof" {
+                Some("weak".to_string())
+            } else {
+                None
+            };
+            let metadata = CertificateMetadata {
+                schema_version: CERTIFICATE_SCHEMA_VERSION,
+                kind: profile.kind.clone(),
+                protocol_file: "protocol.trs".into(),
+                proof_engine: profile.proof_engine.clone(),
+                induction_k: Some(1),
+                solver_used: "z3".into(),
+                soundness: "strict".into(),
+                fairness,
+                committee_bounds: vec![],
+                bundle_sha256: None,
+                obligations: vec![],
+            };
+            let mut issues = Vec::new();
+            let expected = expected_obligation_names_for_profile(&metadata, &mut issues)
+                .expect("profile should resolve to an obligation set");
+            assert!(
+                issues.is_empty(),
+                "valid profile unexpectedly produced issues: {:?}",
+                issues.iter().map(|i| i.code).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                profile.required_obligations,
+                expected.iter().map(|name| (*name).to_string()).collect::<Vec<_>>(),
+                "profile mismatch for kind={}, engine={}",
+                profile.kind,
+                profile.proof_engine
+            );
+        }
+    }
+
+    #[test]
+    fn kernel_semantics_artifact_matches_committed_snapshot() {
+        let artifact_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../artifacts/kernel-semantics/kernel_semantics_v1.json");
+        let committed = fs::read_to_string(&artifact_path).unwrap_or_else(|e| {
+            panic!(
+                "failed to read committed kernel semantics artifact {}: {e}",
+                artifact_path.display()
+            )
+        });
+        let committed_json: serde_json::Value = serde_json::from_str(&committed).unwrap_or_else(|e| {
+            panic!(
+                "failed to parse committed kernel semantics artifact {}: {e}",
+                artifact_path.display()
+            )
+        });
+        let generated_json =
+            serde_json::to_value(kernel_semantics_artifact_v1()).expect("artifact should serialize");
+        assert_eq!(
+            generated_json, committed_json,
+            "committed artifact is stale; regenerate via:\n\
+             cargo run -p tarsier-proof-kernel --bin kernel-semantics-export -- \
+             --out artifacts/kernel-semantics/kernel_semantics_v1.json"
+        );
     }
 
     fn reference_profile_spec(

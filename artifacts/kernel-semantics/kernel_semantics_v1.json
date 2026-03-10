@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "certificate_schema_version": 2,
+  "certificate_hash_domain_tag": "tarsier-certificate-v2\n",
+  "fail_closed": true,
+  "certificate_schema_doc_path": "docs/CERTIFICATE_SCHEMA.md",
+  "obligation_profiles": [
+    {
+      "kind": "safety_proof",
+      "proof_engine": "kinduction",
+      "required_obligations": [
+        "base_case",
+        "inductive_step"
+      ],
+      "requires_induction_k": true,
+      "fairness": null
+    },
+    {
+      "kind": "safety_proof",
+      "proof_engine": "pdr",
+      "required_obligations": [
+        "init_implies_inv",
+        "inv_and_transition_implies_inv_prime",
+        "inv_implies_safe"
+      ],
+      "requires_induction_k": true,
+      "fairness": null
+    },
+    {
+      "kind": "fair_liveness_proof",
+      "proof_engine": "pdr",
+      "required_obligations": [
+        "init_implies_inv",
+        "inv_and_transition_implies_inv_prime",
+        "inv_implies_no_fair_bad"
+      ],
+      "requires_induction_k": true,
+      "fairness": [
+        "weak",
+        "strong"
+      ]
+    }
+  ],
+  "governance_profiles": [
+    {
+      "name": "standard",
+      "min_solvers": 1,
+      "require_proofs": false,
+      "require_proof_checker": false,
+      "require_foundational_proof_path": false
+    },
+    {
+      "name": "reinforced",
+      "min_solvers": 2,
+      "require_proofs": true,
+      "require_proof_checker": false,
+      "require_foundational_proof_path": false
+    },
+    {
+      "name": "high-assurance",
+      "min_solvers": 2,
+      "require_proofs": true,
+      "require_proof_checker": true,
+      "require_foundational_proof_path": true
+    }
+  ],
+  "issue_codes": [
+    "bundle_hash_mismatch",
+    "check_sat_count",
+    "disallowed_commands",
+    "duplicate_obligation_file",
+    "duplicate_obligation_name",
+    "empty_obligations",
+    "exit_count",
+    "invalid_command_order",
+    "invalid_expected",
+    "invalid_expected_for_proof",
+    "invalid_kind",
+    "invalid_obligation_extension",
+    "invalid_proof_engine",
+    "missing_assert",
+    "missing_bundle_hash",
+    "missing_file",
+    "missing_induction_k",
+    "missing_obligation_hash",
+    "missing_or_invalid_fairness",
+    "missing_proof_file",
+    "missing_proof_hash",
+    "missing_required_obligation",
+    "obligation_hash_mismatch",
+    "orphan_proof_hash",
+    "proof_hash_mismatch",
+    "schema_version",
+    "symlink_escape",
+    "unexpected_fairness",
+    "unexpected_obligation_name",
+    "unsafe_path",
+    "unsafe_proof_path"
+  ]
+}

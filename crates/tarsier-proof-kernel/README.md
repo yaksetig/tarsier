@@ -29,6 +29,8 @@ without depending on any solver or engine internals.
 - `GovernanceProfile` -- Named assurance profiles (`Standard`, `Reinforced`,
   `HighAssurance`) with escalating replay requirements.
 - `CERTIFICATE_SCHEMA_VERSION` -- Current schema version constant (v2).
+- `kernel_semantics_artifact_v1()` -- Deterministic machine-readable checker
+  semantics export for formalization workflows.
 
 ## Usage
 
@@ -64,4 +66,5 @@ replay checker) without pulling in Z3 or any other heavyweight dependency.
 - [Workspace overview](../../README.md)
 - [Certificate schema](../../docs/CERTIFICATE_SCHEMA.md)
 - [Kernel spec](../../docs/KERNEL_SPEC.md)
+- [Kernel formalization RFC](../../docs/KERNEL_FORMALIZATION_RFC.md)
 - [Trust boundary](../../docs/TRUST_BOUNDARY.md)
