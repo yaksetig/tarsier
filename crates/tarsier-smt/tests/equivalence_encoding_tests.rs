@@ -266,3 +266,124 @@ fn solver_unknown_variant_constructible() {
     };
     assert!(matches!(result, EquivalenceCheckResult::Unknown { .. }));
 }
+
+// ===========================================================================
+// EQX-05: Equivalence fixture corpus + perf baseline
+// ===========================================================================
+
+#[test]
+fn fixture_equivalent_chain_of_3() {
+    let a = make_ta(&["A", "B", "C"], &[0], &[(0, 1), (1, 2)], &[], &[]);
+    let b = make_ta(&["A", "B", "C"], &[0], &[(0, 1), (1, 2)], &[], &[]);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fs = Z3Solver::new();
+    let mut bs = Z3Solver::new();
+    let result = run_equivalence_solver(&mut fs, &mut bs, &products, 5).unwrap();
+    assert!(
+        matches!(
+            result,
+            EquivalenceCheckResult::EquivalentUpTo { .. }
+                | EquivalenceCheckResult::TriviallyEquivalent
+        ),
+        "identical 3-chain should be equivalent, got: {result:?}"
+    );
+}
+
+#[test]
+fn fixture_equivalent_branching() {
+    // Both have identical branching structure: A → B and A → C.
+    let a = make_ta(&["A", "B", "C"], &[0], &[(0, 1), (0, 2)], &[], &[]);
+    let b = make_ta(&["A", "B", "C"], &[0], &[(0, 1), (0, 2)], &[], &[]);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fs = Z3Solver::new();
+    let mut bs = Z3Solver::new();
+    let result = run_equivalence_solver(&mut fs, &mut bs, &products, 5).unwrap();
+    assert!(
+        matches!(
+            result,
+            EquivalenceCheckResult::EquivalentUpTo { .. }
+                | EquivalenceCheckResult::TriviallyEquivalent
+        ),
+        "identical branching should be equivalent, got: {result:?}"
+    );
+}
+
+#[test]
+fn fixture_equivalent_with_multiple_params_and_vars() {
+    let a = make_ta(
+        &["A", "B"],
+        &[0],
+        &[(0, 1)],
+        &["n", "t", "f"],
+        &["x", "y"],
+    );
+    let b = make_ta(
+        &["A", "B"],
+        &[0],
+        &[(0, 1)],
+        &["n", "t", "f"],
+        &["x", "y"],
+    );
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fs = Z3Solver::new();
+    let mut bs = Z3Solver::new();
+    let result = run_equivalence_solver(&mut fs, &mut bs, &products, 3).unwrap();
+    assert!(
+        matches!(result, EquivalenceCheckResult::EquivalentUpTo { .. }),
+        "identical with params/vars should be equivalent, got: {result:?}"
+    );
+}
+
+#[test]
+fn fixture_equivalent_internal_locations_both_sides() {
+    // A: S → I_A → D, B: S → I_B → D. Both have internal locations.
+    let a = make_ta(&["S", "I_A", "D"], &[0], &[(0, 1), (1, 2)], &[], &[]);
+    let b = make_ta(&["S", "I_B", "D"], &[0], &[(0, 1), (1, 2)], &[], &[]);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fs = Z3Solver::new();
+    let mut bs = Z3Solver::new();
+    let result = run_equivalence_solver(&mut fs, &mut bs, &products, 5).unwrap();
+    // With different internal names, they map to internal (stutter).
+    match &result {
+        EquivalenceCheckResult::EquivalentUpTo { .. }
+        | EquivalenceCheckResult::TriviallyEquivalent => {}
+        other => panic!("expected equivalent, got: {other:?}"),
+    }
+}
+
+#[test]
+fn perf_baseline_equivalence_5x5_depth_10() {
+    use std::time::Instant;
+
+    let start = Instant::now();
+    let names: Vec<String> = (0..5).map(|i| format!("L{i}")).collect();
+    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    let rules: Vec<(usize, usize)> = (0..4).map(|i| (i, i + 1)).collect();
+
+    let a = make_ta(&refs, &[0], &rules, &[], &[]);
+    let b = make_ta(&refs, &[0], &rules, &[], &[]);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fs = Z3Solver::with_timeout_secs(5);
+    let mut bs = Z3Solver::with_timeout_secs(5);
+    let result = run_equivalence_solver(&mut fs, &mut bs, &products, 10).unwrap();
+    assert!(
+        matches!(
+            result,
+            EquivalenceCheckResult::EquivalentUpTo { .. }
+                | EquivalenceCheckResult::TriviallyEquivalent
+        ),
+        "5×5 depth-10 identity equivalence should hold, got: {result:?}"
+    );
+
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed.as_secs() < 5,
+        "perf: 5×5 depth 10 equivalence took {:.2}s (limit 5s)",
+        elapsed.as_secs_f64()
+    );
+}
