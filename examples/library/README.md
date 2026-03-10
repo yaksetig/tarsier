@@ -20,7 +20,7 @@ Current scope:
 - Expected-outcome values are schema-checked by check type (for example `safe`/`unsafe`/`unknown`, `live`/`not_live`, etc.).
 - Schema contract docs: `docs/CERT_SUITE_SCHEMA.md` and `docs/cert-suite-schema-v2.json`.
 
-Protocols included (42):
+Protocols included (selected highlights):
 - `pbft_core.trs`
 - `pbft_liveness_safe_ci.trs`
 - `pbft_liveness_buggy_ci.trs`
@@ -63,6 +63,16 @@ Protocols included (42):
 - `reliable_broadcast_buggy.trs`
 - `temporal_liveness_counterexample.trs`
 - `trivial_live.trs`
+
+Recent EXAMPLE-02 additions (feature-pair closure):
+- `clock_timeout_safe.trs`
+- `voting_enum_buggy.trs`
+- `bounded_log_overflow_buggy.trs`
+- `committee_weak_bound_buggy.trs`
+- `filtered_guard_safe.trs`
+- `filtered_guard_buggy.trs`
+- `leader_equivocation_buggy.trs`
+- `pacemaker_stuck_buggy.trs`
 
 Variant groups (5):
 - `pbft_simple_safe`: minimal + faithful PBFT three-phase safety kernel

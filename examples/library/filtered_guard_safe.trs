@@ -1,0 +1,63 @@
+// Field-filtered threshold guards (message_args) safe counterpart.
+// Distinct-sender quorum + no-equivocation preserves agreement.
+protocol FilteredGuardSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        auth: signed;
+        network: identity_selective;
+        delivery: per_recipient;
+        faults: per_recipient;
+        equivocation: none;
+        values: sign;
+    }
+
+    identity Replica: role key rid;
+    channel Vote: authenticated;
+    equivocation Vote: none;
+
+    message Vote(round: nat in 0..0, value: nat in 0..1);
+
+    role Replica {
+        var decided: bool = false;
+        var decision: bool = false;
+        init start;
+
+        phase start {
+            when received >= 1 Vote(round=0, value=1) => {
+                send Vote(round=0, value=1);
+                goto phase voted;
+            }
+            when received >= 1 Vote(round=0, value=0) => {
+                send Vote(round=0, value=0);
+                goto phase voted;
+            }
+        }
+
+        phase voted {
+            when received distinct >= 2*t + 1 Vote(round=0, value=1) => {
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received distinct >= 2*t + 1 Vote(round=0, value=0) => {
+                decided = true;
+                decision = false;
+                decide false;
+                goto phase done_no;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
