@@ -8,7 +8,7 @@ Scope:
 - expose stable client/peer endpoints for downstream conformance tasks.
 
 Out of scope:
-- model-to-implementation conformance assertions (handled by `INTEG-04`).
+- full multi-node adversarial campaigns (single-node harness is intentional here).
 
 ## Layout
 
@@ -41,3 +41,18 @@ scripts/etcd-raft-live-harness.sh start
 
 The harness intentionally runs one etcd member to keep startup deterministic and
 fast for follow-on live conformance work.
+
+## Active Conformance Smoke (INTEG-04)
+
+Model-to-implementation active conformance assertions are available via:
+
+```bash
+./scripts/etcd-raft-conformance-active-smoke.sh assert-fixture
+./scripts/etcd-raft-conformance-active-smoke.sh smoke
+```
+
+`smoke` runs a live end-to-end path:
+
+- starts the etcd harness;
+- replays `conformance-active` schedule events to a local live endpoint contract;
+- validates deterministic trace assertions (`start/tick/fault/stop`, event counts, final tick).
