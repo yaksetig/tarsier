@@ -492,13 +492,16 @@ fn parse_fairness_mode(s: &str) -> miette::Result<FairnessMode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tarsier_engine::pipeline::{ProofExportKind, ProofExportObligation};
     use tarsier_proof_kernel::CertificateObligationMeta;
 
-    #[test]
-    fn render_lean_module_contains_expected_sections() {
-        let ir = ProofExportIr {
+    const LEAN_GOLDEN: &str = include_str!("../../tests/golden/proof_export_lean.golden");
+    const COQ_GOLDEN: &str = include_str!("../../tests/golden/proof_export_coq.golden");
+
+    fn sample_export_ir() -> ProofExportIr {
+        ProofExportIr {
             schema_version: 1,
             kind: ProofExportKind::Safety,
             protocol_file: "pbft.trs".into(),
@@ -515,8 +518,31 @@ mod tests {
                 smt2: "(check-sat)".into(),
                 certificate_evidence: None,
             }],
-        };
-        let lean = render_lean_module(&ir);
+        }
+    }
+
+    fn compiler_available(binary: &str) -> bool {
+        Command::new(binary).arg("--version").output().is_ok()
+    }
+
+    fn tmp_smoke_dir(prefix: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{prefix}-{unique}"))
+    }
+
+    fn write_module(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("parent directory should be created");
+        }
+        fs::write(path, contents).expect("module should be written");
+    }
+
+    #[test]
+    fn render_lean_module_contains_expected_sections() {
+        let lean = render_lean_module(&sample_export_ir());
         assert!(lean.contains("namespace TarsierExport"));
         assert!(lean.contains("def protocolFile : String := \"pbft.trs\""));
         assert!(lean.contains("def obligations : List (String × String × String)"));
@@ -528,6 +554,12 @@ mod tests {
     }
 
     #[test]
+    fn render_lean_module_matches_golden() {
+        let lean = render_lean_module(&sample_export_ir());
+        assert_eq!(lean, LEAN_GOLDEN);
+    }
+
+    #[test]
     fn lean_escape_escapes_quotes_backslashes_and_newlines() {
         let escaped = lean_escape("a\"b\\c\nd");
         assert_eq!(escaped, "a\\\"b\\\\c\\nd");
@@ -535,25 +567,7 @@ mod tests {
 
     #[test]
     fn render_coq_module_contains_expected_sections() {
-        let ir = ProofExportIr {
-            schema_version: 1,
-            kind: ProofExportKind::Safety,
-            protocol_file: "pbft.trs".into(),
-            proof_engine: "pdr".into(),
-            fairness: None,
-            induction_k: Some(12),
-            frame: None,
-            solver_used: "z3".into(),
-            soundness: "strict".into(),
-            committee_bounds: vec![("n".into(), 4), ("f".into(), 1)],
-            obligations: vec![ProofExportObligation {
-                name: "init_implies_inv".into(),
-                expected: "unsat".into(),
-                smt2: "(check-sat)".into(),
-                certificate_evidence: None,
-            }],
-        };
-        let coq = render_coq_module(&ir);
+        let coq = render_coq_module(&sample_export_ir());
         assert!(coq.contains("Module TarsierExport."));
         assert!(coq.contains("Definition protocol_file : string := \"pbft.trs\"."));
         assert!(coq.contains("Definition obligations : list (string * string * string)"));
@@ -565,6 +579,12 @@ mod tests {
             "Lemma obligation_init_implies_inv : obligation_init_implies_inv_statement."
         ));
         assert!(!coq.contains("Lemma obligation_init_implies_inv : True."));
+    }
+
+    #[test]
+    fn render_coq_module_matches_golden() {
+        let coq = render_coq_module(&sample_export_ir());
+        assert_eq!(coq, COQ_GOLDEN);
     }
 
     #[test]
@@ -606,6 +626,52 @@ mod tests {
             Some("init_implies_inv.proof")
         );
         assert_eq!(artifacts[0].proof_sha256, Some("c".repeat(64)));
+    }
+
+    #[test]
+    fn lean_compile_smoke_gated_on_toolchain() {
+        if !compiler_available("lean") {
+            eprintln!("skipping lean_compile_smoke_gated_on_toolchain: lean unavailable");
+            return;
+        }
+        let out = render_lean_module(&sample_export_ir());
+        let dir = tmp_smoke_dir("tarsier-proof-export-lean-smoke");
+        let module_path = dir.join("TarsierExport.lean");
+        write_module(&module_path, &out);
+
+        let cmd = Command::new("lean").arg(&module_path).output();
+        fs::remove_dir_all(&dir).ok();
+
+        let output = cmd.expect("lean invocation should be spawnable");
+        assert!(
+            output.status.success(),
+            "lean compile smoke failed.\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn coq_compile_smoke_gated_on_toolchain() {
+        if !compiler_available("coqc") {
+            eprintln!("skipping coq_compile_smoke_gated_on_toolchain: coqc unavailable");
+            return;
+        }
+        let out = render_coq_module(&sample_export_ir());
+        let dir = tmp_smoke_dir("tarsier-proof-export-coq-smoke");
+        let module_path = dir.join("TarsierExport.v");
+        write_module(&module_path, &out);
+
+        let cmd = Command::new("coqc").arg(&module_path).output();
+        fs::remove_dir_all(&dir).ok();
+
+        let output = cmd.expect("coqc invocation should be spawnable");
+        assert!(
+            output.status.success(),
+            "coq compile smoke failed.\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[cfg(unix)]
