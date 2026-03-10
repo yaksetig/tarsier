@@ -281,6 +281,7 @@ The smoke script verifies:
 
 - adapter is `etcd-raft`;
 - schema version and seed are stable;
+- live etcd raft path executes a real write/read (`etcdctl put/get`) on the node;
 - live etcd HTTP contract (`/version` and `/health`) is valid;
 - expected fault/tick counts are deterministic;
 - live contract metadata is `tarsier.active.v1`;
@@ -293,6 +294,7 @@ Workflow: `.github/workflows/live-adapter-conformance.yml`
 - **PR smoke job**:
   - deterministic harness config checks;
   - fixture contract checks for CometBFT and etcd-raft;
+  - real-node etcd raft smoke (`etcdctl put/get`) against a live container;
   - adapter schedule generation smoke (`conformance-active`) for both adapters;
   - uploads smoke artifacts for debugging.
 

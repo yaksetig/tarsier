@@ -18,6 +18,7 @@ Commands:
   status    Print container status.
   logs      Tail harness logs.
   wait      Wait until endpoint health is ready.
+  smoke-raft  Verify real raft-backed write/read via etcdctl inside the live node.
   endpoint  Print client endpoint URL.
 USAGE
 }
@@ -50,6 +51,39 @@ wait_for_health() {
   return 1
 }
 
+assert_raft_write_read() {
+  local key="tarsier/smoke/${SMOKE_KEY_SUFFIX:-$(date +%s)}"
+  local value="ok-${SMOKE_VALUE_SUFFIX:-$(date +%s)}"
+
+  compose exec -T etcd-node0 sh -lc \
+    "ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 put '$key' '$value' >/dev/null"
+
+  local got
+  got="$(
+    compose exec -T etcd-node0 sh -lc \
+      "ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 get '$key' --print-value-only"
+  )"
+  got="${got//$'\r'/}"
+  got="${got%$'\n'}"
+
+  if [[ "$got" != "$value" ]]; then
+    echo "raft write/read mismatch for key '$key': expected '$value', got '$got'" >&2
+    return 1
+  fi
+
+  local status
+  status="$(
+    compose exec -T etcd-node0 sh -lc \
+      'ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 endpoint status --write-out=json'
+  )"
+  if [[ "$status" != *'"leader"'* ]]; then
+    echo "endpoint status JSON missing leader metadata" >&2
+    return 1
+  fi
+
+  echo "etcd raft smoke ok: key=$key"
+}
+
 cmd="${1:-}"
 case "$cmd" in
   start)
@@ -75,6 +109,11 @@ case "$cmd" in
     ;;
   wait)
     wait_for_health
+    ;;
+  smoke-raft)
+    require_docker
+    wait_for_health
+    assert_raft_write_read
     ;;
   endpoint)
     echo "$CLIENT_URL"

@@ -49,6 +49,13 @@ jobs:
           ./scripts/cometbft-conformance-active-smoke.sh assert-fixture
           ./scripts/etcd-raft-conformance-active-smoke.sh assert-fixture
 
+      - name: etcd real-node raft smoke (PR)
+        run: |
+          set -euo pipefail
+          trap './scripts/etcd-raft-live-harness.sh stop >/dev/null 2>&1 || true' EXIT
+          ./scripts/etcd-raft-live-harness.sh start
+          ./scripts/etcd-raft-live-harness.sh smoke-raft
+
       - name: Adapter Schedule Generation Smoke
         run: |
           mkdir -p artifacts/live-adapter

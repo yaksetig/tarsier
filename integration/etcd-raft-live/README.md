@@ -22,6 +22,7 @@ From repo root:
 scripts/etcd-raft-live-harness.sh start
 scripts/etcd-raft-live-harness.sh status
 scripts/etcd-raft-live-harness.sh endpoint
+scripts/etcd-raft-live-harness.sh smoke-raft
 scripts/etcd-raft-live-harness.sh stop
 ```
 
@@ -54,5 +55,6 @@ Model-to-implementation active conformance assertions are available via:
 `smoke` runs a live end-to-end path:
 
 - starts the etcd harness;
+- performs a real raft-backed write/read check via `etcdctl` in the live node;
 - replays `conformance-active` schedule events to a local live endpoint contract;
 - validates deterministic trace assertions (`start/tick/fault/stop`, event counts, final tick).

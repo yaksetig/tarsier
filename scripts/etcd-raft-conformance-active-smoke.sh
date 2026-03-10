@@ -57,6 +57,7 @@ PY
 
 assert_live_etcd_contract() {
   local endpoint="$1"
+  "$HARNESS_SCRIPT" smoke-raft
   python3 - "$endpoint" <<'PY'
 import json
 import sys
