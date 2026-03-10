@@ -451,8 +451,9 @@ fn run() -> miette::Result<()> {
             other,
             depth,
             format,
+            timeout,
         } => {
-            commands::equivalence::run_equivalence_check(&file, &other, depth, &format)?;
+            commands::equivalence::run_equivalence_check(&file, &other, depth, &format, timeout)?;
         }
         Commands::InferInvariants {
             file,

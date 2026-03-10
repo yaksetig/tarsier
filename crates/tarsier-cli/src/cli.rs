@@ -970,6 +970,10 @@ pub(crate) enum Commands {
         /// Output format: text | json
         #[arg(long, default_value = "text")]
         format: String,
+
+        /// Solver timeout in seconds
+        #[arg(long, default_value_t = 60)]
+        timeout: u64,
     },
 
     /// Infer likely invariant predicates from a protocol's structure

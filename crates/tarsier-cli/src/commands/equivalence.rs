@@ -1,14 +1,39 @@
 //! `equivalence-check` CLI command handler.
 //!
-//! Parses two protocols, builds bidirectional product automata, and reports
-//! whether they are behaviorally equivalent (within the bounded depth).
+//! Parses two protocols, builds bidirectional product automata, runs Z3 solver
+//! on both simulation directions, and reports the equivalence verdict.
 
 use std::path::Path;
+use std::process;
 
-use serde_json::json;
+use serde::Serialize;
 use tarsier_dsl::parser::parse;
 use tarsier_ir::equivalence::build_equivalence_products;
 use tarsier_ir::lowering::lower;
+use tarsier_smt::backends::z3_backend::Z3Solver;
+use tarsier_smt::equivalence_encoder::{run_equivalence_solver, EquivalenceCheckResult};
+
+/// Schema version for equivalence-check JSON output.
+pub const SCHEMA_VERSION: u32 = 2;
+
+/// Structured equivalence-check report.
+#[derive(Debug, Clone, Serialize)]
+pub struct EquivalenceReport {
+    pub schema_version: u32,
+    pub protocol_a: String,
+    pub protocol_b: String,
+    pub depth: usize,
+    pub timeout_secs: u64,
+    pub forward_product_locations: usize,
+    pub forward_product_rules: usize,
+    pub forward_mismatches: usize,
+    pub backward_product_locations: usize,
+    pub backward_product_rules: usize,
+    pub backward_mismatches: usize,
+    pub result: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unknown_reason: Option<String>,
+}
 
 /// Run the equivalence-check command.
 pub(crate) fn run_equivalence_check(
@@ -16,6 +41,7 @@ pub(crate) fn run_equivalence_check(
     file_b: &Path,
     depth: usize,
     format: &str,
+    timeout_secs: u64,
 ) -> miette::Result<()> {
     // 1. Parse both protocols.
     let src_a =
@@ -36,66 +62,181 @@ pub(crate) fn run_equivalence_check(
     // 3. Build bidirectional products.
     let products = build_equivalence_products(&ta_a, &ta_b).map_err(|e| miette::miette!("{e}"))?;
 
-    // 4. Report.
-    let trivial = products.is_trivially_equivalent();
-    let fwd_mismatches = products.forward.mismatch_locations.len();
-    let bwd_mismatches = products.backward.mismatch_locations.len();
+    // 4. Run solver on both directions.
+    let mut fwd_solver = Z3Solver::with_timeout_secs(timeout_secs);
+    let mut bwd_solver = Z3Solver::with_timeout_secs(timeout_secs);
+    let result = run_equivalence_solver(&mut fwd_solver, &mut bwd_solver, &products, depth)
+        .map_err(|e| miette::miette!("solver error: {e}"))?;
+
+    // 5. Build report.
+    let report = build_report(file_a, file_b, depth, timeout_secs, &products, &result);
 
     match format {
         "json" => {
-            let result_str = if trivial {
-                "trivially_equivalent"
-            } else {
-                "encoding_ready"
-            };
-            println!(
-                "{}",
-                json!({
-                    "schema_version": 1,
-                    "protocol_a": file_a.display().to_string(),
-                    "protocol_b": file_b.display().to_string(),
-                    "depth": depth,
-                    "forward_product_locations": products.forward.num_locations(),
-                    "forward_product_rules": products.forward.num_rules(),
-                    "forward_mismatches": fwd_mismatches,
-                    "backward_product_locations": products.backward.num_locations(),
-                    "backward_product_rules": products.backward.num_rules(),
-                    "backward_mismatches": bwd_mismatches,
-                    "result": result_str,
-                })
-            );
+            let json = serde_json::to_string_pretty(&report)
+                .unwrap_or_else(|e| format!("{{\"error\": \"{e}\"}}"));
+            println!("{json}");
         }
         _ => {
             println!("Equivalence Check Report");
             println!("========================");
-            println!("Protocol A: {}", file_a.display());
-            println!("Protocol B: {}", file_b.display());
-            println!("Depth:      {depth}");
+            println!("Protocol A: {}", report.protocol_a);
+            println!("Protocol B: {}", report.protocol_b);
+            println!("Depth:      {}", report.depth);
+            println!("Timeout:    {}s", report.timeout_secs);
             println!();
             println!("Forward (A → B):");
-            println!("  Product locations: {}", products.forward.num_locations());
-            println!("  Product rules:     {}", products.forward.num_rules());
-            println!("  Mismatches:        {fwd_mismatches}");
+            println!("  Product locations: {}", report.forward_product_locations);
+            println!("  Product rules:     {}", report.forward_product_rules);
+            println!("  Mismatches:        {}", report.forward_mismatches);
             println!();
             println!("Backward (B → A):");
-            println!("  Product locations: {}", products.backward.num_locations());
-            println!("  Product rules:     {}", products.backward.num_rules());
-            println!("  Mismatches:        {bwd_mismatches}");
+            println!("  Product locations: {}", report.backward_product_locations);
+            println!("  Product rules:     {}", report.backward_product_rules);
+            println!("  Mismatches:        {}", report.backward_mismatches);
             println!();
-            if trivial {
-                println!(
-                    "Result: TRIVIALLY EQUIVALENT (no mismatch locations in either direction)"
-                );
-            } else {
-                println!(
-                    "Result: ENCODING READY ({} total mismatches, depth {})",
-                    products.total_mismatches(),
-                    depth
-                );
-                println!("  (Full solver integration pending engine wiring)");
+            match &result {
+                EquivalenceCheckResult::TriviallyEquivalent => {
+                    println!("Result: TRIVIALLY EQUIVALENT (no mismatch locations in either direction)");
+                }
+                EquivalenceCheckResult::EquivalentUpTo { depth } => {
+                    println!("Result: EQUIVALENT up to depth {depth}");
+                }
+                EquivalenceCheckResult::ForwardDivergence { .. } => {
+                    println!("Result: FORWARD DIVERGENCE (A has behavior B cannot match)");
+                }
+                EquivalenceCheckResult::BackwardDivergence { .. } => {
+                    println!("Result: BACKWARD DIVERGENCE (B has behavior A cannot match)");
+                }
+                EquivalenceCheckResult::BidirectionalDivergence { .. } => {
+                    println!("Result: BIDIRECTIONAL DIVERGENCE (neither protocol simulates the other)");
+                }
+                EquivalenceCheckResult::Unknown { reason, .. } => {
+                    println!("Result: UNKNOWN ({reason})");
+                }
             }
         }
     }
 
-    Ok(())
+    // Exit code: 0=equivalent, 1=divergence, 2=unknown
+    match &result {
+        EquivalenceCheckResult::TriviallyEquivalent
+        | EquivalenceCheckResult::EquivalentUpTo { .. } => Ok(()),
+        EquivalenceCheckResult::ForwardDivergence { .. }
+        | EquivalenceCheckResult::BackwardDivergence { .. }
+        | EquivalenceCheckResult::BidirectionalDivergence { .. } => process::exit(1),
+        EquivalenceCheckResult::Unknown { .. } => process::exit(2),
+    }
+}
+
+fn build_report(
+    file_a: &Path,
+    file_b: &Path,
+    depth: usize,
+    timeout_secs: u64,
+    products: &tarsier_ir::equivalence::EquivalenceProducts,
+    result: &EquivalenceCheckResult,
+) -> EquivalenceReport {
+    let result_str = match result {
+        EquivalenceCheckResult::TriviallyEquivalent => "trivially_equivalent",
+        EquivalenceCheckResult::EquivalentUpTo { .. } => "equivalent",
+        EquivalenceCheckResult::ForwardDivergence { .. } => "forward_divergence",
+        EquivalenceCheckResult::BackwardDivergence { .. } => "backward_divergence",
+        EquivalenceCheckResult::BidirectionalDivergence { .. } => "bidirectional_divergence",
+        EquivalenceCheckResult::Unknown { .. } => "unknown",
+    };
+
+    let unknown_reason = if let EquivalenceCheckResult::Unknown { reason, .. } = result {
+        Some(reason.clone())
+    } else {
+        None
+    };
+
+    EquivalenceReport {
+        schema_version: SCHEMA_VERSION,
+        protocol_a: file_a.display().to_string(),
+        protocol_b: file_b.display().to_string(),
+        depth,
+        timeout_secs,
+        forward_product_locations: products.forward.num_locations(),
+        forward_product_rules: products.forward.num_rules(),
+        forward_mismatches: products.forward.mismatch_locations.len(),
+        backward_product_locations: products.backward.num_locations(),
+        backward_product_rules: products.backward.num_rules(),
+        backward_mismatches: products.backward.mismatch_locations.len(),
+        result: result_str.into(),
+        unknown_reason,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_report() -> EquivalenceReport {
+        EquivalenceReport {
+            schema_version: SCHEMA_VERSION,
+            protocol_a: "a.trs".into(),
+            protocol_b: "b.trs".into(),
+            depth: 10,
+            timeout_secs: 60,
+            forward_product_locations: 4,
+            forward_product_rules: 2,
+            forward_mismatches: 1,
+            backward_product_locations: 4,
+            backward_product_rules: 2,
+            backward_mismatches: 0,
+            result: "equivalent".into(),
+            unknown_reason: None,
+        }
+    }
+
+    #[test]
+    fn schema_version_is_current() {
+        assert_eq!(SCHEMA_VERSION, 2);
+    }
+
+    #[test]
+    fn report_serializes_equivalent() {
+        let report = sample_report();
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["schema_version"], 2);
+        assert_eq!(json["result"], "equivalent");
+        assert!(json.get("unknown_reason").is_none());
+    }
+
+    #[test]
+    fn report_serializes_unknown() {
+        let report = EquivalenceReport {
+            result: "unknown".into(),
+            unknown_reason: Some("timeout".into()),
+            ..sample_report()
+        };
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["result"], "unknown");
+        assert_eq!(json["unknown_reason"], "timeout");
+    }
+
+    #[test]
+    fn report_has_required_fields() {
+        let report = sample_report();
+        let json = serde_json::to_value(&report).unwrap();
+        let obj = json.as_object().unwrap();
+        for field in &[
+            "schema_version",
+            "protocol_a",
+            "protocol_b",
+            "depth",
+            "timeout_secs",
+            "forward_product_locations",
+            "forward_product_rules",
+            "forward_mismatches",
+            "backward_product_locations",
+            "backward_product_rules",
+            "backward_mismatches",
+            "result",
+        ] {
+            assert!(obj.contains_key(*field), "missing field: {field}");
+        }
+    }
 }

@@ -1,8 +1,11 @@
-//! Integration tests for equivalence SMT encoding (EQ-04).
+//! Integration tests for equivalence SMT encoding (EQ-04 + EQX-01).
 
 use tarsier_ir::equivalence::build_equivalence_products;
 use tarsier_ir::threshold_automaton::*;
-use tarsier_smt::equivalence_encoder::encode_equivalence_check;
+use tarsier_smt::backends::z3_backend::Z3Solver;
+use tarsier_smt::equivalence_encoder::{
+    encode_equivalence_check, run_equivalence_solver, EquivalenceCheckResult,
+};
 
 fn make_ta(
     loc_names: &[&str],
@@ -167,4 +170,99 @@ fn asymmetric_automata_different_mismatch_counts() {
         .filter(|(name, _)| name.starts_with("pk_0_"))
         .collect();
     assert_eq!(bwd_locs_step0.len(), 6);
+}
+
+// ===========================================================================
+// EQX-01: Solver integration tests
+// ===========================================================================
+
+#[test]
+fn solver_trivially_equivalent_single_location() {
+    let a = make_ta(&["S"], &[0], &[], &[], &[]);
+    let b = make_ta(&["S"], &[0], &[], &[], &[]);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fwd_solver = Z3Solver::new();
+    let mut bwd_solver = Z3Solver::new();
+    let result = run_equivalence_solver(&mut fwd_solver, &mut bwd_solver, &products, 3).unwrap();
+
+    assert!(
+        matches!(result, EquivalenceCheckResult::TriviallyEquivalent),
+        "got: {result:?}"
+    );
+}
+
+#[test]
+fn solver_equivalent_matching_transitions() {
+    let a = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &[]);
+    let b = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &[]);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fwd_solver = Z3Solver::new();
+    let mut bwd_solver = Z3Solver::new();
+    let result = run_equivalence_solver(&mut fwd_solver, &mut bwd_solver, &products, 5).unwrap();
+
+    assert!(
+        matches!(result, EquivalenceCheckResult::EquivalentUpTo { depth: 5 }),
+        "identical automata should be equivalent, got: {result:?}"
+    );
+}
+
+#[test]
+fn solver_equivalent_with_parameters() {
+    let a = make_ta(&["A", "B"], &[0], &[(0, 1)], &["n", "t"], &[]);
+    let b = make_ta(&["A", "B"], &[0], &[(0, 1)], &["n", "t"], &[]);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fwd_solver = Z3Solver::new();
+    let mut bwd_solver = Z3Solver::new();
+    let result = run_equivalence_solver(&mut fwd_solver, &mut bwd_solver, &products, 3).unwrap();
+
+    assert!(
+        matches!(result, EquivalenceCheckResult::EquivalentUpTo { .. }),
+        "identical automata with params should be equivalent, got: {result:?}"
+    );
+}
+
+#[test]
+fn solver_equivalent_with_shared_vars() {
+    let a = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &["x", "y"]);
+    let b = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &["x", "y"]);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fwd_solver = Z3Solver::new();
+    let mut bwd_solver = Z3Solver::new();
+    let result = run_equivalence_solver(&mut fwd_solver, &mut bwd_solver, &products, 3).unwrap();
+
+    assert!(
+        matches!(result, EquivalenceCheckResult::EquivalentUpTo { .. }),
+        "got: {result:?}"
+    );
+}
+
+#[test]
+fn solver_equivalent_with_internal_location() {
+    // A: S→I→D, B: S→D, I is internal in forward product.
+    let a = make_ta(&["S", "I", "D"], &[0], &[(0, 1), (1, 2)], &[], &[]);
+    let b = make_ta(&["S", "D"], &[0], &[(0, 1)], &[], &[]);
+    let products = build_equivalence_products(&a, &b).unwrap();
+
+    let mut fwd_solver = Z3Solver::new();
+    let mut bwd_solver = Z3Solver::new();
+    let result = run_equivalence_solver(&mut fwd_solver, &mut bwd_solver, &products, 5).unwrap();
+
+    // Internal locations produce stutter rules; simulation should hold in both directions.
+    match &result {
+        EquivalenceCheckResult::EquivalentUpTo { .. } | EquivalenceCheckResult::TriviallyEquivalent => {}
+        other => panic!("expected equivalent with internal location, got: {other:?}"),
+    }
+}
+
+#[test]
+fn solver_unknown_variant_constructible() {
+    let result = EquivalenceCheckResult::Unknown {
+        depth: 3,
+        reason: "timeout".to_string(),
+    };
+    assert!(matches!(result, EquivalenceCheckResult::Unknown { .. }));
 }
