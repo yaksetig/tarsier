@@ -1,0 +1,65 @@
+// Pacemaker unsafe counterpart: weak commit thresholds across views admit
+// conflicting decisions while view progression is under-constrained.
+protocol PacemakerStuckBuggy {
+    params n, t, f, gst;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+        timing: partial_synchrony;
+        gst: gst;
+        values: sign;
+    }
+
+    pacemaker {
+        view: view;
+        start: active;
+    }
+
+    message Commit(view: nat in 0..1, value: nat in 0..1);
+    message ViewChange(view: nat in 0..1);
+
+    role Replica {
+        var view: nat in 0..1 = 0;
+        var decided: bool = false;
+        var decision: bool = false;
+        init active;
+
+        phase active {
+            when received >= 1 Commit(view=view, value=1) => {
+                send Commit(view=view, value=1);
+            }
+            when received >= 1 Commit(view=view, value=0) => {
+                send Commit(view=view, value=0);
+            }
+
+            when received >= t + 1 Commit(view=view, value=1) => {
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received >= t + 1 Commit(view=view, value=0) => {
+                decided = true;
+                decision = false;
+                decide false;
+                goto phase done_no;
+            }
+
+            when view == 0 => {
+                send ViewChange(view=view);
+                view = 1;
+                goto phase active;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

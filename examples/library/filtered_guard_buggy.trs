@@ -1,0 +1,42 @@
+// Field-filtered threshold guards (message_args) unsafe counterpart.
+// Weak filtered thresholds allow conflicting decisions.
+protocol FilteredGuardBuggy {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message Vote(round: nat in 0..0, value: nat in 0..1);
+
+    role Replica {
+        var decided: bool = false;
+        var decision: bool = false;
+        init start;
+
+        phase start {
+            when received >= 1 Vote(round=0, value=1) => {
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received >= 1 Vote(round=0, value=0) => {
+                decided = true;
+                decision = false;
+                decide false;
+                goto phase done_no;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

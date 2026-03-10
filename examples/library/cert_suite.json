@@ -622,6 +622,86 @@
       "cegar_iters": 0,
       "notes": "DAG round bug: despite dag_round structure with parent dependencies, weak guards (1 message) allow conflicting true/false decisions. Exercises DAG activation variable encoding alongside agreement property checking.",
       "model_sha256": "17ee51204df1ec2c4110cf424b52270fb09aae1fafab8e833f07c0776b73295f"
+    },
+    {
+      "file": "clock_timeout_safe.trs",
+      "family": "clock-timeout",
+      "class": "expected_safe",
+      "verify": "safe",
+      "depth": 4,
+      "cegar_iters": 0,
+      "notes": "Clock/timeout safe counterpart: timeout only triggers retry and eventual quorum-based true decision. Exercises clock ticks and timeout guards without introducing conflicting terminal values.",
+      "model_sha256": "c1df90250b2ba94b089f6f698cabb9ce8aab3d4ad83e6bea81027251a85807f0"
+    },
+    {
+      "file": "voting_enum_buggy.trs",
+      "family": "voting",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 4,
+      "cegar_iters": 0,
+      "notes": "Enum unsafe counterpart: weak thresholds and abort path allow conflicting enum decisions (yes/no), providing the missing unsafe pair for enum-valued local state.",
+      "model_sha256": "0766c524c231de35b85a89d70debafe054c52e35cf89e97aa16ab1cdd1e1afe8"
+    },
+    {
+      "file": "bounded_log_overflow_buggy.trs",
+      "family": "bounded-log",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 4,
+      "cegar_iters": 0,
+      "notes": "Bounded-log unsafe counterpart: append operations are exercised on conflicting decision paths with weak guards, producing an agreement violation sentinel for bounded collection workflows.",
+      "model_sha256": "f3ca70e10ab5fb3dcf21208e525308a2d07a2cf06ebcb91a1f9f4262164b527e"
+    },
+    {
+      "file": "committee_weak_bound_buggy.trs",
+      "family": "committee",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 4,
+      "cegar_iters": 0,
+      "notes": "Committee unsafe counterpart: certificate threshold is reduced to b+1, allowing conflicting committee outcomes and violating agreement.",
+      "model_sha256": "9ffdff4dde3ec18e5a980218365d070511ac72012ffab3680768802855c3945f"
+    },
+    {
+      "file": "filtered_guard_safe.trs",
+      "family": "filtered-guards",
+      "class": "expected_safe",
+      "verify": "safe",
+      "depth": 4,
+      "cegar_iters": 0,
+      "notes": "Safe message_args example: filtered distinct-sender quorum guards for Vote(round=0,value=*) under signed/no-equivocation assumptions preserve agreement.",
+      "model_sha256": "609842d92117bab3b30328bf3c6561f7c5363bd5d0fa47f492b066bb4d0698a4"
+    },
+    {
+      "file": "filtered_guard_buggy.trs",
+      "family": "filtered-guards",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 4,
+      "cegar_iters": 0,
+      "notes": "Unsafe message_args example: weak filtered guards (received >= 1) on Vote(round=0,value=*) allow immediate conflicting terminal decisions.",
+      "model_sha256": "543c23e25f33c5abbde1dc141095faaf8b29644f22f4b793ae231a0a1c505fbc"
+    },
+    {
+      "file": "leader_equivocation_buggy.trs",
+      "family": "leader",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 4,
+      "cegar_iters": 0,
+      "notes": "Leader-role unsafe counterpart: single leader can equivocate across proposal values, and validators using weak accept rules can decide conflicting values.",
+      "model_sha256": "5593456d06294a96fc74b28e004df643e2f4b591345249fb5fd115b2583e8314"
+    },
+    {
+      "file": "pacemaker_stuck_buggy.trs",
+      "family": "pacemaker",
+      "class": "known_bug",
+      "verify": "unsafe",
+      "depth": 4,
+      "cegar_iters": 0,
+      "notes": "Pacemaker unsafe counterpart: under-constrained view progression plus weak commit thresholds permits conflicting decisions across the same logical view workflow.",
+      "model_sha256": "231c21a0ab584f6436d393651ca9d44a430a0b5eb1f56889ac4d0e1d0955d57d"
     }
   ]
 }

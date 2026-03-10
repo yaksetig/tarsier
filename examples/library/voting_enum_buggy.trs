@@ -1,0 +1,50 @@
+// Enum bug counterpart: weak thresholds let conflicting enum decisions coexist.
+protocol VotingEnumBuggy {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    enum VoteValue { yes, no }
+
+    message Proposal;
+    message Abort;
+    message CastVote;
+
+    role Voter {
+        var decided: bool = false;
+        var decision: VoteValue = yes;
+        init idle;
+
+        phase idle {
+            when received >= 1 Proposal => {
+                send CastVote;
+                goto phase collecting;
+            }
+        }
+
+        phase collecting {
+            when received >= t + 1 CastVote => {
+                decision = yes;
+                decided = true;
+                goto phase done_yes;
+            }
+            when received >= 1 Abort => {
+                decision = no;
+                decided = true;
+                goto phase done_no;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Voter. forall q: Voter.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

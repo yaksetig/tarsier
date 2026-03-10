@@ -1,0 +1,55 @@
+// Clock/timeout safe counterpart: timeout only drives retry, never conflicting decision.
+// All deciding paths commit to the same value once a quorum of votes is observed.
+protocol ClockTimeoutSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message Vote;
+    message TimeoutHint;
+    clock timer;
+
+    role Process {
+        var decided: bool = false;
+        var decision: bool = false;
+        init waiting;
+
+        phase waiting {
+            when received >= 1 Vote => {
+                send Vote;
+                goto phase voting;
+            }
+            when received >= 1 TimeoutHint => {
+                tick timer;
+                goto phase timeout_wait;
+            }
+        }
+
+        phase timeout_wait {
+            when timeout timer >= 1 => {
+                send Vote;
+                goto phase voting;
+            }
+        }
+
+        phase voting {
+            when received >= n - t Vote => {
+                decision = true;
+                decided = true;
+                decide true;
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    property agreement: agreement {
+        forall p: Process. forall q: Process.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

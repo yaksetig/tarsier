@@ -1,0 +1,44 @@
+// Crash-recovery unsafe counterpart: amnesia enables conflicting vote histories.
+protocol CrashRecoveryAmnesiaBuggy {
+    params n, t, f;
+    resilience: n > 2*t;
+
+    adversary {
+        model: crash_recovery;
+        bound: f;
+    }
+
+    message VoteA;
+    message VoteB;
+
+    role Voter {
+        var decided: bool = false;
+        var decision: bool = false;
+        init ready;
+
+        phase ready {
+            when received >= 0 VoteA => {
+                send VoteA;
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received >= 0 VoteB => {
+                send VoteB;
+                decided = true;
+                decision = false;
+                decide false;
+                goto phase done_no;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Voter. forall q: Voter.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

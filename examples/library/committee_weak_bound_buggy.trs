@@ -1,0 +1,50 @@
+// Committee unsafe counterpart: weak certificate threshold allows conflicting
+// committee outcomes and agreement violation.
+protocol CommitteeWeakBoundBuggy {
+    params n, t, f, b;
+    resilience: n > 2*b;
+
+    adversary {
+        model: byzantine;
+        bound: b;
+    }
+
+    committee voters {
+        population: 1000;
+        byzantine: 333;
+        size: 100;
+        epsilon: 1.0e-9;
+        bound_param: b;
+    }
+
+    message CertVote(value: nat in 0..1);
+
+    role Voter {
+        var decided: bool = false;
+        var decision: bool = false;
+        init collecting;
+
+        phase collecting {
+            when received >= b + 1 CertVote(value=1) => {
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received >= b + 1 CertVote(value=0) => {
+                decided = true;
+                decision = false;
+                decide false;
+                goto phase done_no;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Voter. forall q: Voter.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}

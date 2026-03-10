@@ -1,0 +1,61 @@
+// Leader-role unsafe counterpart: equivocation enables conflicting proposals.
+protocol LeaderEquivocationBuggy {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    message Propose(value: nat in 0..1);
+
+    leader role Proposer {
+        init idle;
+
+        phase idle {
+            when received >= 0 Propose(value=1) => {
+                send Propose(value=1);
+                goto phase equivocate;
+            }
+        }
+
+        phase equivocate {
+            when received >= 0 Propose(value=0) => {
+                send Propose(value=0);
+                goto phase done;
+            }
+        }
+
+        phase done {}
+    }
+
+    role Validator {
+        var decided: bool = false;
+        var decision: bool = false;
+        init waiting;
+
+        phase waiting {
+            when received >= 1 Propose(value=1) => {
+                decided = true;
+                decision = true;
+                decide true;
+                goto phase done_yes;
+            }
+            when received >= 1 Propose(value=0) => {
+                decided = true;
+                decision = false;
+                decide false;
+                goto phase done_no;
+            }
+        }
+
+        phase done_yes {}
+        phase done_no {}
+    }
+
+    property agreement: agreement {
+        forall p: Validator. forall q: Validator.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
+    }
+}
