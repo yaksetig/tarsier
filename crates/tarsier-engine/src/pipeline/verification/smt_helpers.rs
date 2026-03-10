@@ -22,9 +22,12 @@ pub(crate) fn run_single_depth_bmc_encoding<S: SmtSolver>(
         .collect();
     let (result, model) = solver.check_sat_with_model(&var_refs)?;
     Ok(match result {
-        SatResult::Sat => BmcResult::Unsafe {
-            depth,
-            model: model.expect("SAT should include model"),
+        SatResult::Sat => match model {
+            Some(m) => BmcResult::Unsafe { depth, model: m },
+            None => BmcResult::Unknown {
+                depth,
+                reason: "SAT result returned without model (solver contract violation)".into(),
+            },
         },
         SatResult::Unsat => BmcResult::Safe {
             depth_checked: depth,
