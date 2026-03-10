@@ -283,3 +283,4 @@ PY`
 `2026-03-10T21:21:51Z | AGENT_1 | CI-01 | START | implementation started`
 `2026-03-10T21:23:11Z | AGENT_1 | CI-01 | PR_OPEN | branch=codex/agent1-ci-01-v1 pr=local summary=add PR-targeted mutation workflow and switch full mutation campaign to nightly`
 `2026-03-10T21:23:11Z | AGENT_1 | CI-01 | DONE | commit=pending tests=python3 - <<"PY" ... mutation workflow contract assertions ... PY; python3 .github/scripts/check_doc_consistency.py`
+`2026-03-10T21:23:20Z | AGENT_1 | CI-01 | CHANGE | done_commit=af13ccc`
