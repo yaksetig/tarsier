@@ -142,6 +142,8 @@ Highest-priority dependency edges:
 `2026-03-10T00:00:00Z | system | INIT | CHANGE | Initial phase-3 task registry published`
 `2026-03-10T18:53:25Z | AGENT_2 | PANIC-01 | START | implementation started`
 `2026-03-10T18:53:50Z | AGENT_1 | INTEG-01 | START | implementation started`
+`2026-03-10T19:02:42Z | AGENT_1 | INTEG-01 | PR_OPEN | branch=codex/agent1-integ-01-v1 pr=local summary=deterministic CometBFT docker-compose harness + bootstrap + config validator + docs`
+`2026-03-10T19:02:42Z | AGENT_1 | INTEG-01 | DONE | commit=5573943 tests=python3 scripts/check-cometbft-live-config.py; bash -n scripts/cometbft-live-harness.sh; bash -n integration/cometbft-live/bootstrap/bootstrap.sh; docker compose -f integration/cometbft-live/docker-compose.yml config >/tmp/cometbft_live_compose.out; ./scripts/cometbft-live-harness.sh endpoint` 
 
 ---
 
