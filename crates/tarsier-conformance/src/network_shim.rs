@@ -517,4 +517,118 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, NetworkShimError::DuplicateTwinId { .. }));
     }
+
+    #[test]
+    fn drop_with_no_matching_messages_is_noop() {
+        let mut shim = InMemoryNetworkShim::new();
+        shim.enqueue(msg(1, "vote", 1, 2));
+
+        shim.apply_fault_at_tick(
+            0,
+            &NetworkFaultAction::DropMessage {
+                channel: "other".into(),
+                from_process: None,
+                to_process: None,
+            },
+        )
+        .unwrap();
+
+        assert!(shim.dropped_messages().is_empty());
+        assert_eq!(shim.pending_messages().len(), 1);
+    }
+
+    #[test]
+    fn reorder_nonexistent_channel_is_noop() {
+        let mut shim = InMemoryNetworkShim::new();
+        shim.enqueue(msg(1, "vote", 1, 2));
+
+        shim.apply_fault_at_tick(
+            0,
+            &NetworkFaultAction::ReorderChannel {
+                channel: "nonexistent".into(),
+            },
+        )
+        .unwrap();
+
+        let delivered = shim.drain_deliverable();
+        assert_eq!(delivered.len(), 1);
+        assert_eq!(delivered[0].message_id, 1);
+    }
+
+    #[test]
+    fn multiple_partitions_coexist() {
+        let mut shim = InMemoryNetworkShim::new();
+        shim.enqueue(msg(1, "a", 1, 2));
+        shim.enqueue(msg(2, "b", 3, 4));
+
+        shim.apply_fault_at_tick(
+            0,
+            &NetworkFaultAction::PartitionLink {
+                process_a: 1,
+                process_b: 2,
+            },
+        )
+        .unwrap();
+        shim.apply_fault_at_tick(
+            0,
+            &NetworkFaultAction::PartitionLink {
+                process_a: 3,
+                process_b: 4,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(shim.active_partitions().len(), 2);
+        assert!(shim.drain_deliverable().is_empty());
+
+        // Heal just one partition
+        shim.apply_fault_at_tick(1, &NetworkFaultAction::HealPartition)
+            .unwrap();
+
+        // All partitions healed
+        let delivered = shim.drain_deliverable();
+        assert_eq!(delivered.len(), 2);
+    }
+
+    #[test]
+    fn advance_tick_rejects_regression() {
+        let mut shim = InMemoryNetworkShim::new();
+        shim.advance_to_tick(5).unwrap();
+        assert_eq!(shim.current_tick(), 5);
+
+        let err = shim.advance_to_tick(3).unwrap_err();
+        assert!(matches!(err, NetworkShimError::TickRegression { .. }));
+    }
+
+    #[test]
+    fn active_twins_for_process_returns_correct_twins() {
+        let mut shim = InMemoryNetworkShim::new();
+        assert!(shim.active_twins_for_process(1).is_empty());
+
+        shim.apply_fault_at_tick(
+            0,
+            &NetworkFaultAction::SpawnTwin {
+                process_id: 1,
+                twin_id: 10,
+            },
+        )
+        .unwrap();
+        shim.apply_fault_at_tick(
+            0,
+            &NetworkFaultAction::SpawnTwin {
+                process_id: 1,
+                twin_id: 11,
+            },
+        )
+        .unwrap();
+
+        let twins = shim.active_twins_for_process(1);
+        assert_eq!(twins.len(), 2);
+        assert!(twins.contains(&10));
+        assert!(twins.contains(&11));
+
+        shim.apply_fault_at_tick(0, &NetworkFaultAction::RetireTwin { twin_id: 10 })
+            .unwrap();
+        assert_eq!(shim.active_twins_for_process(1).len(), 1);
+    }
 }

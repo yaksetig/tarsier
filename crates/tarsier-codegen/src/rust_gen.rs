@@ -1037,6 +1037,309 @@ mod tests {
         assert_eq!(field_type_to_rust("enum"), "u64");
     }
 
+    // --- Guard rendering tests ---
+
+    #[test]
+    fn render_guard_simple_threshold() {
+        let params = HashSet::new();
+        let guard = GuardExpr::Threshold(ThresholdGuard {
+            message_type: "Vote".into(),
+            op: CmpOp::Ge,
+            threshold: LinearExpr::Const(3),
+            distinct: false,
+            distinct_role: None,
+            message_args: vec![],
+        });
+        let result = render_guard(&guard, &params);
+        assert_eq!(result, "self.vote_buffer.len() as u64 >= 3");
+    }
+
+    #[test]
+    fn render_guard_distinct_threshold() {
+        let params = HashSet::new();
+        let guard = GuardExpr::Threshold(ThresholdGuard {
+            message_type: "Vote".into(),
+            op: CmpOp::Ge,
+            threshold: LinearExpr::Const(2),
+            distinct: true,
+            distinct_role: None,
+            message_args: vec![],
+        });
+        let result = render_guard(&guard, &params);
+        assert!(result.contains("collect::<HashSet<_>>().len()"), "distinct guard should use HashSet: {result}");
+        assert!(result.contains(">= 2"));
+    }
+
+    #[test]
+    fn render_guard_filtered_threshold() {
+        let params = HashSet::new();
+        let guard = GuardExpr::Threshold(ThresholdGuard {
+            message_type: "Vote".into(),
+            op: CmpOp::Ge,
+            threshold: LinearExpr::Const(1),
+            distinct: false,
+            distinct_role: None,
+            message_args: vec![("view".into(), Expr::IntLit(5))],
+        });
+        let result = render_guard(&guard, &params);
+        assert!(result.contains("filter"), "filtered guard should use .filter: {result}");
+        assert!(result.contains("m.view == 5"), "should check field: {result}");
+        assert!(result.contains(".count()"), "non-distinct filter should use .count(): {result}");
+    }
+
+    #[test]
+    fn render_guard_filtered_distinct_threshold() {
+        let params = HashSet::new();
+        let guard = GuardExpr::Threshold(ThresholdGuard {
+            message_type: "Vote".into(),
+            op: CmpOp::Ge,
+            threshold: LinearExpr::Const(1),
+            distinct: true,
+            distinct_role: None,
+            message_args: vec![("view".into(), Expr::IntLit(3))],
+        });
+        let result = render_guard(&guard, &params);
+        assert!(result.contains("filter"), "should use filter: {result}");
+        assert!(result.contains("HashSet<_>"), "distinct filter should collect to HashSet: {result}");
+    }
+
+    #[test]
+    fn render_guard_timeout() {
+        let params = HashSet::new();
+        let guard = GuardExpr::Timeout {
+            clock: "deadline".into(),
+            op: CmpOp::Ge,
+            threshold: LinearExpr::Const(10),
+        };
+        assert_eq!(render_guard(&guard, &params), "self.deadline >= 10");
+    }
+
+    #[test]
+    fn render_guard_bool_var() {
+        let params = HashSet::new();
+        assert_eq!(
+            render_guard(&GuardExpr::BoolVar("locked".into()), &params),
+            "self.locked"
+        );
+    }
+
+    #[test]
+    fn render_guard_and_or_nesting() {
+        let params = HashSet::new();
+        let guard = GuardExpr::And(
+            Box::new(GuardExpr::BoolVar("ready".into())),
+            Box::new(GuardExpr::Or(
+                Box::new(GuardExpr::BoolVar("a".into())),
+                Box::new(GuardExpr::BoolVar("b".into())),
+            )),
+        );
+        let result = render_guard(&guard, &params);
+        assert_eq!(result, "(self.ready) && ((self.a) || (self.b))");
+    }
+
+    #[test]
+    fn render_guard_has_crypto_object() {
+        let params = HashSet::new();
+        let guard = GuardExpr::HasCryptoObject {
+            object_name: "QC".into(),
+            object_args: vec![],
+        };
+        assert_eq!(render_guard(&guard, &params), "self.q_c_count >= 1");
+    }
+
+    // --- Action rendering tests ---
+
+    #[test]
+    fn write_actions_assign_renders_correctly() {
+        let protocol = empty_protocol();
+        let params = HashSet::new();
+        let mut out = String::new();
+        write_actions(
+            &mut out,
+            &[Action::Assign {
+                var: "view".into(),
+                value: Expr::IntLit(42),
+            }],
+            &protocol,
+            &params,
+            "Validator",
+            "        ",
+        )
+        .unwrap();
+        assert!(out.contains("self.view = 42;"), "got: {out}");
+    }
+
+    #[test]
+    fn write_actions_goto_phase_renders_pascal_case() {
+        let protocol = empty_protocol();
+        let params = HashSet::new();
+        let mut out = String::new();
+        write_actions(
+            &mut out,
+            &[Action::GotoPhase {
+                phase: "pre_commit".into(),
+            }],
+            &protocol,
+            &params,
+            "Validator",
+            "        ",
+        )
+        .unwrap();
+        assert!(
+            out.contains("ValidatorPhase::PreCommit"),
+            "phase should be PascalCase: {out}"
+        );
+    }
+
+    #[test]
+    fn write_actions_decide_casts_to_u64() {
+        let protocol = empty_protocol();
+        let params = HashSet::new();
+        let mut out = String::new();
+        write_actions(
+            &mut out,
+            &[Action::Decide {
+                value: Expr::IntLit(1),
+            }],
+            &protocol,
+            &params,
+            "Voter",
+            "        ",
+        )
+        .unwrap();
+        assert!(out.contains("decision = Some(VoterDecision"), "got: {out}");
+        assert!(out.contains("1 as u64"), "should cast to u64: {out}");
+    }
+
+    #[test]
+    fn write_actions_crypto_operations() {
+        let protocol = empty_protocol();
+        let params = HashSet::new();
+        let mut out = String::new();
+        write_actions(
+            &mut out,
+            &[
+                Action::FormCryptoObject {
+                    object_name: "QC".into(),
+                    args: vec![],
+                    recipient_role: None,
+                },
+                Action::LockCryptoObject {
+                    object_name: "QC".into(),
+                    args: vec![],
+                },
+                Action::JustifyCryptoObject {
+                    object_name: "QC".into(),
+                    args: vec![],
+                },
+            ],
+            &protocol,
+            &params,
+            "Leader",
+            "        ",
+        )
+        .unwrap();
+        assert!(out.contains("self.q_c_count += 1;"), "form: {out}");
+        assert!(out.contains("self.lock_q_c = true;"), "lock: {out}");
+        assert!(out.contains("self.justify_q_c = true;"), "justify: {out}");
+    }
+
+    #[test]
+    fn write_actions_collection_operations() {
+        let protocol = empty_protocol();
+        let params = HashSet::new();
+        let mut out = String::new();
+        write_actions(
+            &mut out,
+            &[
+                Action::Append {
+                    collection: "log".into(),
+                    value: Expr::IntLit(1),
+                },
+                Action::Enqueue {
+                    collection: "pending_msgs".into(),
+                    value: Expr::IntLit(2),
+                },
+                Action::Dequeue {
+                    collection: "pending_msgs".into(),
+                },
+            ],
+            &protocol,
+            &params,
+            "Node",
+            "        ",
+        )
+        .unwrap();
+        assert!(out.contains("self.log.push(1);"), "append: {out}");
+        assert!(
+            out.contains("self.pending_msgs.push_back(2);"),
+            "enqueue: {out}"
+        );
+        assert!(
+            out.contains("self.pending_msgs.pop_front();"),
+            "dequeue: {out}"
+        );
+    }
+
+    #[test]
+    fn write_actions_reconfigure() {
+        let protocol = empty_protocol();
+        let params: HashSet<String> = ["n".into()].into_iter().collect();
+        let mut out = String::new();
+        write_actions(
+            &mut out,
+            &[Action::Reconfigure {
+                updates: vec![ReconfigureUpdate {
+                    param: "n".into(),
+                    value: Expr::IntLit(10),
+                }],
+            }],
+            &protocol,
+            &params,
+            "Node",
+            "        ",
+        )
+        .unwrap();
+        assert!(out.contains("self.n = 10;"), "reconfigure: {out}");
+    }
+
+    #[test]
+    fn write_actions_clock_operations() {
+        let protocol = empty_protocol();
+        let params = HashSet::new();
+        let mut out = String::new();
+        write_actions(
+            &mut out,
+            &[
+                Action::ResetClock {
+                    clock: "timer".into(),
+                },
+                Action::TickClock {
+                    clock: "timer".into(),
+                    amount: Some(LinearExpr::Const(5)),
+                },
+                Action::TickClock {
+                    clock: "timer".into(),
+                    amount: None,
+                },
+            ],
+            &protocol,
+            &params,
+            "Node",
+            "        ",
+        )
+        .unwrap();
+        assert!(out.contains("self.timer = 0;"), "reset: {out}");
+        assert!(
+            out.contains("self.timer = self.timer + 5;"),
+            "tick by 5: {out}"
+        );
+        assert!(
+            out.contains("self.timer = self.timer + 1;"),
+            "tick by default 1: {out}"
+        );
+    }
+
     #[test]
     fn rust_codegen_imports_hashset_only_when_distinct_guards_are_used() {
         let with_distinct_src = include_str!("../../tarsier-dsl/../../examples/crypto_objects.trs");

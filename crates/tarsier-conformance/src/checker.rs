@@ -926,4 +926,366 @@ mod tests {
         let json2 = serde_json::to_string(&result2).unwrap();
         assert_eq!(json1, json2, "deterministic output");
     }
+
+    #[test]
+    fn permissive_mode_allows_decide_outside_decided_location() {
+        let ta = make_test_automaton();
+        let checker =
+            ConformanceChecker::new_with_mode(&ta, &make_params(), ConformanceMode::Permissive);
+
+        let trace = RuntimeTrace {
+            schema_version: 1,
+            protocol_name: "Test".into(),
+            params: make_params(),
+            processes: vec![ProcessTrace {
+                process_id: 0,
+                role: "Process".into(),
+                events: vec![
+                    ProcessEvent {
+                        sequence: 0,
+                        kind: ProcessEventKind::Init {
+                            location: "Process_Init".into(),
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 1,
+                        kind: ProcessEventKind::Decide {
+                            value: "commit".into(),
+                        },
+                    },
+                ],
+            }],
+        };
+
+        let result = checker.check(&trace);
+        assert!(
+            !result
+                .violations
+                .iter()
+                .any(|v| v.kind == ViolationKind::InvalidDecideContext),
+            "permissive mode should allow decide outside decided location"
+        );
+    }
+
+    #[test]
+    fn process_with_no_events_passes() {
+        let ta = make_test_automaton();
+        let checker = ConformanceChecker::new(&ta, &make_params());
+
+        let trace = RuntimeTrace {
+            schema_version: 1,
+            protocol_name: "Test".into(),
+            params: make_params(),
+            processes: vec![ProcessTrace {
+                process_id: 0,
+                role: "Process".into(),
+                events: vec![],
+            }],
+        };
+
+        let result = checker.check(&trace);
+        assert!(
+            result.passed,
+            "empty event list should pass: {:?}",
+            result.violations
+        );
+    }
+
+    #[test]
+    fn var_update_events_are_accepted_silently() {
+        let ta = make_test_automaton();
+        let checker = ConformanceChecker::new(&ta, &make_params());
+
+        let trace = RuntimeTrace {
+            schema_version: 1,
+            protocol_name: "Test".into(),
+            params: make_params(),
+            processes: vec![ProcessTrace {
+                process_id: 0,
+                role: "Process".into(),
+                events: vec![
+                    ProcessEvent {
+                        sequence: 0,
+                        kind: ProcessEventKind::Init {
+                            location: "Process_Init".into(),
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 1,
+                        kind: ProcessEventKind::VarUpdate {
+                            var_name: "cnt_Vote".into(),
+                            new_value: "5".into(),
+                        },
+                    },
+                ],
+            }],
+        };
+
+        let result = checker.check(&trace);
+        assert!(
+            result.passed,
+            "VarUpdate should be accepted silently: {:?}",
+            result.violations
+        );
+    }
+
+    #[test]
+    fn distinct_sender_guard_counts_unique_senders() {
+        let mut ta = ThresholdAutomaton::new();
+        let t = ta.add_parameter(Parameter {
+            name: "t".into(),
+            time_varying: false,
+        });
+
+        ta.add_location(Location {
+            name: "P_Init".into(),
+            role: "P".into(),
+            phase: "Init".into(),
+            local_vars: Default::default(),
+        });
+        ta.add_location(Location {
+            name: "P_Done".into(),
+            role: "P".into(),
+            phase: "Done".into(),
+            local_vars: Default::default(),
+        });
+        ta.initial_locations = vec![LocationId::from(0)];
+
+        ta.add_shared_var(SharedVar {
+            name: "cnt_Vote".into(),
+            kind: SharedVarKind::MessageCounter,
+            distinct: true,
+            distinct_role: None,
+        });
+
+        // Rule: P_Init -> P_Done, guard: distinct(cnt_Vote) >= t+1
+        ta.add_rule(Rule {
+            from: LocationId::from(0),
+            to: LocationId::from(1),
+            guard: Guard::single(GuardAtom::Threshold {
+                vars: vec![SharedVarId::from(0)],
+                op: CmpOp::Ge,
+                bound: LinearCombination {
+                    constant: 1,
+                    terms: vec![(1, t)],
+                },
+                distinct: true,
+            }),
+            updates: vec![],
+            collection_updates: vec![],
+            clock_guards: vec![],
+            clock_updates: vec![],
+            param_updates: vec![],
+        });
+
+        let params = vec![("t".into(), 2)];
+        let checker = ConformanceChecker::new(&ta, &params);
+
+        // 3 messages from only 2 distinct senders: should satisfy >= t+1 = 3? No, 2 < 3.
+        let trace_fail = RuntimeTrace {
+            schema_version: 1,
+            protocol_name: "Test".into(),
+            params: params.clone(),
+            processes: vec![ProcessTrace {
+                process_id: 0,
+                role: "P".into(),
+                events: vec![
+                    ProcessEvent {
+                        sequence: 0,
+                        kind: ProcessEventKind::Init {
+                            location: "P_Init".into(),
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 1,
+                        kind: ProcessEventKind::Receive {
+                            message_type: "cnt_Vote".into(),
+                            from_process: 1,
+                            fields: vec![],
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 2,
+                        kind: ProcessEventKind::Receive {
+                            message_type: "cnt_Vote".into(),
+                            from_process: 1,
+                            fields: vec![],
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 3,
+                        kind: ProcessEventKind::Receive {
+                            message_type: "cnt_Vote".into(),
+                            from_process: 2,
+                            fields: vec![],
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 4,
+                        kind: ProcessEventKind::Transition {
+                            from_location: "P_Init".into(),
+                            to_location: "P_Done".into(),
+                            rule_id: None,
+                        },
+                    },
+                ],
+            }],
+        };
+
+        let result = checker.check(&trace_fail);
+        assert!(
+            !result.passed,
+            "distinct count is 2, need 3 — should fail"
+        );
+
+        // 3 messages from 3 distinct senders: should satisfy >= t+1 = 3
+        let trace_pass = RuntimeTrace {
+            schema_version: 1,
+            protocol_name: "Test".into(),
+            params: params.clone(),
+            processes: vec![ProcessTrace {
+                process_id: 0,
+                role: "P".into(),
+                events: vec![
+                    ProcessEvent {
+                        sequence: 0,
+                        kind: ProcessEventKind::Init {
+                            location: "P_Init".into(),
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 1,
+                        kind: ProcessEventKind::Receive {
+                            message_type: "cnt_Vote".into(),
+                            from_process: 1,
+                            fields: vec![],
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 2,
+                        kind: ProcessEventKind::Receive {
+                            message_type: "cnt_Vote".into(),
+                            from_process: 2,
+                            fields: vec![],
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 3,
+                        kind: ProcessEventKind::Receive {
+                            message_type: "cnt_Vote".into(),
+                            from_process: 3,
+                            fields: vec![],
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 4,
+                        kind: ProcessEventKind::Transition {
+                            from_location: "P_Init".into(),
+                            to_location: "P_Done".into(),
+                            rule_id: None,
+                        },
+                    },
+                ],
+            }],
+        };
+
+        let result = checker.check(&trace_pass);
+        assert!(
+            result.passed,
+            "distinct count is 3 >= 3, should pass: {:?}",
+            result.violations
+        );
+    }
+
+    #[test]
+    fn checker_options_strict_and_permissive_presets() {
+        let strict = CheckerOptions::strict();
+        assert!(strict.reject_unknown_message_type);
+        assert!(strict.reject_invalid_decide_context);
+
+        let permissive = CheckerOptions::permissive();
+        assert!(!permissive.reject_unknown_message_type);
+        assert!(!permissive.reject_invalid_decide_context);
+    }
+
+    #[test]
+    fn multiple_processes_checked_independently() {
+        let ta = make_test_automaton();
+        let checker = ConformanceChecker::new(&ta, &make_params());
+
+        let trace = RuntimeTrace {
+            schema_version: 1,
+            protocol_name: "Test".into(),
+            params: make_params(),
+            processes: vec![
+                // Process 0: valid
+                ProcessTrace {
+                    process_id: 0,
+                    role: "Process".into(),
+                    events: vec![ProcessEvent {
+                        sequence: 0,
+                        kind: ProcessEventKind::Init {
+                            location: "Process_Init".into(),
+                        },
+                    }],
+                },
+                // Process 1: invalid (bad initial location)
+                ProcessTrace {
+                    process_id: 1,
+                    role: "Process".into(),
+                    events: vec![ProcessEvent {
+                        sequence: 0,
+                        kind: ProcessEventKind::Init {
+                            location: "Process_Decided".into(),
+                        },
+                    }],
+                },
+            ],
+        };
+
+        let result = checker.check(&trace);
+        assert!(!result.passed);
+        assert_eq!(result.violations.len(), 1);
+        assert_eq!(result.violations[0].process_id, 1);
+    }
+
+    #[test]
+    fn trivial_guard_allows_transition_without_messages() {
+        let ta = make_test_automaton();
+        let checker = ConformanceChecker::new(&ta, &make_params());
+
+        // Transition from L0 to L2 (Abort) using rule 1 (trivial guard)
+        let trace = RuntimeTrace {
+            schema_version: 1,
+            protocol_name: "Test".into(),
+            params: make_params(),
+            processes: vec![ProcessTrace {
+                process_id: 0,
+                role: "Process".into(),
+                events: vec![
+                    ProcessEvent {
+                        sequence: 0,
+                        kind: ProcessEventKind::Init {
+                            location: "Process_Init".into(),
+                        },
+                    },
+                    ProcessEvent {
+                        sequence: 1,
+                        kind: ProcessEventKind::Transition {
+                            from_location: "Process_Init".into(),
+                            to_location: "Process_Abort".into(),
+                            rule_id: None,
+                        },
+                    },
+                ],
+            }],
+        };
+
+        let result = checker.check(&trace);
+        assert!(
+            result.passed,
+            "trivial guard should allow transition without messages: {:?}",
+            result.violations
+        );
+    }
 }
