@@ -756,6 +756,9 @@ jobs:
           TARSIER_MAX_REQUEST_BYTES: "524288"
         run: ./scripts/playground-security-smoke.sh
 
+      - name: Playground Compose Smoke (config)
+        run: ./scripts/playground-compose-smoke.sh config
+
   codegen-go-smoke:
     runs-on: ubuntu-latest
     needs: build-test

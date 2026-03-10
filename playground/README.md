@@ -76,6 +76,7 @@ python3 scripts/ux_snapshot_regression.py --update
 Compose deployment template (local + hosted):
 - [`playground/deploy`](deploy/README.md)
 - Detailed guide: [`docs/PLAYGROUND_DEPLOYMENT.md`](../docs/PLAYGROUND_DEPLOYMENT.md)
+- Compose smoke script: `./scripts/playground-compose-smoke.sh {config|smoke}`
 
 ### Local mode (default)
 
