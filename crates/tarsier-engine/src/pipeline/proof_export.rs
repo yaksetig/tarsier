@@ -6,6 +6,7 @@
 
 use super::*;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 const PROOF_EXPORT_IR_SCHEMA_VERSION: u32 = 1;
 
@@ -17,10 +18,28 @@ pub enum ProofExportKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProofExportCertificateObligationEvidence {
+    /// Relative path to the SMT-LIB obligation file in the certificate bundle.
+    pub obligation_file: String,
+    /// Optional SHA-256 hash recorded for the SMT-LIB obligation file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub obligation_sha256: Option<String>,
+    /// Optional relative path to solver proof object file in the certificate bundle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_file: Option<String>,
+    /// Optional SHA-256 hash recorded for the solver proof object file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProofExportObligation {
     pub name: String,
     pub expected: String,
     pub smt2: String,
+    /// Optional mapping to the original certificate bundle artifacts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub certificate_evidence: Option<ProofExportCertificateObligationEvidence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,7 +104,25 @@ fn export_obligation(ob: &SafetyProofObligation) -> ProofExportObligation {
         name: ob.name.clone(),
         expected: ob.expected.clone(),
         smt2: ob.smt2.clone(),
+        certificate_evidence: None,
     }
+}
+
+/// Attach certificate artifact evidence to IR obligations by obligation name.
+///
+/// Returns the number of obligations for which evidence was attached.
+pub fn attach_certificate_evidence_by_name(
+    ir: &mut ProofExportIr,
+    evidence_by_name: &BTreeMap<String, ProofExportCertificateObligationEvidence>,
+) -> usize {
+    let mut attached = 0usize;
+    for ob in &mut ir.obligations {
+        if let Some(evidence) = evidence_by_name.get(&ob.name) {
+            ob.certificate_evidence = Some(evidence.clone());
+            attached += 1;
+        }
+    }
+    attached
 }
 
 fn proof_engine_label(engine: ProofEngine) -> &'static str {
@@ -147,6 +184,7 @@ mod tests {
         assert_eq!(ir.fairness, None);
         assert_eq!(ir.obligations.len(), 1);
         assert_eq!(ir.obligations[0].name, "init_implies_inv");
+        assert!(ir.obligations[0].certificate_evidence.is_none());
     }
 
     #[test]
@@ -177,5 +215,55 @@ mod tests {
         assert_eq!(ir.fairness.as_deref(), Some("strong"));
         assert_eq!(ir.obligations.len(), 1);
         assert_eq!(ir.obligations[0].name, "inv_implies_no_fair_bad");
+        assert!(ir.obligations[0].certificate_evidence.is_none());
+    }
+
+    #[test]
+    fn attach_certificate_evidence_by_name_maps_matching_obligations_only() {
+        let cert = SafetyProofCertificate {
+            protocol_file: "safe.trs".into(),
+            proof_engine: ProofEngine::Pdr,
+            induction_k: Some(3),
+            solver_used: SolverChoice::Z3,
+            soundness: SoundnessMode::Strict,
+            committee_bounds: vec![("n".into(), 4)],
+            obligations: vec![
+                SafetyProofObligation {
+                    name: "init_implies_inv".into(),
+                    expected: "unsat".into(),
+                    smt2: "(check-sat)".into(),
+                },
+                SafetyProofObligation {
+                    name: "inv_implies_safe".into(),
+                    expected: "unsat".into(),
+                    smt2: "(check-sat)".into(),
+                },
+            ],
+        };
+        let mut ir = export_ir_from_safety_certificate(&cert);
+        let mut evidence_by_name = BTreeMap::new();
+        evidence_by_name.insert(
+            "init_implies_inv".into(),
+            ProofExportCertificateObligationEvidence {
+                obligation_file: "init_implies_inv.smt2".into(),
+                obligation_sha256: Some("abc".into()),
+                proof_file: Some("init_implies_inv.proof".into()),
+                proof_sha256: Some("def".into()),
+            },
+        );
+        evidence_by_name.insert(
+            "extra_unused".into(),
+            ProofExportCertificateObligationEvidence {
+                obligation_file: "extra_unused.smt2".into(),
+                obligation_sha256: None,
+                proof_file: None,
+                proof_sha256: None,
+            },
+        );
+
+        let attached = attach_certificate_evidence_by_name(&mut ir, &evidence_by_name);
+        assert_eq!(attached, 1);
+        assert!(ir.obligations[0].certificate_evidence.is_some());
+        assert!(ir.obligations[1].certificate_evidence.is_none());
     }
 }

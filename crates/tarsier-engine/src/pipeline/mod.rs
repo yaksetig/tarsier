@@ -570,7 +570,8 @@ pub use certification::{
 
 // From proof_export
 pub use proof_export::{
-    export_ir_from_fair_liveness_certificate, export_ir_from_safety_certificate, ProofExportIr,
+    attach_certificate_evidence_by_name, export_ir_from_fair_liveness_certificate,
+    export_ir_from_safety_certificate, ProofExportCertificateObligationEvidence, ProofExportIr,
     ProofExportKind, ProofExportObligation,
 };
 

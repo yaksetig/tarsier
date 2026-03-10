@@ -1,12 +1,14 @@
 use miette::IntoDiagnostic;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tarsier_engine::pipeline::{
-    export_ir_from_fair_liveness_certificate, export_ir_from_safety_certificate,
-    FairLivenessProofCertificate, FairnessMode, ProofEngine, ProofExportIr, SafetyProofCertificate,
+    attach_certificate_evidence_by_name, export_ir_from_fair_liveness_certificate,
+    export_ir_from_safety_certificate, FairLivenessProofCertificate, FairnessMode, ProofEngine,
+    ProofExportCertificateObligationEvidence, ProofExportIr, SafetyProofCertificate,
     SafetyProofObligation, SolverChoice, SoundnessMode,
 };
 use tarsier_proof_kernel::load_metadata;
@@ -65,7 +67,7 @@ pub(crate) fn run_proof_export_command(
         })
         .collect::<miette::Result<Vec<_>>>()?;
 
-    let export_ir = match metadata.kind.as_str() {
+    let mut export_ir = match metadata.kind.as_str() {
         "safety_proof" => {
             let cert = SafetyProofCertificate {
                 protocol_file: metadata.protocol_file.clone(),
@@ -97,6 +99,22 @@ pub(crate) fn run_proof_export_command(
             );
         }
     };
+    let evidence_by_name = metadata
+        .obligations
+        .iter()
+        .map(|ob| {
+            (
+                ob.name.clone(),
+                ProofExportCertificateObligationEvidence {
+                    obligation_file: ob.file.clone(),
+                    obligation_sha256: ob.sha256.clone(),
+                    proof_file: ob.proof_file.clone(),
+                    proof_sha256: ob.proof_sha256.clone(),
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let _ = attach_certificate_evidence_by_name(&mut export_ir, &evidence_by_name);
 
     let rendered = match target {
         "lean" => render_lean_module(&export_ir),
@@ -420,6 +438,7 @@ mod tests {
                 name: "init_implies_inv".into(),
                 expected: "unsat".into(),
                 smt2: "(check-sat)".into(),
+                certificate_evidence: None,
             }],
         };
         let lean = render_lean_module(&ir);
@@ -452,6 +471,7 @@ mod tests {
                 name: "init_implies_inv".into(),
                 expected: "unsat".into(),
                 smt2: "(check-sat)".into(),
+                certificate_evidence: None,
             }],
         };
         let coq = render_coq_module(&ir);
