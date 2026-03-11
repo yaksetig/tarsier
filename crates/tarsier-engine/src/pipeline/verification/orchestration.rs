@@ -1977,20 +1977,83 @@ pub fn prove_fair_liveness_with_cegar(
                     });
                 }
             };
-        let result = eval_cache.eval(&refinement, || {
+        let mut result = eval_cache.eval(&refinement, || {
             let mut refined_program = program.clone();
             refinement.apply(&mut refined_program);
             prove_fair_liveness_program_with_mode(&refined_program, &refined_options, fairness)
         })?;
         let refinement_preds = refinement.refinements();
         let mut effective_preds = refinement_preds.clone();
+        let mut used_realizability_replay = false;
+
+        if let UnboundedFairLivenessResult::FairCycleFound { trace, .. } = &result {
+            let mut stage_program = program.clone();
+            refinement.apply(&mut stage_program);
+            let ta_for_signals = lower_with_active_controls(
+                &stage_program,
+                "prove_fair_liveness_cegar.realizability.signals",
+            )?;
+            let stage_signals = cegar_trace_signals_from_trace(&ta_for_signals, trace);
+            let replay_atoms = cegar_liveness_realizability_atoms(
+                &stage_program,
+                &stage_signals,
+                &effective_preds,
+            );
+
+            for atom in replay_atoms.into_iter().take(3) {
+                let replay_options = match options_with_remaining_timeout(
+                    options,
+                    deadline,
+                    "CEGAR fair-liveness realizability replay",
+                ) {
+                    Ok(adjusted) => adjusted,
+                    Err(_) => {
+                        eval_cache.emit_notes();
+                        return Ok(UnboundedFairLivenessResult::Unknown {
+                            reason: timeout_unknown_reason("CEGAR fair-liveness proof"),
+                        });
+                    }
+                };
+                let mut replay_refinement = refinement.clone();
+                replay_refinement.atoms.push(atom.clone());
+                let replay_result = match eval_cache.eval(&replay_refinement, || {
+                    let mut replay_program = program.clone();
+                    replay_refinement.apply(&mut replay_program);
+                    prove_fair_liveness_program_with_mode(
+                        &replay_program,
+                        &replay_options,
+                        fairness,
+                    )
+                }) {
+                    Ok(value) => value,
+                    Err(PipelineError::Lowering(
+                        tarsier_ir::lowering::LoweringError::Unsupported(_),
+                    )) => {
+                        // Some strict replay predicates require role metadata not
+                        // present in all protocols; skip inapplicable candidates.
+                        continue;
+                    }
+                    Err(err) => return Err(err),
+                };
+                if !matches!(
+                    replay_result,
+                    UnboundedFairLivenessResult::FairCycleFound { .. }
+                ) {
+                    effective_preds = sorted_unique_strings(replay_refinement.refinements());
+                    result = replay_result;
+                    used_realizability_replay = true;
+                    break;
+                }
+            }
+        }
+
         match result {
             UnboundedFairLivenessResult::FairCycleFound { .. } => {
                 eval_cache.emit_notes();
                 return Ok(result);
             }
             UnboundedFairLivenessResult::LiveProved { .. } => {
-                if refinement.atoms.len() > 1 {
+                if !used_realizability_replay && refinement.atoms.len() > 1 {
                     let maybe_core = cegar_shrink_refinement_core(&refinement, |candidate| {
                         let refined_options = match options_with_remaining_timeout(
                             options,
@@ -2246,25 +2309,118 @@ pub fn prove_fair_liveness_with_cegar_report(
                     break;
                 }
             };
-        let result = eval_cache.eval(&refinement, || {
+        let mut result = eval_cache.eval(&refinement, || {
             let mut refined_program = program.clone();
             refinement.apply(&mut refined_program);
             prove_fair_liveness_program_with_mode(&refined_program, &refined_options, fairness)
         })?;
         let refinement_preds = sorted_unique_strings(refinement.refinements());
+        let mut effective_refinement = refinement.clone();
         let mut effective_preds = refinement_preds.clone();
-        let model_changes = cegar_stage_model_changes(&program, &refinement);
+        let mut used_realizability_replay = false;
+        let mut realizability_note: Option<String> = None;
+
+        if let UnboundedFairLivenessResult::FairCycleFound { trace, .. } = &result {
+            let mut stage_program = program.clone();
+            effective_refinement.apply(&mut stage_program);
+            let ta_for_signals = lower_with_active_controls(
+                &stage_program,
+                "prove_fair_liveness_cegar.realizability.signals",
+            )?;
+            let stage_signals = cegar_trace_signals_from_trace(&ta_for_signals, trace);
+            let replay_atoms = cegar_liveness_realizability_atoms(
+                &stage_program,
+                &stage_signals,
+                &effective_preds,
+            );
+
+            for atom in replay_atoms.into_iter().take(3) {
+                let replay_options = match options_with_remaining_timeout(
+                    options,
+                    deadline,
+                    "CEGAR fair-liveness realizability replay",
+                ) {
+                    Ok(adjusted) => adjusted,
+                    Err(_) => {
+                        saw_timeout = true;
+                        result = UnboundedFairLivenessResult::Unknown {
+                            reason: timeout_unknown_reason("CEGAR fair-liveness proof"),
+                        };
+                        break;
+                    }
+                };
+                let mut replay_refinement = effective_refinement.clone();
+                replay_refinement.atoms.push(atom.clone());
+                let replay_result = match eval_cache.eval(&replay_refinement, || {
+                    let mut replay_program = program.clone();
+                    replay_refinement.apply(&mut replay_program);
+                    prove_fair_liveness_program_with_mode(
+                        &replay_program,
+                        &replay_options,
+                        fairness,
+                    )
+                }) {
+                    Ok(value) => value,
+                    Err(PipelineError::Lowering(
+                        tarsier_ir::lowering::LoweringError::Unsupported(_),
+                    )) => {
+                        // Candidate not applicable to this protocol shape; try next atom.
+                        continue;
+                    }
+                    Err(err) => return Err(err),
+                };
+                if !matches!(
+                    replay_result,
+                    UnboundedFairLivenessResult::FairCycleFound { .. }
+                ) {
+                    effective_refinement = replay_refinement;
+                    effective_preds = sorted_unique_strings(effective_refinement.refinements());
+                    result = replay_result;
+                    used_realizability_replay = true;
+                    realizability_note = Some(format!(
+                        "Realizability replay added predicate {} from lasso evidence.",
+                        atom.predicate
+                    ));
+                    break;
+                }
+            }
+        }
+        let model_changes = cegar_stage_model_changes(&program, &effective_refinement);
 
         let mut note = match &result {
-            UnboundedFairLivenessResult::FairCycleFound { .. } => Some(
-                "Fair-cycle witness persists under this refinement; treated as concrete.".into(),
-            ),
+            UnboundedFairLivenessResult::FairCycleFound { .. } => {
+                if used_realizability_replay {
+                    Some(
+                        "Fair-cycle witness persists after realizability replay; treated as concrete."
+                            .into(),
+                    )
+                } else {
+                    Some(
+                        "Fair-cycle witness persists under this refinement; treated as concrete."
+                            .into(),
+                    )
+                }
+            }
             UnboundedFairLivenessResult::LiveProved { .. } => {
-                Some("Baseline fair-cycle witness is eliminated under this refinement.".into())
+                if used_realizability_replay {
+                    Some(
+                        "Realizability replay eliminated the abstract fair-cycle witness under additional predicates."
+                            .into(),
+                    )
+                } else {
+                    Some("Baseline fair-cycle witness is eliminated under this refinement.".into())
+                }
             }
             UnboundedFairLivenessResult::NotProved { .. }
             | UnboundedFairLivenessResult::Unknown { .. } => {
-                Some("Refinement did not produce a decisive verdict for this stage.".into())
+                if used_realizability_replay {
+                    Some(
+                        "Realizability replay did not confirm the fair-cycle witness as concrete."
+                            .into(),
+                    )
+                } else {
+                    Some("Refinement did not produce a decisive verdict for this stage.".into())
+                }
             }
         };
         let selection_note = format!("Selection rationale: {}", plan_entry.rationale);
@@ -2272,8 +2428,15 @@ pub fn prove_fair_liveness_with_cegar_report(
             Some(existing) => format!("{selection_note} {existing}"),
             None => selection_note,
         });
+        if let Some(extra_note) = realizability_note {
+            note = Some(match note {
+                Some(existing) => format!("{existing} {extra_note}"),
+                None => extra_note,
+            });
+        }
 
-        if !matches!(result, UnboundedFairLivenessResult::FairCycleFound { .. })
+        if !used_realizability_replay
+            && !matches!(result, UnboundedFairLivenessResult::FairCycleFound { .. })
             && refinement.atoms.len() > 1
         {
             let maybe_core = cegar_shrink_refinement_core(&refinement, |candidate| {
@@ -2345,8 +2508,8 @@ pub fn prove_fair_liveness_with_cegar_report(
 
         stages.push(UnboundedFairLivenessCegarStageReport {
             stage: idx + 1,
-            label: refinement.label(),
-            refinements: sorted_unique_strings(refinement_preds.clone()),
+            label: effective_refinement.label(),
+            refinements: sorted_unique_strings(effective_preds.clone()),
             outcome: stage_outcome_from_unbounded_fair_liveness(&result),
             note,
             model_changes,
