@@ -174,3 +174,5 @@ Highest-priority dependency edges:
 - Phase 3 KERN-02 artifacts (kernel semantics export) must be merged to main before LDOCS references are valid.
 `2026-03-11T00:41:14Z | AGENT_ID=1 | CEGAR-01 | CLAIM | Claimed CEGAR-01 (liveness CEGAR audit) on branch codex/agent1-cegar-01-v1`
 `2026-03-11T00:41:14Z | AGENT_ID=1 | CEGAR-01 | START | Auditing current cegar.rs safety-specific flow and liveness extension points`
+`2026-03-11T00:44:42Z | AGENT_ID=1 | CEGAR-01 | PR_OPEN | Branch codex/agent1-cegar-01-v2 commit 88294d0; PR https://github.com/yaksetig/tarsier/pull/new/codex/agent1-cegar-01-v2`
+`2026-03-11T00:44:42Z | AGENT_ID=1 | CEGAR-01 | DONE | Completed CEGAR liveness audit report docs/CEGAR_LIVENESS_GAP_REPORT.md; commit 88294d0; checks: python3 scripts/board_status.py --board MULTI_AGENT_EXECUTION_BOARD_PHASE4.md`
