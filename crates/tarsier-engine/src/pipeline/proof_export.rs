@@ -267,4 +267,80 @@ mod tests {
         assert!(ir.obligations[0].certificate_evidence.is_some());
         assert!(ir.obligations[1].certificate_evidence.is_none());
     }
+
+    #[test]
+    fn export_ir_from_safety_certificate_maps_ranking_engine_label() {
+        let cert = SafetyProofCertificate {
+            protocol_file: "safe_ranking.trs".into(),
+            proof_engine: ProofEngine::Ranking,
+            induction_k: Some(5),
+            solver_used: SolverChoice::Z3,
+            soundness: SoundnessMode::Strict,
+            committee_bounds: vec![],
+            obligations: vec![],
+        };
+        let ir = export_ir_from_safety_certificate(&cert);
+        assert_eq!(ir.proof_engine, "ranking");
+    }
+
+    #[test]
+    fn export_ir_from_fair_liveness_certificate_maps_weak_fairness_label() {
+        let cert = FairLivenessProofCertificate {
+            protocol_file: "fair_weak.trs".into(),
+            fairness: FairnessMode::Weak,
+            proof_engine: ProofEngine::KInduction,
+            frame: 3,
+            solver_used: SolverChoice::Z3,
+            soundness: SoundnessMode::Strict,
+            committee_bounds: vec![],
+            obligations: vec![],
+        };
+        let ir = export_ir_from_fair_liveness_certificate(&cert);
+        assert_eq!(ir.fairness.as_deref(), Some("weak"));
+        assert_eq!(ir.proof_engine, "kinduction");
+    }
+
+    #[test]
+    fn attach_certificate_evidence_by_name_replaces_existing_evidence_on_match() {
+        let cert = SafetyProofCertificate {
+            protocol_file: "safe_replace.trs".into(),
+            proof_engine: ProofEngine::Pdr,
+            induction_k: Some(2),
+            solver_used: SolverChoice::Z3,
+            soundness: SoundnessMode::Strict,
+            committee_bounds: vec![],
+            obligations: vec![SafetyProofObligation {
+                name: "init_implies_inv".into(),
+                expected: "unsat".into(),
+                smt2: "(check-sat)".into(),
+            }],
+        };
+        let mut ir = export_ir_from_safety_certificate(&cert);
+        ir.obligations[0].certificate_evidence = Some(ProofExportCertificateObligationEvidence {
+            obligation_file: "old.smt2".into(),
+            obligation_sha256: None,
+            proof_file: None,
+            proof_sha256: None,
+        });
+
+        let mut evidence_by_name = BTreeMap::new();
+        evidence_by_name.insert(
+            "init_implies_inv".into(),
+            ProofExportCertificateObligationEvidence {
+                obligation_file: "new.smt2".into(),
+                obligation_sha256: Some("f".repeat(64)),
+                proof_file: Some("new.proof".into()),
+                proof_sha256: Some("e".repeat(64)),
+            },
+        );
+
+        let attached = attach_certificate_evidence_by_name(&mut ir, &evidence_by_name);
+        assert_eq!(attached, 1);
+        let evidence = ir.obligations[0]
+            .certificate_evidence
+            .as_ref()
+            .expect("evidence should be attached");
+        assert_eq!(evidence.obligation_file, "new.smt2");
+        assert_eq!(evidence.proof_file.as_deref(), Some("new.proof"));
+    }
 }

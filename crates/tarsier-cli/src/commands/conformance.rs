@@ -1206,6 +1206,81 @@ mod active_tests {
     }
 
     #[test]
+    fn classify_conformance_mismatch_triage_prefers_model_change_when_flagged() {
+        let triage =
+            classify_conformance_mismatch_triage(true, Some(CONFORMANCE_TRIAGE_ENGINE_REGRESSION));
+        assert_eq!(triage, CONFORMANCE_TRIAGE_MODEL_CHANGE);
+    }
+
+    #[test]
+    fn classify_conformance_mismatch_triage_uses_trimmed_hint_or_defaults() {
+        assert_eq!(
+            classify_conformance_mismatch_triage(false, Some("  impl_divergence  ")),
+            CONFORMANCE_TRIAGE_IMPL_DIVERGENCE
+        );
+        assert_eq!(
+            classify_conformance_mismatch_triage(false, Some("engine_regression")),
+            CONFORMANCE_TRIAGE_ENGINE_REGRESSION
+        );
+        assert_eq!(
+            classify_conformance_mismatch_triage(false, Some("unknown_hint")),
+            CONFORMANCE_TRIAGE_IMPL_DIVERGENCE
+        );
+    }
+
+    #[test]
+    fn classify_conformance_load_error_triage_maps_known_stages() {
+        assert_eq!(
+            classify_conformance_load_error_triage("model_read"),
+            CONFORMANCE_TRIAGE_MODEL_CHANGE
+        );
+        assert_eq!(
+            classify_conformance_load_error_triage("trace_adapt"),
+            CONFORMANCE_TRIAGE_IMPL_DIVERGENCE
+        );
+        assert_eq!(
+            classify_conformance_load_error_triage("other"),
+            CONFORMANCE_TRIAGE_ENGINE_REGRESSION
+        );
+    }
+
+    #[test]
+    fn sanitize_artifact_component_normalizes_and_falls_back_to_entry() {
+        assert_eq!(
+            sanitize_artifact_component(" PBFT/Trace.File v1 "),
+            "pbft_trace_file_v1"
+        );
+        assert_eq!(
+            sanitize_artifact_component("Alpha-BETA_01"),
+            "alpha-beta_01"
+        );
+        assert_eq!(sanitize_artifact_component("..."), "entry");
+    }
+
+    #[test]
+    fn write_json_artifact_creates_parent_directories_and_writes_json() {
+        let out = tmp_path("tarsier_conformance_artifact_write");
+        let nested = out.with_extension("").join("nested").join("report.json");
+        let payload = serde_json::json!({
+            "schema_version": 1,
+            "overall": "pass",
+            "entries": []
+        });
+        write_json_artifact(&nested, &payload).expect("json artifact write should succeed");
+        let raw = fs::read_to_string(&nested).expect("artifact should be readable");
+        let parsed: serde_json::Value = serde_json::from_str(&raw).expect("artifact should parse");
+        assert_eq!(parsed["overall"], "pass");
+        fs::remove_dir_all(
+            nested
+                .parent()
+                .expect("parent should exist")
+                .parent()
+                .expect("grandparent should exist"),
+        )
+        .ok();
+    }
+
+    #[test]
     fn conformance_active_command_corpus_matrix_writes_expected_json_shape() {
         for case in active_corpus_cases() {
             let trace = active_fixture_path(case.fixture);
