@@ -734,12 +734,8 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     if ta.semantics.timing_model == TimingModel::PartialSynchrony
                         && selective_network
                     {
-                        let post_gst = if let Some(gst_pid) = ta.semantics.gst_param {
-                            param_term_at_step(step, gst_pid.as_usize(), time_varying_param_ids)
-                                .le(SmtTerm::var(time_var(step)))
-                        } else {
-                            SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(step)))
-                        };
+                        let post_gst =
+                            SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(step)));
                         if byzantine_faults {
                             if let Some(sender_idx) = signed_uncompromised_sender_idx_by_var
                                 .get(v)
@@ -760,12 +756,8 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     }
                     if ta.semantics.timing_model == TimingModel::PartialSynchrony && lossy_delivery
                     {
-                        let post_gst = if let Some(gst_pid) = ta.semantics.gst_param {
-                            param_term_at_step(step, gst_pid.as_usize(), time_varying_param_ids)
-                                .le(SmtTerm::var(time_var(step)))
-                        } else {
-                            SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(step)))
-                        };
+                        let post_gst =
+                            SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(step)));
                         enc.assert_term(post_gst.implies(net_drop.eq(SmtTerm::int(0))));
                     }
                 }
@@ -851,16 +843,8 @@ impl<'a> KInductionEncoderBuilder<'a> {
                         if let Some(drop_term) = drop_term {
                             enc.assert_term(drop_term.clone().le(sent_expr.add(adv_term)));
                             if ta.semantics.timing_model == TimingModel::PartialSynchrony {
-                                let post_gst = if let Some(gst_pid) = ta.semantics.gst_param {
-                                    param_term_at_step(
-                                        step,
-                                        gst_pid.as_usize(),
-                                        time_varying_param_ids,
-                                    )
-                                    .le(SmtTerm::var(time_var(step)))
-                                } else {
-                                    SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(step)))
-                                };
+                                let post_gst =
+                                    SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(step)));
                                 enc.assert_term(post_gst.implies(drop_term.eq(SmtTerm::int(0))));
                             }
                         }
