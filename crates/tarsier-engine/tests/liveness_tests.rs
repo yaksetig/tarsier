@@ -734,6 +734,98 @@ protocol FairNonTerminatingProofReport {
 }
 
 #[test]
+fn prove_fair_liveness_with_cegar_report_replay_marks_baseline_cycle_inconclusive() {
+    let source = r#"
+protocol FairLivenessCegarSpuriousCycle {
+    params n, t, f;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: f; equivocation: full; auth: none; }
+    message Vote(v: bool);
+    role Sender {
+        init send;
+        phase send {
+            when received >= 0 Vote(v=true) => {
+                send Vote(v=true);
+                goto phase send;
+            }
+        }
+    }
+    role Replica {
+        var decided: bool = false;
+        var conflict: bool = false;
+        init start;
+        phase start {
+            when received >= 1 Vote(v=false) => {
+                conflict = true;
+                goto phase start;
+            }
+            when received >= 1 Vote(v=true) && conflict == false => {
+                decided = true;
+                goto phase done;
+            }
+        }
+        phase done {}
+    }
+    property replica_terminate: liveness {
+        forall p: Replica. p.decided == true
+    }
+}
+"#;
+    let options = PipelineOptions {
+        solver: SolverChoice::Z3,
+        max_depth: 4,
+        timeout_secs: 30,
+        dump_smt: None,
+        soundness: SoundnessMode::Strict,
+        proof_engine: ProofEngine::Pdr,
+    };
+
+    let report = tarsier_engine::pipeline::prove_fair_liveness_with_cegar_report(
+        source,
+        "fair_liveness_cegar_spurious_cycle.trs",
+        &options,
+        FairnessMode::Strong,
+        1,
+    )
+    .expect("fair-liveness CEGAR report should complete");
+
+    assert!(
+        matches!(
+            report.baseline_result,
+            UnboundedFairLivenessResult::FairCycleFound { .. }
+        ),
+        "baseline should expose the spurious abstract fair-cycle witness"
+    );
+    assert!(
+        matches!(
+            report.final_result,
+            UnboundedFairLivenessResult::Unknown { .. }
+        ),
+        "unconfirmed baseline witness should produce inconclusive final verdict"
+    );
+    assert_eq!(report.classification, "inconclusive");
+    assert!(
+        report.stages.len() >= 2,
+        "at least one refinement stage should be reported"
+    );
+    assert!(
+        report.stages[1]
+            .note
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Realizability replay"),
+        "refinement stage should report realizability replay diagnostics"
+    );
+    assert!(
+        report.stages[1]
+            .refinements
+            .iter()
+            .any(|pred| pred.contains("adversary.auth=signed")),
+        "realizability replay should expose additional refinement predicates"
+    );
+}
+
+#[test]
 fn prove_fair_liveness_proves_already_decided_protocol() {
     let source = r#"
 protocol FairAlreadyDecidedProof {
