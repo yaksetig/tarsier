@@ -97,6 +97,8 @@ pub enum ProofEngine {
     KInduction,
     /// IC3/PDR with clause blocking, generalization, and frame propagation.
     Pdr,
+    /// Ranking-function synthesis for liveness proofs.
+    Ranking,
 }
 
 /// Fairness semantics for liveness checks/proofs.

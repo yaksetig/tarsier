@@ -287,6 +287,7 @@ pub(crate) fn proof_engine_label(engine: ProofEngine) -> &'static str {
     match engine {
         ProofEngine::KInduction => "kinduction",
         ProofEngine::Pdr => "pdr",
+        ProofEngine::Ranking => "ranking",
     }
 }
 
@@ -541,7 +542,7 @@ pub(crate) fn run_unbounded_with_engine<S: SmtSolver>(
     overall_timeout: Option<Duration>,
 ) -> Result<KInductionResult, PipelineError> {
     push_reduction_note("encoder.structural_hashing=on");
-    if engine == ProofEngine::Pdr {
+    if matches!(engine, ProofEngine::Pdr | ProofEngine::Ranking) {
         push_reduction_note("pdr.symmetry_generalization=on");
         push_reduction_note("pdr.incremental_query_reuse=on");
         push_reduction_note("por.stutter_time_signature_collapse=on");
@@ -554,7 +555,7 @@ pub(crate) fn run_unbounded_with_engine<S: SmtSolver>(
             run_k_induction_with_deadline(solver, cs, property, max_k, &extra_assertions, deadline)
                 .map_err(|e| PipelineError::Solver(e.to_string()))
         }
-        ProofEngine::Pdr => {
+        ProofEngine::Pdr | ProofEngine::Ranking => {
             run_pdr_with_deadline(solver, cs, property, max_k, &extra_assertions, deadline)
                 .map_err(|e| PipelineError::Solver(e.to_string()))
         }
@@ -720,7 +721,7 @@ pub(crate) fn run_unbounded_with_engine_and_location_invariants<S: SmtSolver>(
     let cs = config.cs;
     let property = config.property;
     push_reduction_note("encoder.structural_hashing=on");
-    if config.engine == ProofEngine::Pdr {
+    if matches!(config.engine, ProofEngine::Pdr | ProofEngine::Ranking) {
         push_reduction_note("pdr.symmetry_generalization=on");
         push_reduction_note("pdr.incremental_query_reuse=on");
         push_reduction_note("por.stutter_time_signature_collapse=on");
@@ -740,7 +741,7 @@ pub(crate) fn run_unbounded_with_engine_and_location_invariants<S: SmtSolver>(
             deadline,
         )
         .map_err(|e| PipelineError::Solver(e.to_string())),
-        ProofEngine::Pdr => {
+        ProofEngine::Pdr | ProofEngine::Ranking => {
             extra_assertions.extend(location_zero_assertions_for_step_relation(
                 config.invariant_zero_locs,
             ));
@@ -1320,6 +1321,7 @@ mod tests {
     fn proof_engine_label_values() {
         assert_eq!(proof_engine_label(ProofEngine::KInduction), "kinduction");
         assert_eq!(proof_engine_label(ProofEngine::Pdr), "pdr");
+        assert_eq!(proof_engine_label(ProofEngine::Ranking), "ranking");
     }
 
     #[test]

@@ -477,6 +477,7 @@ fn parse_proof_engine(s: &str) -> miette::Result<ProofEngine> {
     match s.to_ascii_lowercase().as_str() {
         "kinduction" => Ok(ProofEngine::KInduction),
         "pdr" => Ok(ProofEngine::Pdr),
+        "ranking" => Ok(ProofEngine::Ranking),
         other => miette::bail!("Unsupported proof engine '{other}' in certificate metadata."),
     }
 }

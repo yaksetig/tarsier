@@ -245,7 +245,9 @@ pub fn generate_safety_certificate(
         ProofEngine::KInduction => {
             generate_kinduction_safety_certificate(source, filename, options)
         }
-        ProofEngine::Pdr => generate_pdr_safety_certificate(source, filename, options),
+        ProofEngine::Pdr | ProofEngine::Ranking => {
+            generate_pdr_safety_certificate(source, filename, options)
+        }
     }
 }
 

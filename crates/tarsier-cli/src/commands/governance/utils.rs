@@ -281,6 +281,7 @@ pub(crate) fn parse_proof_engine_checked(raw: &str) -> miette::Result<ProofEngin
     match raw {
         "kinduction" => Ok(ProofEngine::KInduction),
         "pdr" => Ok(ProofEngine::Pdr),
+        "ranking" => Ok(ProofEngine::Ranking),
         other => miette::bail!("Unknown proof engine in certificate metadata: {other}"),
     }
 }
@@ -539,6 +540,7 @@ mod tests {
     fn parse_proof_engine_checked_valid() {
         assert!(parse_proof_engine_checked("kinduction").is_ok());
         assert!(parse_proof_engine_checked("pdr").is_ok());
+        assert!(parse_proof_engine_checked("ranking").is_ok());
     }
 
     #[test]
