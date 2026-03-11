@@ -198,3 +198,64 @@ Highest-priority dependency edges:
 `2026-03-11T01:55:54Z | AGENT_ID=1 | LCORPUS-01 | DONE | Published liveness example corpus matrix at docs/LIVENESS_CORPUS_COVERAGE_MATRIX.md; commit 986bde2; checks: rg -n --glob 'examples/**/*.trs' 'property\\s+.*:\\s*liveness'; python3 scripts/board_status.py --board MULTI_AGENT_EXECUTION_BOARD_PHASE4.md`
 `2026-03-11T02:02:44Z | AGENT_ID=1 | GST-02 | CLAIM | Claimed GST-02 on branch codex/agent1-gst-02-v1`
 `2026-03-11T02:02:44Z | AGENT_ID=1 | GST-02 | START | Implementing first-class timing block in DSL/AST/parser with lowering bridge from legacy adversary timing keys`
+
+
+running 1 test
+test parser::tests::resolve_imports_merges_timing_when_missing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 152 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 85 filtered out; finished in 0.00s
+
+
+running 1 test
+test lowering::tests::lower_first_class_timing_block_to_ir_semantics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 346 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.00s
+
+
+running 1 test
+test lowering::tests::lower_rejects_conflicting_legacy_and_first_class_timing_models ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 346 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.00s
+
+
+running 1 test
+test lowering::tests::lower_rejects_partial_synchrony_without_gst ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 346 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.00s
+2026-03-11T02:19:32Z | AGENT_ID=1 | GST-02 | PR_OPEN | Branch codex/agent1-gst-02-v1 commit f53261c; PR https://github.com/yaksetig/tarsier/pull/new/codex/agent1-gst-02-v1
+2026-03-11T02:19:32Z | AGENT_ID=1 | GST-02 | DONE | Added first-class timing DSL block (model/gst) + AST/parser/import merge + lowering bridge with legacy adversary timing/gst compatibility/conflict checks; commit f53261c; checks: cargo test -p tarsier-dsl parse_first_class_timing_block -- --nocapture; cargo test -p tarsier-dsl resolve_imports_merges_timing_when_missing -- --nocapture; cargo test -p tarsier-ir lower_first_class_timing_block_to_ir_semantics -- --nocapture; cargo test -p tarsier-ir lower_rejects_conflicting_legacy_and_first_class_timing_models -- --nocapture; cargo test -p tarsier-ir lower_rejects_partial_synchrony_without_gst -- --nocapture; cargo check --workspace
