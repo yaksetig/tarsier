@@ -341,6 +341,45 @@ pub(crate) fn cegar_trace_generated_refinements(
     generated
 }
 
+/// Build ordered candidate atoms for fair-lasso realizability replay.
+///
+/// Candidates are signal-driven first (derived from the current lasso), then
+/// fall back to generic adversary-tightening atoms. Existing predicates are
+/// filtered out so replay only explores genuinely new distinctions.
+pub(crate) fn cegar_liveness_realizability_atoms(
+    program: &ast::Program,
+    signals: &CegarTraceSignals,
+    existing_predicates: &[String],
+) -> Vec<CegarAtomicRefinement> {
+    let existing: HashSet<&str> = existing_predicates.iter().map(|p| p.as_str()).collect();
+    let mut seen_predicates: HashSet<String> = HashSet::new();
+    let mut atoms: Vec<CegarAtomicRefinement> = Vec::new();
+
+    for atom in cegar_trace_generated_refinements(program, signals) {
+        if existing.contains(atom.predicate.as_str()) {
+            continue;
+        }
+        if seen_predicates.insert(atom.predicate.clone()) {
+            atoms.push(atom);
+        }
+    }
+    for atom in cegar_atomic_refinements(program) {
+        if existing.contains(atom.predicate.as_str()) {
+            continue;
+        }
+        if seen_predicates.insert(atom.predicate.clone()) {
+            atoms.push(atom);
+        }
+    }
+
+    atoms.sort_by(|a, b| {
+        let sa = cegar_refinement_score(a, signals);
+        let sb = cegar_refinement_score(b, signals);
+        sb.cmp(&sa).then_with(|| a.label.cmp(&b.label))
+    });
+    atoms
+}
+
 pub(crate) fn cegar_core_compound_predicate(predicates: &[String]) -> Option<String> {
     if predicates.len() <= 1 {
         return None;
@@ -1884,6 +1923,10 @@ mod tests {
         }
     }
 
+    fn parse_test_program(source: &str) -> ast::Program {
+        tarsier_dsl::parse(source, "cegar_test.trs").expect("test program should parse")
+    }
+
     // ── CegarAtomicRefinement constructors ───────────────────────────
 
     #[test]
@@ -2268,6 +2311,43 @@ mod tests {
         assert!(!s.identity_scoped_channels);
         assert!(s.conflicting_variant_families.is_empty());
         assert!(s.cross_recipient_families.is_empty());
+    }
+
+    #[test]
+    fn liveness_realizability_atoms_filter_existing_and_prioritize_signal_atoms() {
+        let program = parse_test_program(
+            r#"
+protocol CegarRealizabilityCandidates {
+    params n, t;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: t; equivocation: full; auth: none; }
+    message Vote(v: bool);
+    role R {
+        init s;
+        phase s {}
+    }
+}
+"#,
+        );
+        let mut signals = CegarTraceSignals {
+            conflicting_variants: true,
+            ..Default::default()
+        };
+        signals.conflicting_variant_families.insert("Vote".into());
+        let existing = vec!["adversary.equivocation=none".to_string()];
+        let atoms = cegar_liveness_realizability_atoms(&program, &signals, &existing);
+
+        assert!(!atoms.is_empty());
+        assert!(
+            atoms
+                .iter()
+                .all(|a| a.predicate != "adversary.equivocation=none"),
+            "existing predicates must be filtered out"
+        );
+        assert_eq!(
+            atoms[0].predicate, "equivocation(Vote)=none",
+            "signal-derived message refinement should be prioritized"
+        );
     }
 
     // ── combinations_of_size ─────────────────────────────────────────
