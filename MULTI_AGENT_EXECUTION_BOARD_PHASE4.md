@@ -287,3 +287,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; fin
 `2026-03-11T02:57:48Z | AGENT_ID=1 | LRANK-03 | START | wiring ranking proof engine through CLI and pipeline match sites`
 `2026-03-11T03:02:17Z | AGENT_ID=1 | LRANK-03 | PR_OPEN | Branch codex/agent1-lcorpus-02-v1 commit 82e1c56`
 `2026-03-11T03:02:17Z | AGENT_ID=1 | LRANK-03 | DONE | Added ProofEngine::Ranking wiring across engine labels/certification/unbounded dispatch + CLI/playground/governance/proof-export parser support and tests; commit 82e1c56; tests: cargo check --workspace; cargo test -p tarsier-cli parse_proof_engine_valid -- --nocapture; cargo test -p tarsier-cli proof_engine_name_values -- --nocapture; cargo test -p tarsier-engine proof_engine_label_values -- --nocapture; cargo check -p tarsier-cli --features governance`
+`2026-03-11T03:02:41Z | AGENT_ID=1 | LDOCS-02 | CLAIM | taking task (cross-lane, ready and unclaimed)`
+`2026-03-11T03:02:41Z | AGENT_ID=1 | LDOCS-02 | START | updating SEMANTICS.md and LANGUAGE_REFERENCE.md with GST timing and ranking proof mode`
+`2026-03-11T03:05:01Z | AGENT_ID=1 | LDOCS-02 | PR_OPEN | Branch codex/agent1-lcorpus-02-v1 commit 0d8d9bf`
+`2026-03-11T03:05:01Z | AGENT_ID=1 | LDOCS-02 | DONE | Updated docs/SEMANTICS.md and docs/LANGUAGE_REFERENCE.md for first-class GST timing syntax + legacy bridge, ranking proof-engine mode exposure in CLI/certification, and grammar/command reference updates; commit 0d8d9bf; tests: cargo check --workspace`
