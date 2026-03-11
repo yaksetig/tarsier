@@ -188,3 +188,11 @@ Highest-priority dependency edges:
 `2026-03-11T01:25:09Z | AGENT_ID=1 | CEGAR-04 | START | Adding fair-liveness CEGAR integration test where a baseline abstract lasso is eliminated by realizability replay refinements`
 `2026-03-11T01:37:36Z | AGENT_ID=1 | CEGAR-04 | PR_OPEN | Branch codex/agent1-cegar-04-v1 commit d5bf688; PR https://github.com/yaksetig/tarsier/pull/new/codex/agent1-cegar-04-v1`
 `2026-03-11T01:37:36Z | AGENT_ID=1 | CEGAR-04 | DONE | Added fair-liveness CEGAR integration test covering baseline fair-cycle witness becoming inconclusive under realizability replay with added predicates; commit d5bf688; checks: cargo test -p tarsier-engine prove_fair_liveness_with_cegar_report_replay_marks_baseline_cycle_inconclusive -- --nocapture; cargo test -p tarsier-engine prove_fair_liveness_with_cegar_report_exposes_controls_and_machine_readable_status -- --nocapture`
+`2026-03-11T01:53:48Z | AGENT_ID=1 | GST-01 | CLAIM | Claimed GST-01 on branch codex/agent1-gst-lcorpus-01-v1`
+`2026-03-11T01:53:48Z | AGENT_ID=1 | GST-01 | START | Auditing timing/clock semantics across DSL, IR, and SMT encoder for GST partial synchrony gaps`
+`2026-03-11T01:54:47Z | AGENT_ID=1 | GST-01 | PR_OPEN | Branch codex/agent1-gst-lcorpus-01-v1 commit f589b38; PR https://github.com/yaksetig/tarsier/pull/new/codex/agent1-gst-lcorpus-01-v1`
+`2026-03-11T01:54:47Z | AGENT_ID=1 | GST-01 | DONE | Published timing/GST audit and semantics proposal at docs/GST_TIMING_GAP_REPORT.md; commit f589b38; checks: python3 scripts/board_status.py --board MULTI_AGENT_EXECUTION_BOARD_PHASE4.md`
+`2026-03-11T01:55:01Z | AGENT_ID=1 | LCORPUS-01 | CLAIM | Claimed LCORPUS-01 on branch codex/agent1-gst-lcorpus-01-v1`
+`2026-03-11T01:55:01Z | AGENT_ID=1 | LCORPUS-01 | START | Building liveness feature coverage matrix across existing protocol examples`
+`2026-03-11T01:55:54Z | AGENT_ID=1 | LCORPUS-01 | PR_OPEN | Branch codex/agent1-gst-lcorpus-01-v1 commit 986bde2; PR https://github.com/yaksetig/tarsier/pull/new/codex/agent1-gst-lcorpus-01-v1`
+`2026-03-11T01:55:54Z | AGENT_ID=1 | LCORPUS-01 | DONE | Published liveness example corpus matrix at docs/LIVENESS_CORPUS_COVERAGE_MATRIX.md; commit 986bde2; checks: rg -n --glob 'examples/**/*.trs' 'property\\s+.*:\\s*liveness'; python3 scripts/board_status.py --board MULTI_AGENT_EXECUTION_BOARD_PHASE4.md`
