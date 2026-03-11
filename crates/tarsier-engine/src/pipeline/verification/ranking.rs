@@ -485,4 +485,48 @@ mod tests {
             other => panic!("expected NotFound for no rules, got {other:?}"),
         }
     }
+
+    #[test]
+    fn try_ranking_function_proof_returns_not_found_when_max_coefficients_zero() {
+        let cs = simple_two_location_system();
+        let mut solver = Z3Solver::with_timeout_secs(2);
+        let target = FairLivenessTarget::NonGoalLocs(vec![0]);
+        let config = RankingConfig {
+            max_coefficients: Some(0),
+            ..RankingConfig::default()
+        };
+        let result = try_ranking_function_proof(&mut solver, &cs, &target, &config)
+            .expect("ranking proof should return a result");
+        match result {
+            RankingResult::NotFound { reason } => {
+                assert!(reason.contains("max_coefficients is zero"));
+            }
+            other => panic!("expected NotFound for zero max_coefficients, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn try_ranking_function_proof_uses_lexicographic_variant_when_requested() {
+        let cs = simple_two_location_system();
+        let mut solver = Z3Solver::with_timeout_secs(2);
+        let target = FairLivenessTarget::NonGoalLocs(vec![0]);
+        let config = RankingConfig {
+            max_lexicographic_components: 2,
+            ..RankingConfig::default()
+        };
+        let result = try_ranking_function_proof(&mut solver, &cs, &target, &config)
+            .expect("ranking proof should return a result");
+        match result {
+            RankingResult::LiveProved {
+                function: RankingFunction::Lexicographic {
+                    components,
+                    variable_names,
+                },
+            } => {
+                assert_eq!(components.len(), 1);
+                assert_eq!(variable_names.len(), 2);
+            }
+            other => panic!("expected LiveProved::Lexicographic, got {other:?}"),
+        }
+    }
 }

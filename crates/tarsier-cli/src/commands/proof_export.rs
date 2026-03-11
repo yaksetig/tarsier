@@ -607,6 +607,74 @@ mod tests {
     }
 
     #[test]
+    fn parse_export_target_accepts_case_insensitive_values() {
+        assert_eq!(
+            parse_export_target("Lean").expect("lean target should parse"),
+            "lean"
+        );
+        assert_eq!(
+            parse_export_target("COQ").expect("coq target should parse"),
+            "coq"
+        );
+    }
+
+    #[test]
+    fn parse_export_target_rejects_unknown_target() {
+        let err = parse_export_target("agda").expect_err("unknown target should fail");
+        assert!(err.to_string().contains("Unsupported export target"));
+    }
+
+    #[test]
+    fn parse_solver_soundness_and_fairness_metadata_accept_case_insensitive_values() {
+        assert_eq!(
+            parse_solver_choice("Z3").expect("z3 should parse"),
+            SolverChoice::Z3
+        );
+        assert_eq!(
+            parse_solver_choice("cVc5").expect("cvc5 should parse"),
+            SolverChoice::Cvc5
+        );
+        assert_eq!(
+            parse_soundness_mode("STRICT").expect("strict should parse"),
+            SoundnessMode::Strict
+        );
+        assert_eq!(
+            parse_soundness_mode("Permissive").expect("permissive should parse"),
+            SoundnessMode::Permissive
+        );
+        assert_eq!(
+            parse_fairness_mode("Weak").expect("weak fairness should parse"),
+            FairnessMode::Weak
+        );
+        assert_eq!(
+            parse_fairness_mode("STRONG").expect("strong fairness should parse"),
+            FairnessMode::Strong
+        );
+    }
+
+    #[test]
+    fn parse_solver_soundness_and_fairness_metadata_reject_invalid_values() {
+        assert!(
+            parse_solver_choice("minisat")
+                .expect_err("unknown solver should fail")
+                .to_string()
+                .contains("Unsupported solver")
+        );
+        assert!(
+            parse_soundness_mode("relaxed")
+                .expect_err("unknown soundness mode should fail")
+                .to_string()
+                .contains("Unsupported soundness mode")
+        );
+        assert!(
+            parse_fairness_mode("eventual")
+                .expect_err("unknown fairness mode should fail")
+                .to_string()
+                .contains("Unsupported fairness mode")
+        );
+    }
+
+    #[test]
     fn collect_obligation_artifacts_preserves_hash_and_proof_fields() {
         let metadata = CertificateMetadata {
             schema_version: 2,

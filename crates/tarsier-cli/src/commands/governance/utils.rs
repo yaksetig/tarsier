@@ -386,6 +386,30 @@ pub(crate) fn is_valid_sha256_hex(raw: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tarsier_proof_kernel::{CertificateMetadata, CertificateObligationMeta};
+
+    fn strict_unsat_metadata() -> CertificateMetadata {
+        CertificateMetadata {
+            schema_version: 2,
+            kind: "safety_proof".into(),
+            protocol_file: "safe.trs".into(),
+            proof_engine: "pdr".into(),
+            induction_k: Some(8),
+            solver_used: "z3".into(),
+            soundness: "strict".into(),
+            fairness: None,
+            committee_bounds: vec![("n".into(), 4), ("f".into(), 1)],
+            bundle_sha256: Some("a".repeat(64)),
+            obligations: vec![CertificateObligationMeta {
+                name: "init_implies_inv".into(),
+                expected: "unsat".into(),
+                file: "init_implies_inv.smt2".into(),
+                sha256: Some("b".repeat(64)),
+                proof_file: Some("init_implies_inv.proof".into()),
+                proof_sha256: Some("c".repeat(64)),
+            }],
+        }
+    }
 
     // -- chrono_utc_now --
 
@@ -627,5 +651,84 @@ mod tests {
     fn validate_foundational_passes_with_cvc5() {
         let solvers = vec!["cvc5".to_string()];
         assert!(validate_foundational_profile_requirements(&solvers, false).is_ok());
+    }
+
+    #[test]
+    fn validate_trusted_check_accepts_valid_configuration() {
+        let metadata = strict_unsat_metadata();
+        let solvers = vec!["z3".to_string(), "cvc5".to_string()];
+        let checker = std::path::PathBuf::from("/tmp/fake-proof-checker");
+        assert!(
+            validate_trusted_check_requirements(
+                true,
+                2,
+                &solvers,
+                &metadata,
+                true,
+                Some(&checker),
+                false
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn validate_trusted_check_requires_independent_solver() {
+        let metadata = strict_unsat_metadata();
+        let solvers = vec!["z3".to_string(), "z3".to_string()];
+        let checker = std::path::PathBuf::from("/tmp/fake-proof-checker");
+        let err = validate_trusted_check_requirements(
+            true,
+            2,
+            &solvers,
+            &metadata,
+            true,
+            Some(&checker),
+            false,
+        )
+        .expect_err("trusted-check without independent solver should fail");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("independent solver")
+                || msg.contains("different from certificate solver_used"),
+            "unexpected error message: {msg}"
+        );
+    }
+
+    #[test]
+    fn validate_trusted_check_rejects_non_unsat_expected_outcome() {
+        let mut metadata = strict_unsat_metadata();
+        metadata.obligations[0].expected = "sat".into();
+        let solvers = vec!["z3".to_string(), "cvc5".to_string()];
+        let checker = std::path::PathBuf::from("/tmp/fake-proof-checker");
+        let err = validate_trusted_check_requirements(
+            true,
+            2,
+            &solvers,
+            &metadata,
+            true,
+            Some(&checker),
+            false,
+        )
+        .expect_err("trusted-check with SAT expectation should fail");
+        assert!(format!("{err:?}").contains("UNSAT-only obligations"));
+    }
+
+    #[test]
+    fn validate_trusted_check_requires_checker_unless_explicitly_waived() {
+        let metadata = strict_unsat_metadata();
+        let solvers = vec!["z3".to_string(), "cvc5".to_string()];
+        let err = validate_trusted_check_requirements(
+            true, 2, &solvers, &metadata, true, None, false,
+        )
+        .expect_err("trusted-check without proof checker should fail");
+        assert!(format!("{err:?}").contains("requires --proof-checker"));
+
+        assert!(
+            validate_trusted_check_requirements(
+                true, 2, &solvers, &metadata, true, None, true
+            )
+            .is_ok()
+        );
     }
 }

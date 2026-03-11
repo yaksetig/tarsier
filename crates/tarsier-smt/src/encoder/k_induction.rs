@@ -1599,4 +1599,48 @@ mod tests {
             "expected gst_step to be bound to fixed GST parameter p_0"
         );
     }
+
+    #[test]
+    fn k_induction_partial_synchrony_without_gst_param_has_unbound_gst_step() {
+        let (mut ta, l1) = build_reconfig_ta();
+        ta.semantics.timing_model = TimingModel::PartialSynchrony;
+        ta.semantics.gst_param = None;
+
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_k_induction_step(&cs, &property, 2);
+
+        let decl_names: Vec<&str> = encoding
+            .declarations
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert!(decl_names.contains(&"gst_step"));
+
+        let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
+        assert!(
+            !assertions
+                .iter()
+                .any(|a| a.contains("(= gst_step p_") || a.contains("(= p_") && a.contains("gst_step")),
+            "gst_step should not be tied to a parameter when gst_param is absent"
+        );
+    }
+
+    #[test]
+    fn k_induction_without_partial_synchrony_does_not_declare_gst_step() {
+        let (ta, l1) = build_reconfig_ta();
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_k_induction_step(&cs, &property, 2);
+        let decl_names: Vec<&str> = encoding
+            .declarations
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert!(!decl_names.contains(&"gst_step"));
+    }
 }
