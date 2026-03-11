@@ -143,8 +143,8 @@ adversary {
 |---|---|---|---|
 | `model` | `byzantine`, `crash`, `omission` | `byzantine` | Fault model |
 | `bound` | parameter name (e.g., `f`) | none | Bounds total adversary injections |
-| `timing` | `partial_synchrony`, `async` | `async` | Network timing model |
-| `gst` | parameter name | none | Global Stabilization Time (required if `timing: partial_synchrony`) |
+| `timing` | `partial_synchrony`, `async` | `async` | Legacy timing alias (prefer protocol-level `timing { ... }`) |
+| `gst` | parameter name | none | Legacy GST alias (prefer protocol-level `timing { gst: ... }`) |
 | `values` | `sign`, `exact` | `exact` | Value abstraction mode |
 | `auth` | `signed`, `none` | `none` | Authentication mode |
 | `network` | `classic`, `identity_selective`, `cohort_selective`, `process_selective` | `classic` | Network semantics mode |
@@ -152,6 +152,24 @@ adversary {
 | `faults` | `legacy_counter`, `per_recipient`, `global` | `legacy_counter` | Fault budget scope |
 | `equivocation` | `full`, `none` | `full` | Equivocation policy |
 | `compromised_key` | key name | none | Mark a key as compromised (repeatable) |
+
+### First-class timing block (preferred)
+
+Timing is modeled at protocol scope:
+
+```
+timing {
+    model: partial_synchrony;
+    gst: gst;
+}
+```
+
+Rules:
+
+- `model` is `async` or `partial_synchrony`.
+- `gst` is required when `model: partial_synchrony`.
+- Legacy adversary fields (`timing`, `gst`) are still accepted for compatibility.
+- If both protocol-level and adversary-level timing are present, they must agree.
 
 ### Fault models
 
@@ -1096,9 +1114,9 @@ All commands are invoked as `tarsier <command> [args] [flags]`. The 40 commands 
 
 #### Unbounded Proofs
 
-- `prove <file>` — Unbounded safety via k-induction or PDR. `--engine kinduction|pdr`, `--k 10`, `--auto-strengthen`
+- `prove <file>` — Unbounded safety via k-induction, PDR, or ranking mode. `--engine kinduction|pdr|ranking`, `--k 10`, `--auto-strengthen`
 - `prove-fair <file>` — Unbounded liveness under fairness. `--fairness weak|strong`, `--k 0`
-- `prove-round <file>` — Safety via round-erasure over-approximation. `--round-vars view,round,epoch,height`, `--engine pdr`
+- `prove-round <file>` — Safety via round-erasure over-approximation. `--round-vars view,round,epoch,height`, `--engine kinduction|pdr|ranking`
 - `prove-fair-round <file>` — Fair-liveness via round-erasure. `--round-vars`, `--fairness`
 - `round-sweep <file>` — Sweep round/view upper bounds for verdict convergence. `--vars view`, `--min-bound 2`, `--max-bound 16`
 
@@ -1136,7 +1154,7 @@ All commands are invoked as `tarsier <command> [args] [flags]`. The 40 commands 
 
 #### Certification & Governance
 
-- `certify-safety <file>` — Generate safety proof certificate bundle. `--engine kinduction|pdr`, `--out <dir>`, `--capture-proofs`
+- `certify-safety <file>` — Generate safety proof certificate bundle. `--engine kinduction|pdr|ranking`, `--out <dir>`, `--capture-proofs`
 - `certify-fair-liveness <file>` — Generate fair-liveness certificate bundle. `--fairness weak|strong`, `--out <dir>`
 - `check-certificate <bundle>` — Check certificate bundle with external solvers. `--solvers z3,cvc5`, `--rederive`, `--trusted-check`
 - `cert-suite` — Run protocol corpus certification suite. `--manifest <file>`
@@ -1510,6 +1528,7 @@ protocol LivenessExample {
 program         = protocol_decl
 protocol_decl   = "protocol" IDENT "{" protocol_item* "}"
 protocol_item   = params_decl | resilience_decl | adversary_decl
+                | timing_decl
                 | message_decl | enum_decl | role_decl | property_decl
                 | identity_decl | channel_decl | equivocation_decl
                 | committee_decl | crypto_object_decl | pacemaker_decl
@@ -1520,6 +1539,7 @@ params_decl     = "params" param_list ";"
 resilience_decl = "resilience" ":" resilience_expr ";"
                 | "resilience" "{" resilience_expr ";" "}"
 adversary_decl  = "adversary" "{" adv_item* "}"
+timing_decl     = "timing" "{" timing_item* "}"
 message_decl    = "message" IDENT [ "(" field_list ")" ] ";"
 crypto_object_decl
                 = ("certificate" | "threshold_signature") IDENT
@@ -1536,6 +1556,8 @@ var_decl        = "var" IDENT ":" type [ "in" range ] [ "=" expr ] ";"
 init_decl       = "init" IDENT ";"
 phase_decl      = "phase" IDENT "{" transition* "}"
 transition      = "when" guard "=>" "{" action* "}"
+timing_item     = "model" ":" ("async" | "partial_synchrony") ";"
+                | "gst" ":" IDENT ";"
 
 dag_round_decl  = "dag_round" IDENT ["extends" ident_list] ";"
 clock_decl      = "clock" IDENT ";"

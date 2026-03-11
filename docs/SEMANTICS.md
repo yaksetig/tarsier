@@ -330,7 +330,7 @@ Trace-level IR events expose first-class action kinds and auth provenance:
 
 ### 4.2 GST Integration in Proof Obligations
 
-Under partial synchrony (`timing: partial_synchrony; gst: <param>;`), the Global Stabilization Time (GST) is integrated into **all** proof obligations — both bounded and unbounded:
+Under partial synchrony (preferred syntax: `timing { model: partial_synchrony; gst: <param>; }`), the Global Stabilization Time (GST) is integrated into **all** proof obligations — both bounded and unbounded. Legacy adversary fields (`timing: ...; gst: ...;`) remain accepted and are normalized to the same semantics.
 
 1. **Lasso constraint:** Fair lasso cycles must be entirely post-GST (`gst ≤ loop_start`). Pre-GST-only cycles are excluded as they represent transient asynchronous behavior, not steady-state violations.
 2. **Rule enablement gating:** A rule is considered "enabled" for fairness purposes only at post-GST steps (`gst ≤ step`). Pre-GST steps do not contribute to fairness obligations.
@@ -516,7 +516,8 @@ Strict mode enforces this by rejecting non-monotone threshold operators in Byzan
 ## 6.3 Bounded vs unbounded
 
 - `verify`, `liveness`, `fair-liveness` are bounded checks.
-- `prove` and `prove-fair` attempt unbounded proofs via induction/PDR; results can be `Unknown`/`NotProved` if convergence does not occur.
+- `prove` and `prove-fair` attempt unbounded proofs via induction/PDR/ranking mode; results can be `Unknown`/`NotProved` if convergence does not occur.
+- `ProofEngine::Ranking` is exposed as a first-class engine label in CLI/certification/export artifacts; current backend dispatch follows the PDR unbounded path while ranking synthesis integration is staged.
 - `timeout_secs` is an enforced execution control: it is applied to solver backends (Z3/CVC5 timeout configuration) and to pipeline-level deadlines used by staged engines (CEGAR / PDR / fair-liveness).
 - For safety `prove` with k-induction, `NotProved` may include a CTI (counterexample-to-induction) witness: a SAT step fragment showing non-inductiveness of the property. CTIs are not guaranteed reachable from initial states.
 - CTI classification:
