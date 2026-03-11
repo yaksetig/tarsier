@@ -275,3 +275,5 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; fin
 `2026-03-11T02:43:25Z | AGENT_ID=1 | LCORPUS-02 | START | creating 6+ liveness-focused .trs examples (leads-to, nested temporal, multi-role, buggy variants)`
 `2026-03-11T02:45:23Z | AGENT_ID=1 | LCORPUS-02 | PR_OPEN | Branch codex/agent1-lcorpus-02-v1 commit 65149d1`
 `2026-03-11T02:45:23Z | AGENT_ID=1 | LCORPUS-02 | DONE | Added 7 liveness examples (leads-to, nested temporal, always-eventually, multi-role, buggy variants); commit 65149d1; tests: cargo run -q -p tarsier-cli -- parse <each new .trs>`
+`2026-03-11T02:46:07Z | AGENT_ID=1 | LCORPUS-03 | CLAIM | taking task`
+`2026-03-11T02:46:07Z | AGENT_ID=1 | LCORPUS-03 | START | adding liveness regression manifest and CI gate via example-matrix-fast extension`

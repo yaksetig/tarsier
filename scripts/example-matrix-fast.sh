@@ -62,7 +62,13 @@ for entry in entries:
     expected = entry["expected"]
     depth = int(entry.get("depth", 4))
     soundness = entry.get("soundness", "strict")
-    print(f"{ident}\t{file}\t{expected}\t{depth}\t{soundness}")
+    command = entry.get("command", "verify")
+    fairness = entry.get("fairness", "weak")
+    if command not in {"verify", "liveness", "fair-liveness"}:
+        raise SystemExit(
+            f"Unsupported command '{command}' for entry '{ident}' in {manifest_path}"
+        )
+    print(f"{ident}\t{file}\t{expected}\t{depth}\t{soundness}\t{command}\t{fairness}")
 PY
 
 total=0
@@ -72,18 +78,41 @@ failed=0
 echo "Running fast example matrix from ${MANIFEST}"
 echo "-------------------------------------------"
 
-while IFS=$'\t' read -r ident file expected depth soundness; do
+while IFS=$'\t' read -r ident file expected depth soundness command fairness; do
   [[ -z "${ident}" ]] && continue
   total=$((total + 1))
   out_json="${TMP_DIR}/${ident}.json"
   err_log="${TMP_DIR}/${ident}.err"
 
-  cmd=(
-    cargo run -q -p tarsier-cli -- verify "$file"
-    --depth "$depth"
-    --soundness "$soundness"
-    --format json
-  )
+  case "$command" in
+    verify)
+      cmd=(
+        cargo run -q -p tarsier-cli -- verify "$file"
+        --depth "$depth"
+        --soundness "$soundness"
+        --format json
+      )
+      ;;
+    liveness)
+      cmd=(
+        cargo run -q -p tarsier-cli -- liveness "$file"
+        --depth "$depth"
+        --format json
+      )
+      ;;
+    fair-liveness)
+      cmd=(
+        cargo run -q -p tarsier-cli -- fair-liveness "$file"
+        --depth "$depth"
+        --fairness "$fairness"
+        --format json
+      )
+      ;;
+    *)
+      echo "Unsupported command '$command' for entry '$ident'" >&2
+      exit 2
+      ;;
+  esac
 
   actual="error"
   status="fail"
@@ -109,10 +138,10 @@ PY
     failed=$((failed + 1))
   fi
 
-  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
-    "$ident" "$file" "$expected" "$actual" "$status" "$depth" "$soundness" >> "$RESULTS_TSV"
+  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+    "$ident" "$file" "$expected" "$actual" "$status" "$depth" "$soundness" "$command" "$fairness" >> "$RESULTS_TSV"
 
-  echo "[$status] $ident expected=$expected actual=$actual file=$file"
+  echo "[$status] $ident command=$command expected=$expected actual=$actual file=$file"
 done < "$ENTRIES_TSV"
 
 echo "-------------------------------------------"
@@ -133,7 +162,7 @@ failed = int(sys.argv[5])
 
 entries = []
 for line in results_tsv.read_text().splitlines():
-    ident, file, expected, actual, status, depth, soundness = line.split("\t")
+    ident, file, expected, actual, status, depth, soundness, command, fairness = line.split("\t")
     entries.append(
         {
             "id": ident,
@@ -143,6 +172,8 @@ for line in results_tsv.read_text().splitlines():
             "status": status,
             "depth": int(depth),
             "soundness": soundness,
+            "command": command,
+            "fairness": fairness,
         }
     )
 
