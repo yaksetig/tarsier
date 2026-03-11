@@ -699,6 +699,20 @@ protocol FairNonTerminatingProofReport {
     assert_eq!(report.stages[0].stage, 0);
     assert_eq!(report.stages[1].stage, 1);
     assert_eq!(report.stages[0].label, "baseline");
+    assert!(
+        report.stages[0].lasso_witness.is_some(),
+        "baseline fair-cycle stage should expose extracted lasso witness"
+    );
+    assert!(
+        report.stages[1].lasso_witness.is_some(),
+        "refined fair-cycle stage should expose extracted lasso witness"
+    );
+    let witness = report.stages[0]
+        .lasso_witness
+        .as_ref()
+        .expect("baseline witness should exist");
+    assert!(witness.loop_start < witness.depth);
+    assert!(witness.trace_steps >= witness.loop_steps.len());
     assert!(report.stages[1]
         .note
         .as_deref()
