@@ -273,3 +273,5 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; fin
 2026-03-11T02:37:34Z | AGENT_ID=1 | GST-05 | DONE | Added 4 new GST-focused examples using first-class timing block (safe+buggy PBFT view-change and Tendermint liveness) under examples/gst plus corpus README; commit f513215; checks: for f in examples/gst/*.trs; do cargo run -q -p tarsier-cli -- lint ""; done; cargo check --workspace
 `2026-03-11T02:43:25Z | AGENT_ID=1 | LCORPUS-02 | CLAIM | taking task`
 `2026-03-11T02:43:25Z | AGENT_ID=1 | LCORPUS-02 | START | creating 6+ liveness-focused .trs examples (leads-to, nested temporal, multi-role, buggy variants)`
+`2026-03-11T02:45:23Z | AGENT_ID=1 | LCORPUS-02 | PR_OPEN | Branch codex/agent1-lcorpus-02-v1 commit 65149d1`
+`2026-03-11T02:45:23Z | AGENT_ID=1 | LCORPUS-02 | DONE | Added 7 liveness examples (leads-to, nested temporal, always-eventually, multi-role, buggy variants); commit 65149d1; tests: cargo run -q -p tarsier-cli -- parse <each new .trs>`
