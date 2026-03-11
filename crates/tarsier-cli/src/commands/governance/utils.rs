@@ -386,6 +386,10 @@ pub(crate) fn is_valid_sha256_hex(raw: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{CertificateBundleInput, CertificateBundleObligation, CertificateKind};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tarsier_proof_kernel::{CertificateMetadata, CertificateObligationMeta};
 
     fn strict_unsat_metadata() -> CertificateMetadata {
@@ -409,6 +413,50 @@ mod tests {
                 proof_sha256: Some("c".repeat(64)),
             }],
         }
+    }
+
+    fn sample_bundle_input() -> CertificateBundleInput {
+        CertificateBundleInput {
+            kind: CertificateKind::SafetyProof,
+            protocol_file: "safe.trs".into(),
+            proof_engine: "pdr".into(),
+            induction_k: Some(8),
+            solver_used: "z3".into(),
+            soundness: "strict".into(),
+            fairness: None,
+            committee_bounds: vec![("n".into(), 4), ("f".into(), 1)],
+            obligations: vec![
+                CertificateBundleObligation {
+                    name: "z_obligation".into(),
+                    expected: "unsat".into(),
+                    smt2: "(check-sat)".into(),
+                },
+                CertificateBundleObligation {
+                    name: "a_obligation".into(),
+                    expected: "sat".into(),
+                    smt2: "(assert true)".into(),
+                },
+            ],
+        }
+    }
+
+    fn unique_tmp_dir(prefix: &str) -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{prefix}-{now}"))
+    }
+
+    #[cfg(unix)]
+    fn write_executable_script(path: &std::path::Path, script: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::write(path, script).expect("script should be written");
+        let mut perms = fs::metadata(path)
+            .expect("script metadata should be readable")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(path, perms).expect("script should be executable");
     }
 
     // -- chrono_utc_now --
@@ -654,6 +702,18 @@ mod tests {
     }
 
     #[test]
+    fn validate_foundational_requires_carcara_when_enforced_and_env_missing() {
+        if env_truthy("TARSIER_REQUIRE_CARCARA") {
+            eprintln!("skipping: TARSIER_REQUIRE_CARCARA already truthy in environment");
+            return;
+        }
+        let solvers = vec!["cvc5".to_string()];
+        let err = validate_foundational_profile_requirements(&solvers, true)
+            .expect_err("enforced foundational mode should require Carcara env");
+        assert!(format!("{err:?}").contains("TARSIER_REQUIRE_CARCARA=1"));
+    }
+
+    #[test]
     fn validate_trusted_check_accepts_valid_configuration() {
         let metadata = strict_unsat_metadata();
         let solvers = vec!["z3".to_string(), "cvc5".to_string()];
@@ -730,5 +790,124 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn obligation_triplets_from_bundle_sorts_by_name_and_hashes_smt() {
+        let bundle = sample_bundle_input();
+        let triplets = obligation_triplets_from_bundle(&bundle);
+        assert_eq!(triplets.len(), 2);
+        assert_eq!(triplets[0].0, "a_obligation");
+        assert_eq!(triplets[0].1, "sat");
+        assert_eq!(
+            triplets[0].2,
+            tarsier_proof_kernel::sha256_hex_bytes("(assert true)".as_bytes())
+        );
+        assert_eq!(triplets[1].0, "z_obligation");
+    }
+
+    #[test]
+    fn obligation_triplets_from_metadata_sorts_and_defaults_missing_hash() {
+        let mut metadata = strict_unsat_metadata();
+        metadata.obligations = vec![
+            CertificateObligationMeta {
+                name: "z_obligation".into(),
+                expected: "unsat".into(),
+                file: "z.smt2".into(),
+                sha256: None,
+                proof_file: None,
+                proof_sha256: None,
+            },
+            CertificateObligationMeta {
+                name: "a_obligation".into(),
+                expected: "sat".into(),
+                file: "a.smt2".into(),
+                sha256: Some("d".repeat(64)),
+                proof_file: None,
+                proof_sha256: None,
+            },
+        ];
+        let triplets = obligation_triplets_from_metadata(&metadata);
+        assert_eq!(triplets.len(), 2);
+        assert_eq!(triplets[0], ("a_obligation".into(), "sat".into(), "d".repeat(64)));
+        assert_eq!(triplets[1], ("z_obligation".into(), "unsat".into(), "".into()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_external_solver_on_file_returns_first_token_from_stdout() {
+        let tmp = unique_tmp_dir("tarsier-gov-utils-solver-ok");
+        fs::create_dir_all(&tmp).expect("temp directory should be created");
+        let solver = tmp.join("solver.sh");
+        write_executable_script(
+            &solver,
+            "#!/bin/sh\nset -eu\n# print leading whitespace and extra tokens\nprintf '\\n  unsat model-extra\\n'\n",
+        );
+        let smt = tmp.join("obligation.smt2");
+        fs::write(&smt, "(check-sat)\n").expect("smt file should be written");
+        let token = run_external_solver_on_file(
+            solver.to_str().expect("solver path should be utf-8"),
+            &smt,
+        )
+        .expect("solver wrapper should parse token");
+        assert_eq!(token, "unsat");
+        fs::remove_dir_all(&tmp).expect("temp directory cleanup should succeed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_external_solver_on_file_propagates_solver_failure() {
+        let tmp = unique_tmp_dir("tarsier-gov-utils-solver-fail");
+        fs::create_dir_all(&tmp).expect("temp directory should be created");
+        let solver = tmp.join("solver.sh");
+        write_executable_script(
+            &solver,
+            "#!/bin/sh\nset -eu\necho 'boom' >&2\nexit 2\n",
+        );
+        let smt = tmp.join("obligation.smt2");
+        fs::write(&smt, "(check-sat)\n").expect("smt file should be written");
+        let err = run_external_solver_on_file(
+            solver.to_str().expect("solver path should be utf-8"),
+            &smt,
+        )
+        .expect_err("solver wrapper should fail on non-zero exit");
+        assert!(format!("{err:?}").contains("failed on"));
+        fs::remove_dir_all(&tmp).expect("temp directory cleanup should succeed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_external_proof_checker_accepts_success_status() {
+        let tmp = unique_tmp_dir("tarsier-gov-utils-proof-check-ok");
+        fs::create_dir_all(&tmp).expect("temp directory should be created");
+        let checker = tmp.join("checker.sh");
+        write_executable_script(&checker, "#!/bin/sh\nset -eu\nexit 0\n");
+        let smt = tmp.join("obligation.smt2");
+        let proof = tmp.join("obligation.proof");
+        fs::write(&smt, "(check-sat)\n").expect("smt file should be written");
+        fs::write(&proof, "(proof)\n").expect("proof file should be written");
+        run_external_proof_checker(&checker, "z3", &smt, &proof)
+            .expect("proof checker wrapper should pass");
+        fs::remove_dir_all(&tmp).expect("temp directory cleanup should succeed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_external_proof_checker_propagates_failure_stderr() {
+        let tmp = unique_tmp_dir("tarsier-gov-utils-proof-check-fail");
+        fs::create_dir_all(&tmp).expect("temp directory should be created");
+        let checker = tmp.join("checker.sh");
+        write_executable_script(
+            &checker,
+            "#!/bin/sh\nset -eu\necho 'invalid proof' >&2\nexit 1\n",
+        );
+        let smt = tmp.join("obligation.smt2");
+        let proof = tmp.join("obligation.proof");
+        fs::write(&smt, "(check-sat)\n").expect("smt file should be written");
+        fs::write(&proof, "(proof)\n").expect("proof file should be written");
+        let err = run_external_proof_checker(&checker, "z3", &smt, &proof)
+            .expect_err("proof checker wrapper should fail on non-zero exit");
+        assert!(format!("{err:?}").contains("rejected"));
+        fs::remove_dir_all(&tmp).expect("temp directory cleanup should succeed");
     }
 }

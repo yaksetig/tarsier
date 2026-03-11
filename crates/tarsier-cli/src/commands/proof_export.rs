@@ -675,6 +675,22 @@ mod tests {
     }
 
     #[test]
+    fn lean_ident_from_name_normalizes_symbols_and_trailing_separator() {
+        assert_eq!(
+            lean_ident_from_name("Init->Inv (base)!"),
+            "obligation_init__inv__base__x"
+        );
+    }
+
+    #[test]
+    fn coq_ident_from_name_normalizes_symbols_and_trailing_separator() {
+        assert_eq!(
+            coq_ident_from_name("step#1?"),
+            "obligation_step_1_x"
+        );
+    }
+
+    #[test]
     fn collect_obligation_artifacts_preserves_hash_and_proof_fields() {
         let metadata = CertificateMetadata {
             schema_version: 2,
@@ -833,6 +849,53 @@ printf '{"overall":"fail"}' > "$REPORT"
         let err = run_certcheck(&base, &script_path).expect_err("certcheck wrapper should fail");
         let msg = format!("{err:?}");
         assert!(msg.contains("overall='fail'"));
+
+        fs::remove_dir_all(&base).expect("temp dir cleanup should succeed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_certcheck_fails_when_json_report_is_malformed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        let base =
+            std::env::temp_dir().join(format!("tarsier-proof-export-certcheck-malformed-{unique}"));
+        fs::create_dir_all(&base).expect("temp dir should be created");
+
+        let script_path = base.join("fake-certcheck.sh");
+        let script = r#"#!/bin/sh
+set -eu
+REPORT=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--json-report" ]; then
+    REPORT="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+printf '{"overall":' > "$REPORT"
+"#;
+        fs::write(&script_path, script).expect("script should be written");
+        let mut perms = fs::metadata(&script_path)
+            .expect("script metadata should be readable")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).expect("script should be executable");
+
+        let err =
+            run_certcheck(&base, &script_path).expect_err("malformed report should fail to parse");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("expected value")
+                || msg.contains("EOF while parsing")
+                || msg.contains("into_diagnostic"),
+            "unexpected parse error message: {msg}"
+        );
 
         fs::remove_dir_all(&base).expect("temp dir cleanup should succeed");
     }
