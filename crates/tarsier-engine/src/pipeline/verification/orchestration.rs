@@ -2100,6 +2100,7 @@ pub fn prove_fair_liveness_with_cegar_report(
                     note: Some("Global timeout exhausted before baseline stage.".into()),
                     model_changes: Vec::new(),
                     eliminated_traces: Vec::new(),
+                    lasso_witness: None,
                     discovered_predicates: Vec::new(),
                     counterexample_analysis: None,
                     scored_predicates: Vec::new(),
@@ -2153,6 +2154,7 @@ pub fn prove_fair_liveness_with_cegar_report(
         note: trace_signals.as_ref().and_then(cegar_signals_note),
         model_changes: Vec::new(),
         eliminated_traces: Vec::new(),
+        lasso_witness: cegar_extract_lasso_witness_from_result(&baseline_result),
         discovered_predicates: Vec::new(),
         counterexample_analysis: cegar_stage_counterexample_analysis_unbounded_fair(
             0,
@@ -2349,6 +2351,7 @@ pub fn prove_fair_liveness_with_cegar_report(
             note,
             model_changes,
             eliminated_traces,
+            lasso_witness: cegar_extract_lasso_witness_from_result(&result),
             discovered_predicates: stage_discovered_predicates,
             counterexample_analysis: stage_counterexample_analysis,
             scored_predicates: Vec::new(),

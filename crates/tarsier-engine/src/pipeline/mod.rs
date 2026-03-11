@@ -40,14 +40,15 @@ use tarsier_smt::terms::SmtTerm;
 use crate::counterexample::extract_trace;
 use crate::result::{
     AssumptionNote, BoundAnnotation, BoundEvidenceClass, BoundKind, CegarAuditReport,
-    CegarCounterexampleAnalysis, CegarEliminatedTrace, CegarModelChange, CegarPredicateScore,
-    CegarRunControls, CegarStageOutcome, CegarStageReport, CegarTermination, CommComplexityReport,
-    CommitteeAnalysisSummary, CtiClassification, FairLivenessResult, FairnessSemantics,
-    InductionCtiSummary, LivenessResult, ModelAssumptions, ModelMetadata, MultiPropertyResult,
-    ProbabilisticConfidenceInterval, PropertyVerdict, QuantitativeAnalysisEnvironment,
-    QuantitativeAnalysisOptions, SensitivityPoint, UnboundedFairLivenessCegarAuditReport,
-    UnboundedFairLivenessCegarStageOutcome, UnboundedFairLivenessCegarStageReport,
-    UnboundedFairLivenessResult, UnboundedSafetyCegarAuditReport, UnboundedSafetyCegarStageOutcome,
+    CegarCounterexampleAnalysis, CegarEliminatedTrace, CegarLassoWitness, CegarModelChange,
+    CegarPredicateScore, CegarRunControls, CegarStageOutcome, CegarStageReport, CegarTermination,
+    CommComplexityReport, CommitteeAnalysisSummary, CtiClassification, FairLivenessResult,
+    FairnessSemantics, InductionCtiSummary, LivenessResult, ModelAssumptions, ModelMetadata,
+    MultiPropertyResult, ProbabilisticConfidenceInterval, PropertyVerdict,
+    QuantitativeAnalysisEnvironment, QuantitativeAnalysisOptions, SensitivityPoint,
+    UnboundedFairLivenessCegarAuditReport, UnboundedFairLivenessCegarStageOutcome,
+    UnboundedFairLivenessCegarStageReport, UnboundedFairLivenessResult,
+    UnboundedSafetyCegarAuditReport, UnboundedSafetyCegarStageOutcome,
     UnboundedSafetyCegarStageReport, UnboundedSafetyResult, VerificationResult,
     QUANTITATIVE_SCHEMA_VERSION,
 };

@@ -285,6 +285,41 @@ pub struct CegarEliminatedTrace {
     pub trace: Trace,
 }
 
+/// One transition in an extracted lasso witness loop segment.
+#[derive(Debug, Clone)]
+pub struct CegarLassoStep {
+    /// SMT step index of this transition.
+    pub smt_step: usize,
+    /// Fired rule identifier.
+    pub rule_id: usize,
+    /// Delta value for the fired rule.
+    pub delta: i64,
+}
+
+/// First-class lasso witness extracted from a fair-cycle result.
+///
+/// This captures the loop segment as a concrete counterexample candidate that
+/// downstream CEGAR stages can analyze and replay.
+#[derive(Debug, Clone)]
+pub struct CegarLassoWitness {
+    /// Depth reported by fair-cycle search/PDR.
+    pub depth: usize,
+    /// Loop entry index.
+    pub loop_start: usize,
+    /// Length of loop segment (`depth - loop_start`).
+    pub loop_len: usize,
+    /// Length of prefix segment (`loop_start`).
+    pub prefix_len: usize,
+    /// Number of transitions in the full witness trace.
+    pub trace_steps: usize,
+    /// Ordered loop transitions extracted from the trace.
+    pub loop_steps: Vec<CegarLassoStep>,
+    /// Distinct rule ids observed in the loop segment (first-seen order).
+    pub loop_rule_ids: Vec<usize>,
+    /// Parameter valuation carried by the witness.
+    pub param_values: Vec<(String, i64)>,
+}
+
 /// Scored predicate with evidence tags and impact estimate for machine-readable output.
 #[derive(Debug, Clone)]
 pub struct CegarPredicateScore {
@@ -509,6 +544,8 @@ pub struct UnboundedFairLivenessCegarStageReport {
     pub model_changes: Vec<CegarModelChange>,
     /// Traces eliminated at this stage.
     pub eliminated_traces: Vec<CegarEliminatedTrace>,
+    /// Extracted lasso witness for this stage when a fair cycle is found.
+    pub lasso_witness: Option<CegarLassoWitness>,
     /// Predicates discovered/effective at this stage.
     pub discovered_predicates: Vec<String>,
     /// Optional witness-quality analysis for this stage.
