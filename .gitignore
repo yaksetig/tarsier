@@ -27,9 +27,13 @@ benchmarks/results/
 .cargo/
 .local_backups/
 .worktrees/
+.claude/
 
 # Z3 trace files
 .z3-trace
+
+# Local formal tooling build cache
+formal/lean/.lake/
 
 # VS Code extension build artifacts
 node_modules/
