@@ -1494,8 +1494,9 @@ fn parse_proof_engine(raw: &str) -> Result<ProofEngine, String> {
     match raw.trim().to_lowercase().as_str() {
         "kinduction" => Ok(ProofEngine::KInduction),
         "pdr" => Ok(ProofEngine::Pdr),
+        "ranking" => Ok(ProofEngine::Ranking),
         other => Err(format!(
-            "unknown proof engine '{other}' (expected kinduction|pdr)"
+            "unknown proof engine '{other}' (expected kinduction|pdr|ranking)"
         )),
     }
 }

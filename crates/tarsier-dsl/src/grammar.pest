@@ -17,6 +17,7 @@ protocol_item = _{
     | resilience_decl
     | pacemaker_decl
     | adversary_decl
+    | timing_decl
     | identity_decl
     | channel_decl
     | equivocation_decl
@@ -108,6 +109,21 @@ adversary_decl = {
 }
 
 adversary_item = { ident ~ ":" ~ ident ~ ";" }
+
+// --- Timing model ---
+timing_decl = {
+    "timing" ~ "{" ~
+        timing_item* ~
+    "}"
+}
+
+timing_item = _{
+    timing_model_item
+    | timing_gst_item
+}
+
+timing_model_item = { "model" ~ ":" ~ ident ~ ";" }
+timing_gst_item = { "gst" ~ ":" ~ ident ~ ";" }
 
 // --- Identity / key declarations ---
 identity_decl = {

@@ -533,15 +533,7 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
     // Monitor transition updates.
     let armed0_true = bit_is_true(mon_armed(0));
     let choose0_true = bit_is_true(mon_choose(0));
-    let post_gst_now = if ta.semantics.timing_model
-        == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
-    {
-        ta.semantics.gst_param.map(|gst_pid| {
-            SmtTerm::var(pdr_param_var(gst_pid.as_usize())).le(SmtTerm::var(pdr_time_var(0)))
-        })
-    } else {
-        None
-    };
+    let post_gst_now = pdr_post_gst_guard_at_step(ta, 0);
     if let Some(post_gst_now) = post_gst_now.clone() {
         // Arm point for fair-cycle monitor must be in the post-GST region.
         transition_assertions.push(choose0_true.clone().implies(post_gst_now));
@@ -1728,7 +1720,10 @@ mod tests {
     }
 
     fn int_state_vars(names: &[&str]) -> Vec<(String, SmtSort)> {
-        names.iter().map(|n| (n.to_string(), SmtSort::Int)).collect()
+        names
+            .iter()
+            .map(|n| (n.to_string(), SmtSort::Int))
+            .collect()
     }
 
     fn int_model(values: &[(&str, i64)]) -> Model {
@@ -2089,10 +2084,7 @@ mod tests {
     #[test]
     fn bad_cube_budget_scales_with_state_and_frontier() {
         assert_eq!(fair_pdr_bad_cube_budget(10, 0), 5_000 + 10 * 120);
-        assert_eq!(
-            fair_pdr_bad_cube_budget(10, 5),
-            5_000 + 10 * 120 + 5 * 800
-        );
+        assert_eq!(fair_pdr_bad_cube_budget(10, 5), 5_000 + 10 * 120 + 5 * 800);
     }
 
     #[test]

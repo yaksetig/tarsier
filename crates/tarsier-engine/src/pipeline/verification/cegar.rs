@@ -341,6 +341,45 @@ pub(crate) fn cegar_trace_generated_refinements(
     generated
 }
 
+/// Build ordered candidate atoms for fair-lasso realizability replay.
+///
+/// Candidates are signal-driven first (derived from the current lasso), then
+/// fall back to generic adversary-tightening atoms. Existing predicates are
+/// filtered out so replay only explores genuinely new distinctions.
+pub(crate) fn cegar_liveness_realizability_atoms(
+    program: &ast::Program,
+    signals: &CegarTraceSignals,
+    existing_predicates: &[String],
+) -> Vec<CegarAtomicRefinement> {
+    let existing: HashSet<&str> = existing_predicates.iter().map(|p| p.as_str()).collect();
+    let mut seen_predicates: HashSet<String> = HashSet::new();
+    let mut atoms: Vec<CegarAtomicRefinement> = Vec::new();
+
+    for atom in cegar_trace_generated_refinements(program, signals) {
+        if existing.contains(atom.predicate.as_str()) {
+            continue;
+        }
+        if seen_predicates.insert(atom.predicate.clone()) {
+            atoms.push(atom);
+        }
+    }
+    for atom in cegar_atomic_refinements(program) {
+        if existing.contains(atom.predicate.as_str()) {
+            continue;
+        }
+        if seen_predicates.insert(atom.predicate.clone()) {
+            atoms.push(atom);
+        }
+    }
+
+    atoms.sort_by(|a, b| {
+        let sa = cegar_refinement_score(a, signals);
+        let sb = cegar_refinement_score(b, signals);
+        sb.cmp(&sa).then_with(|| a.label.cmp(&b.label))
+    });
+    atoms
+}
+
 pub(crate) fn cegar_core_compound_predicate(predicates: &[String]) -> Option<String> {
     if predicates.len() <= 1 {
         return None;
@@ -1376,6 +1415,56 @@ pub(crate) fn stage_outcome_from_unbounded_fair_liveness(
     }
 }
 
+pub(crate) fn cegar_extract_lasso_witness_from_result(
+    result: &UnboundedFairLivenessResult,
+) -> Option<CegarLassoWitness> {
+    let UnboundedFairLivenessResult::FairCycleFound {
+        depth,
+        loop_start,
+        trace,
+    } = result
+    else {
+        return None;
+    };
+    Some(cegar_extract_lasso_witness(*depth, *loop_start, trace))
+}
+
+pub(crate) fn cegar_extract_lasso_witness(
+    depth: usize,
+    loop_start: usize,
+    trace: &tarsier_ir::counter_system::Trace,
+) -> CegarLassoWitness {
+    let loop_end = depth.min(trace.steps.len());
+    let loop_start_idx = loop_start.min(loop_end);
+    let loop_steps: Vec<crate::result::CegarLassoStep> = trace.steps[loop_start_idx..loop_end]
+        .iter()
+        .map(|step| crate::result::CegarLassoStep {
+            smt_step: step.smt_step,
+            rule_id: step.rule_id.as_usize(),
+            delta: step.delta,
+        })
+        .collect();
+
+    let mut seen = HashSet::new();
+    let mut loop_rule_ids = Vec::new();
+    for step in &loop_steps {
+        if seen.insert(step.rule_id) {
+            loop_rule_ids.push(step.rule_id);
+        }
+    }
+
+    CegarLassoWitness {
+        depth,
+        loop_start,
+        loop_len: depth.saturating_sub(loop_start),
+        prefix_len: loop_start,
+        trace_steps: trace.steps.len(),
+        loop_steps,
+        loop_rule_ids,
+        param_values: trace.param_values.clone(),
+    }
+}
+
 pub(crate) fn cegar_stage_counterexample_analysis_unbounded_safety(
     stage: usize,
     refinements: &[String],
@@ -1834,6 +1923,10 @@ mod tests {
         }
     }
 
+    fn parse_test_program(source: &str) -> ast::Program {
+        tarsier_dsl::parse(source, "cegar_test.trs").expect("test program should parse")
+    }
+
     // ── CegarAtomicRefinement constructors ───────────────────────────
 
     #[test]
@@ -1921,7 +2014,11 @@ mod tests {
         let result = parse_counter_signature("cnt_Vote@R1");
         assert_eq!(
             result,
-            Some(("Vote".to_string(), "Vote".to_string(), Some("R1".to_string())))
+            Some((
+                "Vote".to_string(),
+                "Vote".to_string(),
+                Some("R1".to_string())
+            ))
         );
     }
 
@@ -1945,7 +2042,11 @@ mod tests {
         let result = parse_counter_signature("cnt_Vote@R1<-S1");
         assert_eq!(
             result,
-            Some(("Vote".to_string(), "Vote".to_string(), Some("R1".to_string())))
+            Some((
+                "Vote".to_string(),
+                "Vote".to_string(),
+                Some("R1".to_string())
+            ))
         );
     }
 
@@ -1964,7 +2065,11 @@ mod tests {
         let result = parse_counter_signature("cnt_Vote@R1#0");
         assert_eq!(
             result,
-            Some(("Vote".to_string(), "Vote".to_string(), Some("R1#0".to_string())))
+            Some((
+                "Vote".to_string(),
+                "Vote".to_string(),
+                Some("R1#0".to_string())
+            ))
         );
     }
 
@@ -1975,7 +2080,11 @@ mod tests {
         let result = parse_counter_signature("cnt_Vote@R1[x]");
         assert_eq!(
             result,
-            Some(("Vote".to_string(), "Vote[x]".to_string(), Some("R1".to_string())))
+            Some((
+                "Vote".to_string(),
+                "Vote[x]".to_string(),
+                Some("R1".to_string())
+            ))
         );
     }
 
@@ -2023,7 +2132,8 @@ mod tests {
 
     #[test]
     fn score_global_equivocation_with_conflicting_variants() {
-        let score = cegar_refinement_score(&atom_global_equivocation(), &signals_conflicting_variants());
+        let score =
+            cegar_refinement_score(&atom_global_equivocation(), &signals_conflicting_variants());
         assert_eq!(score, 40 + 220);
     }
 
@@ -2047,7 +2157,8 @@ mod tests {
 
     #[test]
     fn score_global_network_identity_with_cross_recipient() {
-        let score = cegar_refinement_score(&atom_global_network_identity(), &signals_cross_recipient());
+        let score =
+            cegar_refinement_score(&atom_global_network_identity(), &signals_cross_recipient());
         assert_eq!(score, 30 + 70);
     }
 
@@ -2066,7 +2177,9 @@ mod tests {
     #[test]
     fn score_message_equivocation_with_matching_family() {
         let mut signals = default_signals();
-        signals.conflicting_variant_families.insert("Vote".to_string());
+        signals
+            .conflicting_variant_families
+            .insert("Vote".to_string());
         let atom = CegarAtomicRefinement::message_equivocation_none("Vote");
         let score = cegar_refinement_score(&atom, &signals);
         assert_eq!(score, 50 + 205);
@@ -2198,6 +2311,43 @@ mod tests {
         assert!(!s.identity_scoped_channels);
         assert!(s.conflicting_variant_families.is_empty());
         assert!(s.cross_recipient_families.is_empty());
+    }
+
+    #[test]
+    fn liveness_realizability_atoms_filter_existing_and_prioritize_signal_atoms() {
+        let program = parse_test_program(
+            r#"
+protocol CegarRealizabilityCandidates {
+    params n, t;
+    resilience: n > 3*t;
+    adversary { model: byzantine; bound: t; equivocation: full; auth: none; }
+    message Vote(v: bool);
+    role R {
+        init s;
+        phase s {}
+    }
+}
+"#,
+        );
+        let mut signals = CegarTraceSignals {
+            conflicting_variants: true,
+            ..Default::default()
+        };
+        signals.conflicting_variant_families.insert("Vote".into());
+        let existing = vec!["adversary.equivocation=none".to_string()];
+        let atoms = cegar_liveness_realizability_atoms(&program, &signals, &existing);
+
+        assert!(!atoms.is_empty());
+        assert!(
+            atoms
+                .iter()
+                .all(|a| a.predicate != "adversary.equivocation=none"),
+            "existing predicates must be filtered out"
+        );
+        assert_eq!(
+            atoms[0].predicate, "equivocation(Vote)=none",
+            "signal-derived message refinement should be prioritized"
+        );
     }
 
     // ── combinations_of_size ─────────────────────────────────────────
@@ -2350,10 +2500,7 @@ mod tests {
         let r = CegarRefinement {
             atoms: vec![atom_global_equivocation(), atom_global_auth()],
         };
-        let result = cegar_shrink_refinement_core(&r, |_candidate| {
-            Ok(Some(true))
-        })
-        .unwrap();
+        let result = cegar_shrink_refinement_core(&r, |_candidate| Ok(Some(true))).unwrap();
         assert!(result.is_some());
         let shrunk = result.unwrap();
         assert_eq!(shrunk.atoms.len(), 1);
@@ -2412,7 +2559,9 @@ mod tests {
         );
         let analysis = result.unwrap();
         assert_eq!(analysis.classification, "potentially_spurious");
-        assert!(analysis.rationale.contains("Baseline stage reported UNSAFE"));
+        assert!(analysis
+            .rationale
+            .contains("Baseline stage reported UNSAFE"));
     }
 
     #[test]
@@ -2472,7 +2621,8 @@ mod tests {
 
     #[test]
     fn stage_outcome_safe() {
-        let outcome = stage_outcome_from_verification(&VerificationResult::Safe { depth_checked: 5 });
+        let outcome =
+            stage_outcome_from_verification(&VerificationResult::Safe { depth_checked: 5 });
         assert!(matches!(
             outcome,
             CegarStageOutcome::Safe { depth_checked: 5 }
@@ -2490,6 +2640,104 @@ mod tests {
         }
     }
 
+    #[test]
+    fn lasso_witness_extraction_slices_loop_segment() {
+        let trace = tarsier_ir::counter_system::Trace {
+            initial_config: tarsier_ir::counter_system::Configuration {
+                kappa: vec![1, 0],
+                gamma: vec![0],
+                params: vec![4, 1],
+            },
+            steps: vec![
+                tarsier_ir::counter_system::TraceStep {
+                    smt_step: 0,
+                    rule_id: 2.into(),
+                    delta: 1,
+                    deliveries: vec![],
+                    config: tarsier_ir::counter_system::Configuration {
+                        kappa: vec![0, 1],
+                        gamma: vec![0],
+                        params: vec![4, 1],
+                    },
+                    por_status: None,
+                },
+                tarsier_ir::counter_system::TraceStep {
+                    smt_step: 1,
+                    rule_id: 3.into(),
+                    delta: 1,
+                    deliveries: vec![],
+                    config: tarsier_ir::counter_system::Configuration {
+                        kappa: vec![1, 0],
+                        gamma: vec![1],
+                        params: vec![4, 1],
+                    },
+                    por_status: None,
+                },
+                tarsier_ir::counter_system::TraceStep {
+                    smt_step: 2,
+                    rule_id: 2.into(),
+                    delta: 1,
+                    deliveries: vec![],
+                    config: tarsier_ir::counter_system::Configuration {
+                        kappa: vec![0, 1],
+                        gamma: vec![1],
+                        params: vec![4, 1],
+                    },
+                    por_status: None,
+                },
+            ],
+            param_values: vec![("n".into(), 4), ("t".into(), 1)],
+        };
+
+        let witness = cegar_extract_lasso_witness(3, 1, &trace);
+        assert_eq!(witness.depth, 3);
+        assert_eq!(witness.loop_start, 1);
+        assert_eq!(witness.prefix_len, 1);
+        assert_eq!(witness.loop_len, 2);
+        assert_eq!(witness.trace_steps, 3);
+        assert_eq!(witness.loop_steps.len(), 2);
+        assert_eq!(witness.loop_steps[0].rule_id, 3);
+        assert_eq!(witness.loop_steps[1].rule_id, 2);
+        assert_eq!(witness.loop_rule_ids, vec![3, 2]);
+        assert_eq!(witness.param_values, trace.param_values);
+    }
+
+    #[test]
+    fn lasso_witness_extraction_from_result_only_for_fair_cycle() {
+        let trace = tarsier_ir::counter_system::Trace {
+            initial_config: tarsier_ir::counter_system::Configuration {
+                kappa: vec![1],
+                gamma: vec![0],
+                params: vec![3],
+            },
+            steps: vec![tarsier_ir::counter_system::TraceStep {
+                smt_step: 0,
+                rule_id: 0.into(),
+                delta: 1,
+                deliveries: vec![],
+                config: tarsier_ir::counter_system::Configuration {
+                    kappa: vec![1],
+                    gamma: vec![1],
+                    params: vec![3],
+                },
+                por_status: None,
+            }],
+            param_values: vec![("n".into(), 3)],
+        };
+        let cycle = UnboundedFairLivenessResult::FairCycleFound {
+            depth: 1,
+            loop_start: 0,
+            trace: trace.clone(),
+        };
+        let witness = cegar_extract_lasso_witness_from_result(&cycle)
+            .expect("fair-cycle result should produce lasso witness");
+        assert_eq!(witness.loop_rule_ids, vec![0]);
+        assert_eq!(witness.trace_steps, 1);
+
+        let proved = UnboundedFairLivenessResult::LiveProved { frame: 2 };
+        assert!(cegar_extract_lasso_witness_from_result(&proved).is_none());
+    }
+
     // ── cegar_evidence_requirements ───────────────────────────────────
 
     #[test]
@@ -2500,10 +2748,7 @@ mod tests {
 
     #[test]
     fn evidence_requirements_groups_by_tag() {
-        let atomics = vec![
-            atom_global_equivocation(),
-            atom_global_auth(),
-        ];
+        let atomics = vec![atom_global_equivocation(), atom_global_auth()];
         let signals = CegarTraceSignals {
             conflicting_variants: true,
             cross_recipient_delivery: true,
@@ -2522,14 +2767,8 @@ mod tests {
 
     #[test]
     fn termination_budget_not_reached() {
-        let t = cegar_build_termination_from_iterations(
-            "test_reason",
-            5,
-            2,
-            30,
-            Instant::now(),
-            false,
-        );
+        let t =
+            cegar_build_termination_from_iterations("test_reason", 5, 2, 30, Instant::now(), false);
         assert_eq!(t.reason, "test_reason");
         assert_eq!(t.iteration_budget, 5);
         assert_eq!(t.iterations_used, 2);
@@ -2553,14 +2792,7 @@ mod tests {
 
     #[test]
     fn termination_zero_budget_never_reached() {
-        let t = cegar_build_termination_from_iterations(
-            "test",
-            0,
-            0,
-            30,
-            Instant::now(),
-            false,
-        );
+        let t = cegar_build_termination_from_iterations("test", 0, 0, 30, Instant::now(), false);
         assert!(!t.reached_iteration_budget);
     }
 

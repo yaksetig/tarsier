@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "name": "example-matrix-liveness-fast",
+  "description": "Fast bounded liveness and fair-liveness regression subset.",
+  "entries": [
+    {
+      "id": "pbft_liveness_safe",
+      "command": "liveness",
+      "file": "examples/library/pbft_liveness_safe_ci.trs",
+      "expected": "live",
+      "depth": 8
+    },
+    {
+      "id": "pbft_liveness_buggy",
+      "command": "liveness",
+      "file": "examples/library/pbft_liveness_buggy_ci.trs",
+      "expected": "not_live",
+      "depth": 8
+    },
+    {
+      "id": "pbft_fair_liveness_safe",
+      "command": "fair-liveness",
+      "file": "examples/library/pbft_liveness_safe_ci.trs",
+      "expected": "no_fair_cycle_up_to",
+      "fairness": "weak",
+      "depth": 8
+    },
+    {
+      "id": "pbft_fair_liveness_buggy",
+      "command": "fair-liveness",
+      "file": "examples/library/pbft_liveness_buggy_ci.trs",
+      "expected": "fair_cycle_found",
+      "fairness": "weak",
+      "depth": 8
+    },
+    {
+      "id": "leads_to_safe",
+      "command": "liveness",
+      "file": "examples/library/leads_to_liveness_safe.trs",
+      "expected": "live",
+      "depth": 4
+    },
+    {
+      "id": "leads_to_buggy",
+      "command": "liveness",
+      "file": "examples/library/leads_to_liveness_buggy.trs",
+      "expected": "not_live",
+      "depth": 4
+    },
+    {
+      "id": "multi_phase_safe",
+      "command": "liveness",
+      "file": "examples/library/multi_phase_liveness_safe.trs",
+      "expected": "live",
+      "depth": 4
+    },
+    {
+      "id": "multi_phase_buggy",
+      "command": "liveness",
+      "file": "examples/library/multi_phase_liveness_buggy.trs",
+      "expected": "not_live",
+      "depth": 4
+    },
+    {
+      "id": "always_eventually_safe",
+      "command": "liveness",
+      "file": "examples/library/always_eventually_liveness_safe.trs",
+      "expected": "live",
+      "depth": 4
+    },
+    {
+      "id": "always_eventually_buggy",
+      "command": "liveness",
+      "file": "examples/library/always_eventually_liveness_buggy.trs",
+      "expected": "not_live",
+      "depth": 4
+    },
+    {
+      "id": "two_role_safe",
+      "command": "liveness",
+      "file": "examples/library/two_role_liveness_safe.trs",
+      "expected": "live",
+      "depth": 4
+    }
+  ]
+}

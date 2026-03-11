@@ -246,7 +246,23 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         ta.constraints.resilience_condition = Some(LinearConstraint { lhs, op, rhs });
     }
 
-    // 2b. Set adversary/fault/timing/value-abstraction configuration
+    // 2b. Set first-class timing configuration (with legacy adversary bridge).
+    let mut timing_model_from_timing_block = false;
+    let mut gst_from_timing_block = false;
+    if let Some(timing) = &proto.timing {
+        ta.semantics.timing_model = parse_timing_model(&timing.model)?;
+        timing_model_from_timing_block = true;
+        if let Some(gst_name) = &timing.gst {
+            if let Some(&pid) = param_ids.get(gst_name) {
+                ta.semantics.gst_param = Some(pid);
+                gst_from_timing_block = true;
+            } else {
+                return Err(LoweringError::UnknownParameter(gst_name.clone()));
+            }
+        }
+    }
+
+    // 2c. Set adversary/fault/timing/value-abstraction configuration.
     for item in &proto.adversary {
         match item.key.as_str() {
             "bound" => {
@@ -260,11 +276,30 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
                 ta.semantics.fault_model = parse_fault_model(&item.value)?;
             }
             "timing" => {
-                ta.semantics.timing_model = parse_timing_model(&item.value)?;
+                let legacy_model = parse_timing_model(&item.value)?;
+                if timing_model_from_timing_block {
+                    if ta.semantics.timing_model != legacy_model {
+                        return Err(LoweringError::Unsupported(format!(
+                            "Conflicting timing model declarations: timing block sets '{:?}', adversary sets '{:?}'",
+                            ta.semantics.timing_model, legacy_model
+                        )));
+                    }
+                } else {
+                    ta.semantics.timing_model = legacy_model;
+                }
             }
             "gst" => {
                 if let Some(&pid) = param_ids.get(&item.value) {
-                    ta.semantics.gst_param = Some(pid);
+                    if gst_from_timing_block {
+                        if ta.semantics.gst_param != Some(pid) {
+                            return Err(LoweringError::Unsupported(format!(
+                                "Conflicting GST declarations: timing block sets '{:?}', adversary sets '{}'",
+                                ta.semantics.gst_param, item.value
+                            )));
+                        }
+                    } else {
+                        ta.semantics.gst_param = Some(pid);
+                    }
                 } else {
                     return Err(LoweringError::UnknownParameter(item.value.clone()));
                 }
@@ -304,7 +339,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
         && ta.semantics.gst_param.is_none()
     {
         return Err(LoweringError::Unsupported(
-            "timing: partial_synchrony requires `adversary { gst: <param>; }`".into(),
+            "partial_synchrony requires `timing { gst: <param>; }` (or legacy `adversary { gst: <param>; }`)".into(),
         ));
     }
     if ta.semantics.delivery_control != DeliveryControlMode::LegacyCounter
@@ -323,7 +358,7 @@ pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, LoweringError
     ta.security.compromised_keys = compromised_keys_from_adversary;
     ta.security.message_policies = build_message_policy_overrides(proto)?;
 
-    // 2c. Process committee declarations
+    // 2d. Process committee declarations
     for committee in &proto.committees {
         let mut population = None;
         let mut byzantine = None;
@@ -1838,7 +1873,13 @@ fn validate_dag_rounds(rounds: &[IrDagRoundSpec]) -> Result<(), LoweringError> {
     let mut state: HashMap<&str, VisitState> = HashMap::new();
     for round in rounds {
         let mut path = Vec::new();
-        dfs(round.name.as_str(), &mut path, rounds, &round_index, &mut state)?;
+        dfs(
+            round.name.as_str(),
+            &mut path,
+            rounds,
+            &round_index,
+            &mut state,
+        )?;
     }
 
     // 6. Require at least one root (no parents).

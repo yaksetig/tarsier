@@ -1303,6 +1303,45 @@ role R { init s; phase s {} }
 }
 
 #[test]
+fn resolve_imports_merges_timing_when_missing() {
+    let tmp = std::env::temp_dir().join("tarsier_test_import_timing");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let imported_src = r#"
+protocol Imported {
+params n, t, f, gst;
+resilience: n > 3*t;
+timing { model: partial_synchrony; gst: gst; }
+message Echo;
+role R { init s; phase s {} }
+}
+"#;
+    std::fs::write(tmp.join("imported.trs"), imported_src).unwrap();
+
+    let main_src = r#"
+protocol Main {
+import Imp from "imported.trs";
+params n, t, f, gst;
+resilience: n > 3*t;
+message M;
+role R { init s; phase s {} }
+}
+"#;
+    let mut prog = parse(main_src, "main.trs").unwrap();
+    resolve_imports(&mut prog, &tmp).unwrap();
+
+    let timing = prog
+        .protocol
+        .node
+        .timing
+        .as_ref()
+        .expect("imported timing should be merged");
+    assert_eq!(timing.model, "partial_synchrony");
+    assert_eq!(timing.gst.as_deref(), Some("gst"));
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
 fn resolve_imports_nonexistent_file_is_error() {
     let tmp = std::env::temp_dir().join("tarsier_test_import_missing");
     std::fs::create_dir_all(&tmp).unwrap();
@@ -1694,6 +1733,31 @@ role R { init s; phase s {} }
     assert!(keys.contains(&"auth"));
     assert!(keys.contains(&"network"));
     assert!(keys.contains(&"gst"));
+}
+
+#[test]
+fn parse_first_class_timing_block() {
+    let src = r#"
+protocol P {
+params n, t, f, gst;
+resilience: n > 3*t;
+timing {
+    model: partial_synchrony;
+    gst: gst;
+}
+message M;
+role R { init s; phase s {} }
+}
+"#;
+    let prog = parse(src, "timing_block.trs").expect("parse should succeed");
+    let timing = prog
+        .protocol
+        .node
+        .timing
+        .as_ref()
+        .expect("timing block should be present");
+    assert_eq!(timing.model, "partial_synchrony");
+    assert_eq!(timing.gst.as_deref(), Some("gst"));
 }
 
 // ---------------------------------------------------------------
@@ -2255,6 +2319,7 @@ const DSL_KEYWORDS: &[&str] = &[
     "equivocation",
     "identity",
     "pacemaker",
+    "timing",
     "has",
     "next",
     "always",

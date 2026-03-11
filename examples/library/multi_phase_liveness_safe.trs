@@ -1,0 +1,23 @@
+protocol MultiPhaseLivenessSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    role Replica {
+        var phase1_done: bool = true;
+        var phase2_done: bool = true;
+        var phase3_done: bool = true;
+
+        init committed;
+        phase committed {}
+    }
+
+    property progress: liveness {
+        forall p: Replica.
+            [] (p.phase1_done == true ~> <> (p.phase2_done == true && <> (p.phase3_done == true)))
+    }
+}

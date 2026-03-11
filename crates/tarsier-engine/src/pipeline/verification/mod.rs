@@ -32,6 +32,8 @@ pub use invariant_inference::{
 mod fair_pdr;
 pub(crate) use fair_pdr::*;
 
+mod ranking;
+
 mod orchestration;
 pub use orchestration::{
     check_fair_liveness, check_fair_liveness_with_mode, check_liveness, prove_fair_liveness,

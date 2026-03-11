@@ -6,6 +6,7 @@ on:
       - "examples/**"
       - "scripts/example-matrix-fast.sh"
       - "examples/example_matrix_fast.json"
+      - "examples/example_matrix_liveness_fast.json"
       - "docs/EXAMPLE_COVERAGE_MATRIX.md"
       - ".github/workflows/example-matrix-fast.yml"
   workflow_dispatch:
@@ -26,12 +27,15 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Run fast example matrix
+      - name: Run fast safety + liveness matrix
         run: |
           mkdir -p artifacts/example-matrix-fast
           ./scripts/example-matrix-fast.sh \
             --manifest examples/example_matrix_fast.json \
-            --report-out artifacts/example-matrix-fast/report.json
+            --report-out artifacts/example-matrix-fast/safety-report.json
+          ./scripts/example-matrix-fast.sh \
+            --manifest examples/example_matrix_liveness_fast.json \
+            --report-out artifacts/example-matrix-fast/liveness-report.json
 
       - name: Upload matrix artifacts
         if: always()

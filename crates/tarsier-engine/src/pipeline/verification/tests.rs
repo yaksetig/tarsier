@@ -500,6 +500,7 @@ fn make_default_program() -> ast::Program {
                 resilience: None,
                 pacemaker: None,
                 adversary: vec![],
+                timing: None,
                 identities: vec![],
                 channels: vec![],
                 equivocation_policies: vec![],

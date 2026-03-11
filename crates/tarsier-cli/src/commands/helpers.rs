@@ -99,8 +99,9 @@ pub(crate) fn parse_proof_engine(raw: &str) -> CliParseResult<ProofEngine> {
     match raw {
         "kinduction" => Ok(ProofEngine::KInduction),
         "pdr" => Ok(ProofEngine::Pdr),
+        "ranking" => Ok(ProofEngine::Ranking),
         other => Err(CliParseError::new(format!(
-            "Unknown proof engine: {other}. Use 'kinduction' or 'pdr'."
+            "Unknown proof engine: {other}. Use 'kinduction', 'pdr', or 'ranking'."
         ))),
     }
 }
@@ -110,8 +111,9 @@ pub(crate) fn parse_manifest_proof_engine(raw: &str) -> Result<ProofEngine, Stri
     match raw {
         "kinduction" => Ok(ProofEngine::KInduction),
         "pdr" => Ok(ProofEngine::Pdr),
+        "ranking" => Ok(ProofEngine::Ranking),
         other => Err(format!(
-            "Unknown proof_engine '{other}'. Use 'kinduction' or 'pdr'."
+            "Unknown proof_engine '{other}'. Use 'kinduction', 'pdr', or 'ranking'."
         )),
     }
 }
@@ -833,6 +835,7 @@ pub(crate) fn proof_engine_name(engine: ProofEngine) -> &'static str {
     match engine {
         ProofEngine::KInduction => "kinduction",
         ProofEngine::Pdr => "pdr",
+        ProofEngine::Ranking => "ranking",
     }
 }
 
@@ -1825,6 +1828,10 @@ mod tests {
             Ok(ProofEngine::KInduction)
         ));
         assert!(matches!(parse_proof_engine("pdr"), Ok(ProofEngine::Pdr)));
+        assert!(matches!(
+            parse_proof_engine("ranking"),
+            Ok(ProofEngine::Ranking)
+        ));
     }
 
     #[test]
@@ -2134,6 +2141,7 @@ mod tests {
     fn proof_engine_name_values() {
         assert_eq!(proof_engine_name(ProofEngine::KInduction), "kinduction");
         assert_eq!(proof_engine_name(ProofEngine::Pdr), "pdr");
+        assert_eq!(proof_engine_name(ProofEngine::Ranking), "ranking");
     }
 
     #[test]
@@ -2517,6 +2525,10 @@ mod tests {
         assert!(matches!(
             parse_manifest_proof_engine("pdr"),
             Ok(ProofEngine::Pdr)
+        ));
+        assert!(matches!(
+            parse_manifest_proof_engine("ranking"),
+            Ok(ProofEngine::Ranking)
         ));
     }
 

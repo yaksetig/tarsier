@@ -42,6 +42,11 @@ pub(crate) fn time_var(step: usize) -> String {
     format!("time_{step}")
 }
 
+/// Existential GST step used by partial-synchrony encodings.
+pub(crate) fn gst_step_var() -> String {
+    "gst_step".to_string()
+}
+
 /// Firing count for rule `rule` at step `step`.
 pub(crate) fn delta_var(step: usize, rule: usize) -> String {
     format!("delta_{step}_{rule}")
@@ -172,6 +177,11 @@ mod tests {
     fn time_var_format() {
         assert_eq!(time_var(0), "time_0");
         assert_eq!(time_var(99), "time_99");
+    }
+
+    #[test]
+    fn gst_step_var_format() {
+        assert_eq!(gst_step_var(), "gst_step");
     }
 
     // ── delta_var ──
@@ -311,6 +321,11 @@ mod tests {
             dag_round_active_var(step, 0),
         ];
         let unique: std::collections::HashSet<&String> = names.iter().collect();
-        assert_eq!(names.len(), unique.len(), "variable names must be unique: {:?}", names);
+        assert_eq!(
+            names.len(),
+            unique.len(),
+            "variable names must be unique: {:?}",
+            names
+        );
     }
 }

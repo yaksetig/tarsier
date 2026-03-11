@@ -801,7 +801,7 @@ pub fn prove_safety_with_auto_strengthen(
                         }
                     }
                 }
-                ProofEngine::Pdr => {
+                ProofEngine::Pdr | ProofEngine::Ranking => {
                     // For PDR, add step-relation invariant assertions as extra.
                     extra.extend(predicate_assertions_for_step_relation(&inductive_preds));
                     match options.solver {

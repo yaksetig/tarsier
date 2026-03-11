@@ -42,6 +42,7 @@ pub(crate) fn run_compose_check_command(file: PathBuf) -> miette::Result<()> {
                     resilience: module_decl.items.resilience.clone(),
                     pacemaker: None,
                     adversary: module_decl.items.adversary.clone(),
+                    timing: None,
                     identities: Vec::new(),
                     channels: Vec::new(),
                     equivocation_policies: Vec::new(),

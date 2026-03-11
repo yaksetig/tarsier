@@ -46,6 +46,7 @@ pub struct ProtocolDecl {
     pub resilience: Option<ResilienceDecl>,
     pub pacemaker: Option<PacemakerDecl>,
     pub adversary: Vec<AdversaryItem>,
+    pub timing: Option<TimingDecl>,
     pub identities: Vec<IdentityDecl>,
     pub channels: Vec<ChannelDecl>,
     pub equivocation_policies: Vec<EquivocationDecl>,
@@ -190,6 +191,17 @@ pub struct ResilienceExpr {
 pub struct AdversaryItem {
     pub key: String,
     pub value: String,
+    pub span: Span,
+}
+
+/// First-class protocol timing configuration.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize))]
+pub struct TimingDecl {
+    /// Timing model (`asynchronous`, `async`, `partial_synchrony`, ...).
+    pub model: String,
+    /// Optional GST parameter name.
+    pub gst: Option<String>,
     pub span: Span,
 }
 

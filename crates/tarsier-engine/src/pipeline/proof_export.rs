@@ -129,6 +129,7 @@ fn proof_engine_label(engine: ProofEngine) -> &'static str {
     match engine {
         ProofEngine::KInduction => "kinduction",
         ProofEngine::Pdr => "pdr",
+        ProofEngine::Ranking => "ranking",
     }
 }
 

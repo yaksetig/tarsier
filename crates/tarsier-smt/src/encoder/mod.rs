@@ -12,7 +12,7 @@ mod por;
 mod variables;
 
 pub use k_induction::encode_k_induction_step;
-pub(crate) use variables::{delta_var, gamma_var, kappa_var, time_var};
+pub(crate) use variables::{delta_var, gamma_var, gst_step_var, kappa_var, time_var};
 
 use context::{build_common_encoder_context, CommonEncoderContext};
 use k_induction::encode_property_violation;
@@ -234,6 +234,7 @@ impl<'a> BmcEncoderBuilder<'a> {
     pub(super) fn phase_declare_parameters_and_resilience(&mut self) {
         let ta = self.ta;
         let num_params = self.context.num_params;
+        let max_depth = self.max_depth;
         let enc = &mut self.enc;
         // 1. Declare parameter variables
         for i in 0..num_params {
@@ -247,6 +248,25 @@ impl<'a> BmcEncoderBuilder<'a> {
             enc.declare(param_var_at_step(0, i), SmtSort::Int);
             // p_i_0 = p_i (initial value)
             enc.assert_term(SmtTerm::var(param_var_at_step(0, i)).eq(SmtTerm::var(param_var(i))));
+        }
+
+        if ta.semantics.timing_model == TimingModel::PartialSynchrony {
+            enc.declare(gst_step_var(), SmtSort::Int);
+            enc.assert_term(SmtTerm::var(gst_step_var()).ge(SmtTerm::int(0)));
+            enc.assert_term(SmtTerm::var(gst_step_var()).le(SmtTerm::int(max_depth as i64)));
+
+            if let Some(gst_pid) = ta.semantics.gst_param {
+                let gst_source = if self
+                    .context
+                    .time_varying_param_ids
+                    .contains(&gst_pid.as_usize())
+                {
+                    SmtTerm::var(param_var_at_step(0, gst_pid))
+                } else {
+                    SmtTerm::var(param_var(gst_pid))
+                };
+                enc.assert_term(SmtTerm::var(gst_step_var()).eq(gst_source));
+            }
         }
 
         // 2. Encode resilience condition
@@ -530,9 +550,8 @@ impl<'a> BmcEncoderBuilder<'a> {
                 let delta_name = format!("dag_delta_{k}_{rid}");
                 enc.declare(delta_name.clone(), SmtSort::Int);
                 enc.assert_term(
-                    SmtTerm::var(delta_name.clone()).eq(
-                        SmtTerm::var(next.clone()).sub(SmtTerm::var(curr)),
-                    ),
+                    SmtTerm::var(delta_name.clone())
+                        .eq(SmtTerm::var(next.clone()).sub(SmtTerm::var(curr))),
                 );
 
                 for parent_id in parents {
@@ -840,38 +859,30 @@ impl<'a> BmcEncoderBuilder<'a> {
                     if ta.semantics.timing_model == TimingModel::PartialSynchrony
                         && selective_network
                     {
-                        if let Some(gst_pid) = ta.semantics.gst_param {
-                            let post_gst =
-                                SmtTerm::var(param_var(gst_pid)).le(SmtTerm::var(time_var(k)));
-                            if byzantine_faults {
-                                if let Some(sender_idx) = signed_uncompromised_sender_idx_by_var
-                                    .get(v)
-                                    .copied()
-                                    .flatten()
-                                {
-                                    let honest_sender = SmtTerm::var(byz_sender_var(k, sender_idx))
-                                        .eq(SmtTerm::int(0));
-                                    enc.assert_term(
-                                        SmtTerm::and(vec![post_gst.clone(), honest_sender])
-                                            .implies(net_deliver.clone().eq(available.clone())),
-                                    );
-                                }
-                            } else {
+                        let post_gst = SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(k)));
+                        if byzantine_faults {
+                            if let Some(sender_idx) = signed_uncompromised_sender_idx_by_var
+                                .get(v)
+                                .copied()
+                                .flatten()
+                            {
+                                let honest_sender =
+                                    SmtTerm::var(byz_sender_var(k, sender_idx)).eq(SmtTerm::int(0));
                                 enc.assert_term(
-                                    post_gst.implies(net_deliver.clone().eq(available.clone())),
+                                    SmtTerm::and(vec![post_gst.clone(), honest_sender])
+                                        .implies(net_deliver.clone().eq(available.clone())),
                                 );
                             }
+                        } else {
+                            enc.assert_term(
+                                post_gst.implies(net_deliver.clone().eq(available.clone())),
+                            );
                         }
                     }
-                    if ta.semantics.timing_model == TimingModel::PartialSynchrony
-                        && lossy_delivery
-                        && ta.semantics.gst_param.is_some()
+                    if ta.semantics.timing_model == TimingModel::PartialSynchrony && lossy_delivery
                     {
-                        if let Some(gst_pid) = ta.semantics.gst_param {
-                            let post_gst =
-                                SmtTerm::var(param_var(gst_pid)).le(SmtTerm::var(time_var(k)));
-                            enc.assert_term(post_gst.implies(net_drop.eq(SmtTerm::int(0))));
-                        }
+                        let post_gst = SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(k)));
+                        enc.assert_term(post_gst.implies(net_drop.eq(SmtTerm::int(0))));
                     }
                 }
 
@@ -963,13 +974,9 @@ impl<'a> BmcEncoderBuilder<'a> {
                             // Omission/crash can only drop messages that are in-flight at this step.
                             enc.assert_term(drop_term.clone().le(sent_expr.add(adv_term)));
                             if ta.semantics.timing_model == TimingModel::PartialSynchrony {
-                                if let Some(gst_pid) = ta.semantics.gst_param {
-                                    let post_gst = SmtTerm::var(param_var(gst_pid))
-                                        .le(SmtTerm::var(time_var(k)));
-                                    enc.assert_term(
-                                        post_gst.implies(drop_term.eq(SmtTerm::int(0))),
-                                    );
-                                }
+                                let post_gst =
+                                    SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(k)));
+                                enc.assert_term(post_gst.implies(drop_term.eq(SmtTerm::int(0))));
                             }
                         }
                     }
@@ -1956,6 +1963,7 @@ mod tests {
         let decls: std::collections::HashSet<_> =
             enc.declarations.iter().map(|(n, _)| n.clone()).collect();
         assert!(decls.contains("drop_0_0"));
+        assert!(decls.contains("gst_step"));
         assert!(decls.contains("time_0"));
         assert!(decls.contains("time_1"));
 
@@ -1965,7 +1973,8 @@ mod tests {
         assert!(assertions.iter().any(|a| a == "(= net_drop_0_0 drop_0_0)"));
         assert!(assertions
             .iter()
-            .any(|a| a == "(=> (<= p_3 time_0) (= net_drop_0_0 0))"));
+            .any(|a| a == "(=> (<= gst_step time_0) (= net_drop_0_0 0))"));
+        assert!(assertions.iter().any(|a| a == "(= gst_step p_3)"));
         assert!(assertions.iter().any(|a| a == "(= time_0 0)"));
         assert!(assertions.iter().any(|a| a == "(= time_1 (+ time_0 1))"));
     }
@@ -2690,7 +2699,7 @@ mod tests {
         let enc = encode_bmc(&cs, &property, 1);
         let assertions: Vec<String> = enc.assertions.iter().map(to_smtlib).collect();
         assert!(assertions.iter().any(|a| {
-            a.contains("(=> (and (<= p_3 time_0) (= byzsender_0_0 0))")
+            a.contains("(=> (and (<= gst_step time_0) (= byzsender_0_0 0))")
                 && a.contains(
                     "(= net_deliver_0_0 (+ (+ net_pending_0_0 net_send_0_0) net_forge_0_0))",
                 )
@@ -3409,13 +3418,17 @@ mod tests {
         };
 
         let step = encode_k_induction_step(&cs, &property, 1);
+        let decls: std::collections::HashSet<_> =
+            step.declarations.iter().map(|(n, _)| n.clone()).collect();
+        assert!(decls.contains("gst_step"));
         let assertions: Vec<String> = step.assertions.iter().map(to_smtlib).collect();
         assert!(assertions.iter().any(|a| a == "(= adv_0_0 0)"));
         assert!(assertions.iter().any(|a| a == "(<= drop_0_0 p_2)"));
         assert!(assertions.iter().any(|a| a == "(= net_drop_0_0 drop_0_0)"));
         assert!(assertions
             .iter()
-            .any(|a| a == "(=> (<= p_3 time_0) (= net_drop_0_0 0))"));
+            .any(|a| a == "(=> (<= gst_step time_0) (= net_drop_0_0 0))"));
+        assert!(assertions.iter().any(|a| a == "(= gst_step p_3)"));
     }
 
     #[test]
@@ -4685,7 +4698,10 @@ protocol BuggyBroadcast {
                 .iter()
                 .any(|a| a.contains("dag_delta_0_0") && a.contains("dag_active_1_0")),
             "delta should be defined as next - curr; assertions: {:?}",
-            assertions.iter().filter(|a| a.contains("dag_delta")).collect::<Vec<_>>()
+            assertions
+                .iter()
+                .filter(|a| a.contains("dag_delta"))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -4765,20 +4781,14 @@ protocol BuggyBroadcast {
             .iter()
             .filter(|d| d.starts_with("dag_active_"))
             .count();
-        assert_eq!(
-            dag_active_count, 24,
-            "4 rounds × 6 steps = 24 active vars"
-        );
+        assert_eq!(dag_active_count, 24, "4 rounds × 6 steps = 24 active vars");
 
         // 4 rounds × 5 deltas (0..4)
         let dag_delta_count = declarations
             .iter()
             .filter(|d| d.starts_with("dag_delta_"))
             .count();
-        assert_eq!(
-            dag_delta_count, 20,
-            "4 rounds × 5 steps = 20 delta vars"
-        );
+        assert_eq!(dag_delta_count, 20, "4 rounds × 5 steps = 20 delta vars");
     }
 
     #[test]
@@ -5122,7 +5132,9 @@ protocol BuggyBroadcast {
         let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
 
         // Should contain resilience re-assertion at step 1 using p_1_1 (step-1 t)
-        let has_epoch_resilience = assertions.iter().any(|a| a.contains("p_1_1") && a.contains("p_0"));
+        let has_epoch_resilience = assertions
+            .iter()
+            .any(|a| a.contains("p_1_1") && a.contains("p_0"));
         assert!(
             has_epoch_resilience,
             "resilience should be re-asserted using epoch-aware params at step 1"
@@ -5198,7 +5210,9 @@ protocol BuggyBroadcast {
         let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
 
         // Should contain mutual exclusion constraint (ite-based indicator sum <= 1)
-        let has_mutex = assertions.iter().any(|a| a.contains("ite") && a.contains("delta_0_0") && a.contains("delta_0_1"));
+        let has_mutex = assertions
+            .iter()
+            .any(|a| a.contains("ite") && a.contains("delta_0_0") && a.contains("delta_0_1"));
         assert!(
             has_mutex,
             "should have mutual-exclusion constraint for multi-rule param updates"
@@ -5220,7 +5234,9 @@ protocol BuggyBroadcast {
         for step in 0..3 {
             let curr = format!("p_1_{}", step);
             let next = format!("p_1_{}", step + 1);
-            let has_frame = assertions.iter().any(|a| a.contains(&curr) && a.contains(&next));
+            let has_frame = assertions
+                .iter()
+                .any(|a| a.contains(&curr) && a.contains(&next));
             assert!(
                 has_frame,
                 "should have frame/update constraint between step {} and {}",

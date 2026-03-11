@@ -1,0 +1,21 @@
+protocol LeadsToLivenessSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    role Replica {
+        var active: bool = true;
+        var delivered: bool = true;
+
+        init steady;
+        phase steady {}
+    }
+
+    property progress: liveness {
+        forall p: Replica. (p.active == true) ~> <> (p.delivered == true)
+    }
+}

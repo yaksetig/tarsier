@@ -775,6 +775,29 @@ pub(crate) fn cegar_eliminated_trace_json(
     })
 }
 
+pub(crate) fn cegar_lasso_witness_json(
+    witness: &tarsier_engine::result::CegarLassoWitness,
+) -> Value {
+    json!({
+        "depth": witness.depth,
+        "loop_start": witness.loop_start,
+        "loop_len": witness.loop_len,
+        "prefix_len": witness.prefix_len,
+        "trace_steps": witness.trace_steps,
+        "loop_rule_ids": witness.loop_rule_ids,
+        "param_values": witness.param_values.iter().map(|(name, value)| {
+            json!({"name": name, "value": value})
+        }).collect::<Vec<_>>(),
+        "loop_steps": witness.loop_steps.iter().map(|step| {
+            json!({
+                "smt_step": step.smt_step,
+                "rule_id": step.rule_id,
+                "delta": step.delta,
+            })
+        }).collect::<Vec<_>>(),
+    })
+}
+
 pub(crate) fn cegar_report_details(report: &CegarAuditReport) -> Value {
     let stages: Vec<Value> = report
         .stages
@@ -957,6 +980,10 @@ pub(crate) fn unbounded_fair_cegar_report_details(
                 "refinements": stage.refinements,
                 "model_changes": stage.model_changes.iter().map(cegar_model_change_json).collect::<Vec<_>>(),
                 "eliminated_traces": stage.eliminated_traces.iter().map(cegar_eliminated_trace_json).collect::<Vec<_>>(),
+                "lasso_witness": stage
+                    .lasso_witness
+                    .as_ref()
+                    .map(cegar_lasso_witness_json),
                 "discovered_predicates": stage.discovered_predicates,
                 "note": stage.note,
                 "outcome": unbounded_fair_cegar_stage_outcome_json(&stage.outcome),

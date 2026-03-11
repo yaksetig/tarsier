@@ -52,6 +52,10 @@ pub(crate) fn pdr_time_var(step: usize) -> String {
     format!("time_{step}")
 }
 
+pub(crate) fn pdr_gst_step_var() -> String {
+    "gst_step".to_string()
+}
+
 pub(crate) fn pdr_clock_var(step: usize, clock: usize) -> String {
     format!("clk_{step}_{clock}")
 }
@@ -157,6 +161,14 @@ pub(crate) fn encode_clock_guard_enabled_at_step(
         CmpOp::Lt => lhs.lt(rhs),
         CmpOp::Eq => lhs.eq(rhs),
         CmpOp::Ne => SmtTerm::not(lhs.eq(rhs)),
+    }
+}
+
+pub(crate) fn pdr_post_gst_guard_at_step(ta: &ThresholdAutomaton, step: usize) -> Option<SmtTerm> {
+    if ta.semantics.timing_model == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony {
+        Some(SmtTerm::var(pdr_gst_step_var()).le(SmtTerm::var(pdr_time_var(step))))
+    } else {
+        None
     }
 }
 
@@ -340,14 +352,9 @@ pub(crate) fn build_fair_lasso_encoding(
         }
     }
 
-    if ta.semantics.timing_model == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony {
-        if let Some(gst_pid) = ta.semantics.gst_param {
-            // Fair lasso must be fully post-GST to represent steady-state behavior.
-            step_encoding.assertions.push(
-                SmtTerm::var(pdr_param_var(gst_pid.as_usize()))
-                    .le(SmtTerm::var(pdr_time_var(loop_start))),
-            );
-        }
+    if let Some(post_gst_loop_start) = pdr_post_gst_guard_at_step(ta, loop_start) {
+        // Fair lasso must be fully post-GST to represent steady-state behavior.
+        step_encoding.assertions.push(post_gst_loop_start);
     }
 
     // Fairness on the loop:
@@ -367,15 +374,8 @@ pub(crate) fn build_fair_lasso_encoding(
                         .iter()
                         .map(|g| encode_clock_guard_enabled_at_step(g, step)),
                 );
-                if ta.semantics.timing_model
-                    == tarsier_ir::threshold_automaton::TimingModel::PartialSynchrony
-                {
-                    if let Some(gst_pid) = ta.semantics.gst_param {
-                        atoms.push(
-                            SmtTerm::var(pdr_param_var(gst_pid.as_usize()))
-                                .le(SmtTerm::var(pdr_time_var(step))),
-                        );
-                    }
+                if let Some(post_gst_at_step) = pdr_post_gst_guard_at_step(ta, step) {
+                    atoms.push(post_gst_at_step);
                 }
                 if atoms.is_empty() {
                     SmtTerm::bool(true)
@@ -414,6 +414,7 @@ pub(crate) fn build_fair_lasso_encoding(
 mod tests {
     use crate::pipeline::verification::*;
     use crate::pipeline::*;
+    use tarsier_ir::threshold_automaton::TimingModel;
 
     #[test]
     fn pdr_param_var_format() {
@@ -438,6 +439,11 @@ mod tests {
     fn pdr_time_var_format() {
         assert_eq!(pdr_time_var(0), "time_0");
         assert_eq!(pdr_time_var(10), "time_10");
+    }
+
+    #[test]
+    fn pdr_gst_step_var_format() {
+        assert_eq!(pdr_gst_step_var(), "gst_step");
     }
 
     #[test]
@@ -602,5 +608,19 @@ mod tests {
         let expected = SmtTerm::var("clk_2_1".to_string())
             .ge(SmtTerm::int(1).add(SmtTerm::int(2).mul(SmtTerm::var("p_0".to_string()))));
         assert_eq!(term, expected);
+    }
+
+    #[test]
+    fn pdr_post_gst_guard_uses_gst_step_for_partial_sync() {
+        let mut ta = ThresholdAutomaton::new();
+        ta.semantics.timing_model = TimingModel::PartialSynchrony;
+        let guard = pdr_post_gst_guard_at_step(&ta, 4).expect("partial sync should produce guard");
+        assert_eq!(guard, SmtTerm::var("gst_step").le(SmtTerm::var("time_4")));
+    }
+
+    #[test]
+    fn pdr_post_gst_guard_absent_for_async() {
+        let ta = ThresholdAutomaton::new();
+        assert!(pdr_post_gst_guard_at_step(&ta, 0).is_none());
     }
 }
