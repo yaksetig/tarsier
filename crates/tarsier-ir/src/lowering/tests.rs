@@ -371,6 +371,59 @@ role R {
 }
 
 #[test]
+fn lower_first_class_timing_block_to_ir_semantics() {
+    let src = r#"
+protocol TimingBlockCfg {
+params n, t, f, gst;
+resilience: n > 3*t;
+adversary { model: omission; bound: f; }
+timing {
+    model: partial_synchrony;
+    gst: gst;
+}
+message M;
+role R {
+    init s;
+    phase s {}
+}
+}
+"#;
+    let prog = parse(src, "timing_block_cfg.trs").unwrap();
+    let ta = lower(&prog).unwrap();
+    assert_eq!(ta.semantics.fault_model, FaultModel::Omission);
+    assert_eq!(ta.semantics.timing_model, TimingModel::PartialSynchrony);
+    let gst = ta.semantics.gst_param.expect("gst param should be set");
+    assert_eq!(ta.parameters[gst.as_usize()].name, "gst");
+}
+
+#[test]
+fn lower_rejects_conflicting_legacy_and_first_class_timing_models() {
+    let src = r#"
+protocol TimingConflict {
+params n, t, f, gst;
+resilience: n > 3*t;
+adversary {
+    model: omission;
+    bound: f;
+    timing: asynchronous;
+    gst: gst;
+}
+timing {
+    model: partial_synchrony;
+    gst: gst;
+}
+role R {
+    init s;
+    phase s {}
+}
+}
+"#;
+    let prog = parse(src, "timing_conflict.trs").unwrap();
+    let err = lower(&prog).expect_err("conflicting timing declarations must be rejected");
+    assert!(format!("{err}").contains("Conflicting timing model declarations"));
+}
+
+#[test]
 fn lower_parses_byzantine_equivocation_mode() {
     let src = r#"
 protocol EqCfg {
@@ -1562,7 +1615,7 @@ role R {
     let prog = parse(src, "missing_gst.trs").unwrap();
     let err = lower(&prog).expect_err("partial_synchrony without gst should be rejected");
     let msg = format!("{err}");
-    assert!(msg.contains("requires `adversary { gst: <param>; }`"));
+    assert!(msg.contains("requires `timing { gst: <param>; }`"));
 }
 
 #[test]

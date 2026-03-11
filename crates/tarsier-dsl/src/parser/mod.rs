@@ -177,6 +177,7 @@ fn parse_protocol(
     let mut resilience = None;
     let mut pacemaker = None;
     let mut adversary = Vec::new();
+    let mut timing = None;
     let mut identities = Vec::new();
     let mut channels = Vec::new();
     let mut equivocation_policies = Vec::new();
@@ -229,6 +230,19 @@ fn parse_protocol(
             }
             Rule::adversary_decl => {
                 adversary = parse_adversary_collecting(item, &mut semantic_errors)?;
+            }
+            Rule::timing_decl => {
+                let decl = parse_timing(item, source, filename)?;
+                if timing.is_some() {
+                    semantic_errors.push(ParseError::syntax(
+                        "Duplicate timing declaration",
+                        decl.span,
+                        source,
+                        filename,
+                    ));
+                } else {
+                    timing = Some(decl);
+                }
             }
             Rule::identity_decl => {
                 identities.push(parse_identity(item)?);
@@ -293,6 +307,7 @@ fn parse_protocol(
             resilience,
             pacemaker,
             adversary,
+            timing,
             identities,
             channels,
             equivocation_policies,
@@ -382,7 +397,8 @@ fn parse_module(pair: Pair<'_>, _source: &str, _filename: &str) -> Result<Module
             | Rule::channel_decl
             | Rule::equivocation_decl
             | Rule::identity_decl
-            | Rule::pacemaker_decl => {
+            | Rule::pacemaker_decl
+            | Rule::timing_decl => {
                 let span = span_from(&item);
                 let rule_name = format!("{:?}", item.as_rule());
                 return Err(ParseError::UnsupportedInModule {
@@ -637,6 +653,46 @@ fn parse_adversary(pair: Pair<'_>) -> Result<Vec<AdversaryItem>, ParseError> {
         return Err(err);
     }
     Ok(items)
+}
+
+fn parse_timing(pair: Pair<'_>, source: &str, filename: &str) -> Result<TimingDecl, ParseError> {
+    let span = span_from(&pair);
+    let mut model = None;
+    let mut gst = None;
+    for item in pair.into_inner() {
+        match item.as_rule() {
+            Rule::timing_model_item => {
+                let mut inner = item.into_inner();
+                let raw = next_child(&mut inner, "timing model")?.as_str().to_string();
+                if model.replace(raw).is_some() {
+                    return Err(ParseError::syntax(
+                        "timing block has duplicate `model` entries",
+                        span,
+                        source,
+                        filename,
+                    ));
+                }
+            }
+            Rule::timing_gst_item => {
+                let mut inner = item.into_inner();
+                let raw = next_child(&mut inner, "timing gst")?.as_str().to_string();
+                if gst.replace(raw).is_some() {
+                    return Err(ParseError::syntax(
+                        "timing block has duplicate `gst` entries",
+                        span,
+                        source,
+                        filename,
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let model = model.ok_or_else(|| {
+        ParseError::syntax("timing block missing `model` entry", span, source, filename)
+    })?;
+    Ok(TimingDecl { model, gst, span })
 }
 
 /// Parse adversary items, collecting `InvalidField` errors into `errors` instead
@@ -1906,6 +1962,9 @@ pub fn resolve_imports(
             .extend(imported_proto.equivocation_policies);
         if program.protocol.node.adversary.is_empty() {
             program.protocol.node.adversary = imported_proto.adversary;
+        }
+        if program.protocol.node.timing.is_none() {
+            program.protocol.node.timing = imported_proto.timing;
         }
         if program.protocol.node.resilience.is_none() {
             program.protocol.node.resilience = imported_proto.resilience;

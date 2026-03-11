@@ -196,3 +196,5 @@ Highest-priority dependency edges:
 `2026-03-11T01:55:01Z | AGENT_ID=1 | LCORPUS-01 | START | Building liveness feature coverage matrix across existing protocol examples`
 `2026-03-11T01:55:54Z | AGENT_ID=1 | LCORPUS-01 | PR_OPEN | Branch codex/agent1-gst-lcorpus-01-v1 commit 986bde2; PR https://github.com/yaksetig/tarsier/pull/new/codex/agent1-gst-lcorpus-01-v1`
 `2026-03-11T01:55:54Z | AGENT_ID=1 | LCORPUS-01 | DONE | Published liveness example corpus matrix at docs/LIVENESS_CORPUS_COVERAGE_MATRIX.md; commit 986bde2; checks: rg -n --glob 'examples/**/*.trs' 'property\\s+.*:\\s*liveness'; python3 scripts/board_status.py --board MULTI_AGENT_EXECUTION_BOARD_PHASE4.md`
+`2026-03-11T02:02:44Z | AGENT_ID=1 | GST-02 | CLAIM | Claimed GST-02 on branch codex/agent1-gst-02-v1`
+`2026-03-11T02:02:44Z | AGENT_ID=1 | GST-02 | START | Implementing first-class timing block in DSL/AST/parser with lowering bridge from legacy adversary timing keys`
