@@ -116,11 +116,20 @@ impl<'a> KInductionEncoderBuilder<'a> {
     pub(super) fn phase_declare_parameters_and_resilience(&mut self) {
         let ta = self.ta;
         let num_params = self.context.num_params;
+        let k = self.k;
         let enc = &mut self.enc;
         // Parameters and resilience
         for i in 0..num_params {
             enc.declare(param_var(i), SmtSort::Int);
             enc.assert_term(SmtTerm::var(param_var(i)).ge(SmtTerm::int(0)));
+        }
+        if ta.semantics.timing_model == TimingModel::PartialSynchrony {
+            enc.declare(gst_step_var(), SmtSort::Int);
+            enc.assert_term(SmtTerm::var(gst_step_var()).ge(SmtTerm::int(0)));
+            enc.assert_term(SmtTerm::var(gst_step_var()).le(SmtTerm::int(k as i64)));
+            if let Some(gst_pid) = ta.semantics.gst_param {
+                enc.assert_term(SmtTerm::var(gst_step_var()).eq(SmtTerm::var(param_var(gst_pid))));
+            }
         }
         if let Some(ref rc) = ta.constraints.resilience_condition {
             let lhs = encode_lc(&rc.lhs);
@@ -618,39 +627,32 @@ impl<'a> KInductionEncoderBuilder<'a> {
                     if ta.semantics.timing_model == TimingModel::PartialSynchrony
                         && selective_network
                     {
-                        if let Some(gst_pid) = ta.semantics.gst_param {
-                            let post_gst =
-                                SmtTerm::var(param_var(gst_pid)).le(SmtTerm::var(time_var(step)));
-                            if byzantine_faults {
-                                if let Some(sender_idx) = signed_uncompromised_sender_idx_by_var
-                                    .get(v)
-                                    .copied()
-                                    .flatten()
-                                {
-                                    let honest_sender =
-                                        SmtTerm::var(byz_sender_var(step, sender_idx))
-                                            .eq(SmtTerm::int(0));
-                                    enc.assert_term(
-                                        SmtTerm::and(vec![post_gst.clone(), honest_sender])
-                                            .implies(net_deliver.clone().eq(available.clone())),
-                                    );
-                                }
-                            } else {
+                        let post_gst =
+                            SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(step)));
+                        if byzantine_faults {
+                            if let Some(sender_idx) = signed_uncompromised_sender_idx_by_var
+                                .get(v)
+                                .copied()
+                                .flatten()
+                            {
+                                let honest_sender = SmtTerm::var(byz_sender_var(step, sender_idx))
+                                    .eq(SmtTerm::int(0));
                                 enc.assert_term(
-                                    post_gst.implies(net_deliver.clone().eq(available.clone())),
+                                    SmtTerm::and(vec![post_gst.clone(), honest_sender])
+                                        .implies(net_deliver.clone().eq(available.clone())),
                                 );
                             }
+                        } else {
+                            enc.assert_term(
+                                post_gst.implies(net_deliver.clone().eq(available.clone())),
+                            );
                         }
                     }
-                    if ta.semantics.timing_model == TimingModel::PartialSynchrony
-                        && lossy_delivery
-                        && ta.semantics.gst_param.is_some()
+                    if ta.semantics.timing_model == TimingModel::PartialSynchrony && lossy_delivery
                     {
-                        if let Some(gst_pid) = ta.semantics.gst_param {
-                            let post_gst =
-                                SmtTerm::var(param_var(gst_pid)).le(SmtTerm::var(time_var(step)));
-                            enc.assert_term(post_gst.implies(net_drop.eq(SmtTerm::int(0))));
-                        }
+                        let post_gst =
+                            SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(step)));
+                        enc.assert_term(post_gst.implies(net_drop.eq(SmtTerm::int(0))));
                     }
                 }
                 let has_set_update = ta.rules.iter().any(|rule| {
@@ -734,13 +736,9 @@ impl<'a> KInductionEncoderBuilder<'a> {
                         if let Some(drop_term) = drop_term {
                             enc.assert_term(drop_term.clone().le(sent_expr.add(adv_term)));
                             if ta.semantics.timing_model == TimingModel::PartialSynchrony {
-                                if let Some(gst_pid) = ta.semantics.gst_param {
-                                    let post_gst = SmtTerm::var(param_var(gst_pid))
-                                        .le(SmtTerm::var(time_var(step)));
-                                    enc.assert_term(
-                                        post_gst.implies(drop_term.eq(SmtTerm::int(0))),
-                                    );
-                                }
+                                let post_gst =
+                                    SmtTerm::var(gst_step_var()).le(SmtTerm::var(time_var(step)));
+                                enc.assert_term(post_gst.implies(drop_term.eq(SmtTerm::int(0))));
                             }
                         }
                     }
