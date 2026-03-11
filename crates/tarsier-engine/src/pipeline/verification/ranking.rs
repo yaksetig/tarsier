@@ -392,6 +392,7 @@ pub(crate) fn try_ranking_function_proof<S: SmtSolver>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tarsier_smt::backends::z3_backend::Z3Solver;
     use tarsier_ir::threshold_automaton::*;
 
     /// Build a minimal counter system with two locations and one transition.
@@ -450,5 +451,38 @@ mod tests {
         assert_eq!(coeff_names[0], "c_0");
         assert_eq!(coeff_names[1], "c_1");
         assert_eq!(coeff_names[2], "c_2");
+    }
+
+    #[test]
+    fn try_ranking_function_proof_returns_not_found_when_no_state_vars() {
+        let cs = CounterSystem::from(ThresholdAutomaton::new());
+        let mut solver = Z3Solver::with_timeout_secs(2);
+        let target = FairLivenessTarget::NonGoalLocs(vec![]);
+        let result =
+            try_ranking_function_proof(&mut solver, &cs, &target, &RankingConfig::default())
+                .expect("ranking proof should return a result");
+        match result {
+            RankingResult::NotFound { reason } => {
+                assert!(reason.contains("No state variables"));
+            }
+            other => panic!("expected NotFound for empty state vars, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn try_ranking_function_proof_returns_not_found_when_no_rules() {
+        let mut cs = simple_two_location_system();
+        cs.rules.clear();
+        let mut solver = Z3Solver::with_timeout_secs(2);
+        let target = FairLivenessTarget::NonGoalLocs(vec![0]);
+        let result =
+            try_ranking_function_proof(&mut solver, &cs, &target, &RankingConfig::default())
+                .expect("ranking proof should return a result");
+        match result {
+            RankingResult::NotFound { reason } => {
+                assert!(reason.contains("No transition rules"));
+            }
+            other => panic!("expected NotFound for no rules, got {other:?}"),
+        }
     }
 }

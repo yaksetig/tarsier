@@ -1541,4 +1541,62 @@ mod tests {
             "encoder should fail closed when immediate semantics is requested"
         );
     }
+
+    #[test]
+    fn k_induction_partial_synchrony_with_varying_gst_binds_gst_step_to_epoch_zero_param() {
+        let (mut ta, l1) = build_reconfig_ta();
+        ta.semantics.timing_model = TimingModel::PartialSynchrony;
+        ta.semantics.gst_param = Some(ParamId::from(1)); // varying "t"
+
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_k_induction_step(&cs, &property, 2);
+
+        let decl_names: Vec<&str> = encoding
+            .declarations
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert!(decl_names.contains(&"gst_step"));
+        assert!(decl_names.contains(&"p_1_0"));
+
+        let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("gst_step") && a.contains("p_1_0") && a.contains("=")),
+            "expected gst_step to be bound to epoch-0 varying GST parameter"
+        );
+    }
+
+    #[test]
+    fn k_induction_partial_synchrony_with_fixed_gst_binds_gst_step_to_global_param() {
+        let (mut ta, l1) = build_reconfig_ta();
+        ta.semantics.timing_model = TimingModel::PartialSynchrony;
+        ta.semantics.gst_param = Some(ParamId::from(0)); // fixed "n"
+
+        let cs = CounterSystem::from(ta);
+        let property = SafetyProperty::Invariant {
+            bad_sets: vec![vec![l1]],
+        };
+        let encoding = encode_k_induction_step(&cs, &property, 2);
+
+        let decl_names: Vec<&str> = encoding
+            .declarations
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert!(decl_names.contains(&"gst_step"));
+        assert!(decl_names.contains(&"p_0"));
+
+        let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
+        assert!(
+            assertions
+                .iter()
+                .any(|a| a.contains("gst_step") && a.contains("p_0") && a.contains("=")),
+            "expected gst_step to be bound to fixed GST parameter p_0"
+        );
+    }
 }

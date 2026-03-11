@@ -2310,6 +2310,18 @@ protocol MissingResilience {
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
+
+    #[test]
+    fn test_parse_proof_engine_accepts_ranking() {
+        let engine = parse_proof_engine("ranking").expect("ranking should parse");
+        assert_eq!(engine, ProofEngine::Ranking);
+    }
+
+    #[test]
+    fn test_parse_proof_engine_rejects_unknown_value() {
+        let err = parse_proof_engine("bogus").expect_err("unknown engine should fail");
+        assert!(err.contains("expected kinduction|pdr|ranking"));
+    }
 }
 
 #[cfg(test)]

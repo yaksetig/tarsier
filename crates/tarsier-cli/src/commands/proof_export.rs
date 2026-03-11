@@ -595,6 +595,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_proof_engine_accepts_ranking_metadata() {
+        let parsed = parse_proof_engine("ranking").expect("ranking engine should parse");
+        assert_eq!(parsed, ProofEngine::Ranking);
+    }
+
+    #[test]
+    fn parse_proof_engine_rejects_unknown_metadata_value() {
+        let err = parse_proof_engine("unknown").expect_err("unknown engine should fail");
+        assert!(err.to_string().contains("Unsupported proof engine"));
+    }
+
+    #[test]
     fn collect_obligation_artifacts_preserves_hash_and_proof_fields() {
         let metadata = CertificateMetadata {
             schema_version: 2,
