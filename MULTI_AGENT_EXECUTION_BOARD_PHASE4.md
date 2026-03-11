@@ -277,3 +277,5 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; fin
 `2026-03-11T02:45:23Z | AGENT_ID=1 | LCORPUS-02 | DONE | Added 7 liveness examples (leads-to, nested temporal, always-eventually, multi-role, buggy variants); commit 65149d1; tests: cargo run -q -p tarsier-cli -- parse <each new .trs>`
 `2026-03-11T02:46:07Z | AGENT_ID=1 | LCORPUS-03 | CLAIM | taking task`
 `2026-03-11T02:46:07Z | AGENT_ID=1 | LCORPUS-03 | START | adding liveness regression manifest and CI gate via example-matrix-fast extension`
+`2026-03-11T02:49:29Z | AGENT_ID=1 | LCORPUS-03 | PR_OPEN | Branch codex/agent1-lcorpus-02-v1 commit d08f922`
+`2026-03-11T02:49:29Z | AGENT_ID=1 | LCORPUS-03 | DONE | Added examples/example_matrix_liveness_fast.json and extended scripts/example-matrix-fast.sh + workflow gate for liveness/fair-liveness; commit d08f922; tests: ./scripts/example-matrix-fast.sh --manifest examples/example_matrix_liveness_fast.json --report-out /tmp/example-matrix-liveness-report.json && ./scripts/example-matrix-fast.sh --manifest examples/example_matrix_fast.json --report-out /tmp/example-matrix-safety-report.json`
