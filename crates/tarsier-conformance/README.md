@@ -34,6 +34,10 @@ formally verified model and a real-world implementation.
 - `network_shim::NetworkFaultAction` -- Fault action enum for active
   perturbations (`delay_message`, `drop_message`, `reorder_channel`,
   `partition_link`, `heal_partition`, `spawn_twin`, `retire_twin`).
+- `active::scenario_from_counterexample(trace, scenario_id, options)` --
+  Convert model counterexamples into executable active fault schedules.
+- `active::ActiveScenario` -- Serializable scenario artifact for active
+  conformance/adversarial replay flows.
 - `adapters` module -- Trace format adapters for different systems (native
   runtime traces, CometBFT, etcd-raft).
 
