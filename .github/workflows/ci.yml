@@ -52,6 +52,20 @@ jobs:
       - name: Enforce Kernel Spec Consistency
         run: python3 ./.github/scripts/check_kernel_spec_consistency.py
 
+      - name: Enforce Kernel Semantics Artifact Contract
+        run: python3 ./.github/scripts/check_kernel_semantics_artifact.py
+
+      - name: Setup Lean Toolchain
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf > /tmp/elan-init.sh
+          sh /tmp/elan-init.sh -y --default-toolchain stable
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Enforce Kernel Lean Prototype Contract
+        run: |
+          lean --version
+          python3 ./.github/scripts/check_kernel_lean_prototype.py
+
       - name: Enforce Checker Soundness Artifact
         run: python3 ./.github/scripts/check_checker_soundness_artifact.py
 
@@ -98,6 +112,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: Enforce Kernel Semantics Artifact Sync
+        run: |
+          mkdir -p /tmp/tarsier-kernel-semantics
+          cargo run -q -p tarsier-proof-kernel --bin kernel-semantics-export -- \
+            --out /tmp/tarsier-kernel-semantics/kernel_semantics_v1.json
+          diff -u artifacts/kernel-semantics/kernel_semantics_v1.json \
+            /tmp/tarsier-kernel-semantics/kernel_semantics_v1.json
 
       - name: Rustfmt
         run: cargo fmt --check

@@ -243,5 +243,14 @@ Total: **31** distinct error codes.
 | `docs/TRUST_BOUNDARY.md` | Trust assumptions, governance profiles, threat model |
 | `docs/CHECKER_SOUNDNESS_ARGUMENT.md` | Soundness argument artifact with explicit assumptions/non-goals and machine-checked subset proof links |
 | `docs/KERNEL_FORMALIZATION_RFC.md` | Formalization roadmap for exported semantics + Lean/Coq checker soundness milestones |
+| `docs/kernel-semantics-schema-v1.json` | JSON schema for checker-semantics export artifacts |
+| `artifacts/kernel-semantics/kernel_semantics_v1.json` | Canonical v1 checker-semantics artifact emitted by `kernel-semantics-export` |
+| `artifacts/kernel-semantics/lean/KernelSemanticsV1.lean` | Lean prototype theorem module proving minimal checker-soundness implication over exported semantics |
+| `.github/scripts/export_kernel_semantics_lean.py` | Deterministic exporter from JSON semantics artifact to Lean prototype module |
+| `.github/scripts/check_kernel_lean_prototype.py` | Contract check: Lean module regen parity + theorem typecheck |
+| `artifacts/kernel-semantics/coq/KernelSemanticsV1.v` | Coq prototype theorem module proving the same minimal checker-soundness implication |
+| `.github/scripts/export_kernel_semantics_coq.py` | Deterministic exporter from JSON semantics artifact to Coq prototype module |
+| `.github/scripts/check_kernel_coq_prototype.py` | Contract check: Coq module regen parity + theorem typecheck |
+| `.github/workflows/kernel-coq-proof.yml` | CI enforcement for Coq prototype theorem check |
 | `crates/tarsier-proof-kernel/src/lib.rs` | Reference implementation |
 | `crates/tarsier-certcheck/src/main.rs` | Standalone replay binary using this kernel |

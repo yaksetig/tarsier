@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tarsier.dev/schemas/kernel-semantics-v1.json",
+  "title": "Tarsier Kernel Semantics Artifact v1",
+  "description": "Machine-readable checker-semantics export used by Lean/Coq prototype ingestion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "certificate_schema_version",
+    "certificate_hash_domain_tag",
+    "fail_closed",
+    "certificate_schema_doc_path",
+    "obligation_profiles",
+    "governance_profiles",
+    "issue_codes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "certificate_schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "certificate_hash_domain_tag": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fail_closed": {
+      "type": "boolean"
+    },
+    "certificate_schema_doc_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "obligation_profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "proof_engine",
+          "required_obligations",
+          "requires_induction_k",
+          "fairness"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "proof_engine": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required_obligations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "requires_induction_k": {
+            "type": "boolean"
+          },
+          "fairness": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "weak",
+                    "strong"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "governance_profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "min_solvers",
+          "require_proofs",
+          "require_proof_checker",
+          "require_foundational_proof_path"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "reinforced",
+              "high-assurance"
+            ]
+          },
+          "min_solvers": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "require_proofs": {
+            "type": "boolean"
+          },
+          "require_proof_checker": {
+            "type": "boolean"
+          },
+          "require_foundational_proof_path": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "issue_codes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z_]+$"
+      },
+      "uniqueItems": true
+    }
+  }
+}

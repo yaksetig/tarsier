@@ -52,6 +52,11 @@ pub(crate) fn delta_var(step: usize, rule: usize) -> String {
     format!("delta_{step}_{rule}")
 }
 
+/// Cumulative number of reconfiguration steps up to and including `step`.
+pub(super) fn reconf_count_var(step: usize) -> String {
+    format!("reconf_count_{step}")
+}
+
 /// Message drop count for shared var `var` at step `step` (omission faults).
 pub(super) fn drop_var(step: usize, var: impl std::fmt::Display) -> String {
     format!("drop_{step}_{var}")
@@ -190,6 +195,14 @@ mod tests {
     fn delta_var_format() {
         assert_eq!(delta_var(0, 0), "delta_0_0");
         assert_eq!(delta_var(3, 7), "delta_3_7");
+    }
+
+    // ── reconf_count_var ──
+
+    #[test]
+    fn reconf_count_var_format() {
+        assert_eq!(reconf_count_var(0), "reconf_count_0");
+        assert_eq!(reconf_count_var(4), "reconf_count_4");
     }
 
     // ── drop_var ──

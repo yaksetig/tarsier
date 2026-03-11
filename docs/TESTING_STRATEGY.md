@@ -167,3 +167,61 @@ CI gates:
 Quality bar:
 - Benchmark reports must preserve schema compatibility and include deterministic replay metadata.
 - Regressions must be triaged with artifact evidence before budget thresholds are relaxed.
+
+## 10) Mutation Testing Gates (PR + Nightly)
+
+Purpose:
+- Detect weak assertions and survivable behavioral regressions in critical crates.
+- Enforce a practical PR mutation quality gate while preserving a broader nightly campaign.
+
+CI gates:
+- PR targeted gate: `.github/workflows/mutation-testing-pr.yml`
+  - Scope: `tarsier-engine` and `tarsier-ir`
+  - Budget: `--timeout=180 -j 2`, job timeout `60` minutes
+  - Threshold: `MUTATION_SCORE_MIN=65`
+- Nightly full campaign: `.github/workflows/mutation-testing.yml`
+  - Scope: `tarsier-smt`, `tarsier-prob`, `tarsier-engine`, `tarsier-ir`
+  - Threshold: `MUTATION_SCORE_MIN=70`
+  - Schedule: nightly at `03:00 UTC`
+
+Quality gate script:
+- `.github/scripts/check_mutation_score.py` reads `mutants.out/outcomes.json`
+  and fails when score `< MUTATION_SCORE_MIN`.
+
+## 11) ByMC Parity Gates (PR + Nightly)
+
+Purpose:
+- Enforce real ByMC execution parity in PRs with a bounded targeted corpus.
+- Preserve a broader nightly full-manifest parity run for drift detection.
+
+CI gates:
+- PR targeted gate: `.github/workflows/bymc-parity-pr.yml`
+  - Manifest: `benchmarks/cross_tool_scenarios/scenario_manifest_real_bymc_smoke.json`
+  - Tools: `tarsier,bymc` with `--bymc-mode real`
+  - Budget: workflow timeout `45` minutes, runner timeout `180` seconds per scenario
+- Nightly full parity: `.github/workflows/bymc-verification.yml`
+  - Manifest: `benchmarks/cross_tool_scenarios/scenario_manifest.json`
+  - Tools: `tarsier,bymc` with `--bymc-mode real`
+  - Schedule: nightly at `02:00 UTC`
+
+Contract checks:
+- `.github/scripts/check_cross_tool_external_execution.py`
+  validates required tools are present and real ByMC execution occurred.
+- `.github/scripts/check_cross_tool_verdict_parity.py`
+  fails on verdict mismatch across tools.
+
+## 12) Branch Protection Required Checks (main)
+
+Purpose:
+- Keep CI enforcement aligned with branch-protection settings for merges into `main`.
+- Ensure new PR enforcement workflows remain non-optional.
+
+Recommended required checks for `main` branch protection:
+- `CI / build-test`
+- `Mutation Testing (PR Targeted) / mutation-test-pr`
+- `ByMC Parity (PR Targeted) / bymc-parity-pr`
+
+Configuration guidance:
+- Require all listed checks to pass before merge.
+- Require branch up-to-date before merge (so latest required checks rerun on head SHA).
+- Do not mark nightly workflows as required checks (nightly jobs are drift detection, not merge gating).

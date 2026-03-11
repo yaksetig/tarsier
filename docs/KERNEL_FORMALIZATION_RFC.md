@@ -96,6 +96,10 @@ The exported semantics artifact (`KERN-02`) must include:
 
 Deliverable:
 - machine-readable semantics artifact that both Lean/Coq adapters can ingest.
+- initial artifact path: `artifacts/kernel-semantics/kernel_semantics_v1.json`
+- initial schema path: `docs/kernel-semantics-schema-v1.json`
+- initial exporter entrypoint:
+  `cargo run -p tarsier-proof-kernel --bin kernel-semantics-export -- --out artifacts/kernel-semantics/kernel_semantics_v1.json`
 
 Acceptance criteria:
 - artifact covers all current kernel error-code classes;
@@ -114,18 +118,31 @@ Minimum theorem target:
 - hash-match predicates,
 - SMT structural sanity predicates.
 
+Prototype artifacts:
+- generator: `.github/scripts/export_kernel_semantics_lean.py`
+- checked Lean module: `artifacts/kernel-semantics/lean/KernelSemanticsV1.lean`
+- contract checker: `.github/scripts/check_kernel_lean_prototype.py`
+
 Acceptance criteria:
 - theorem checked in CI by Lean;
 - at least one negative counterexample construction tested (reject path).
+- deterministic regeneration gate (`export_kernel_semantics_lean.py` output must match committed Lean module).
 
 ## M3 (KERN-04): Coq Prototype Parity Theorem
 
 Minimum theorem target:
 - Coq statement equivalent to Lean theorem over same exported semantics artifact.
 
+Prototype artifacts:
+- generator: `.github/scripts/export_kernel_semantics_coq.py`
+- checked Coq module: `artifacts/kernel-semantics/coq/KernelSemanticsV1.v`
+- contract checker: `.github/scripts/check_kernel_coq_prototype.py`
+- CI workflow: `.github/workflows/kernel-coq-proof.yml`
+
 Acceptance criteria:
 - Coq proof script checks in CI;
 - proof scope and assumptions documented side-by-side with Lean statement.
+- deterministic regeneration gate (`export_kernel_semantics_coq.py` output must match committed Coq module).
 
 ## M4 (Post KERN-04): Parity Drift Gate
 

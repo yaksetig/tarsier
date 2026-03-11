@@ -1,25 +1,27 @@
-name: Mutation Testing (PR)
+name: Mutation Testing (PR Targeted)
 
 on:
   pull_request:
+    branches:
+      - main
     paths:
-      - 'crates/tarsier-smt/src/**'
-      - 'crates/tarsier-prob/src/**'
-      - 'crates/tarsier-engine/src/**'
-      - 'crates/tarsier-ir/src/**'
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/scripts/check_mutation_score.py"
+      - ".github/workflows/mutation-testing*.yml"
+  workflow_dispatch:
 
 env:
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
   CARGO_TERM_COLOR: always
-  # PR-targeted mutation score threshold. Intentionally lower than nightly
-  # to avoid blocking PRs on pre-existing surviving mutants.
-  MUTATION_SCORE_MIN: "60"
+  # Slightly lower than nightly full-corpus runs to keep PR latency practical.
+  MUTATION_SCORE_MIN: "65"
 
 jobs:
   mutation-test-pr:
     runs-on: ubuntu-latest
-    # Budget: keep PR cycle time reasonable. The nightly job has no limit.
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -36,38 +38,20 @@ jobs:
       - name: Install cargo-mutants
         run: cargo install cargo-mutants
 
-      - name: Detect changed crates
-        id: changed
+      - name: Run targeted mutation testing for PR gating
         run: |
-          # Only mutate crates whose source files were touched in this PR.
-          changed_crates=""
-          for crate in tarsier-smt tarsier-prob tarsier-engine tarsier-ir; do
-            if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "crates/${crate}/src/"; then
-              changed_crates="${changed_crates} -p ${crate}"
-            fi
-          done
-          echo "crates=${changed_crates}" >> "$GITHUB_OUTPUT"
-          echo "Targeted crates: ${changed_crates:-none}"
-
-      - name: Run targeted mutation testing
-        if: steps.changed.outputs.crates != ''
-        run: |
-          cargo mutants --no-shuffle --timeout=120 -j 2 \
-            ${{ steps.changed.outputs.crates }} \
+          cargo mutants --no-shuffle --timeout=180 -j 2 \
+            -p tarsier-engine \
+            -p tarsier-ir \
           || true
 
       - name: Mutation score quality gate
-        if: steps.changed.outputs.crates != ''
-        run: python .github/scripts/check_mutation_score.py
-
-      - name: Skip (no targeted crates changed)
-        if: steps.changed.outputs.crates == ''
-        run: echo "No mutation-tested crates changed in this PR. Skipping."
+        run: python3 .github/scripts/check_mutation_score.py
 
       - name: Upload mutation testing results
-        if: always() && steps.changed.outputs.crates != ''
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mutation-testing-pr-results
           path: mutants.out/
-          retention-days: 7
+          retention-days: 14
