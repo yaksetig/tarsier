@@ -271,3 +271,5 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; fin
 2026-03-11T02:34:27Z | AGENT_ID=1 | GST-05 | START | Adding 4 GST-focused example protocols (safe + buggy PBFT view-change and Tendermint liveness) using first-class timing block
 2026-03-11T02:37:34Z | AGENT_ID=1 | GST-05 | PR_OPEN | Branch codex/agent1-gst-04-v1 commit f513215; PR https://github.com/yaksetig/tarsier/pull/new/codex/agent1-gst-04-v1
 2026-03-11T02:37:34Z | AGENT_ID=1 | GST-05 | DONE | Added 4 new GST-focused examples using first-class timing block (safe+buggy PBFT view-change and Tendermint liveness) under examples/gst plus corpus README; commit f513215; checks: for f in examples/gst/*.trs; do cargo run -q -p tarsier-cli -- lint ""; done; cargo check --workspace
+`2026-03-11T02:43:25Z | AGENT_ID=1 | LCORPUS-02 | CLAIM | taking task`
+`2026-03-11T02:43:25Z | AGENT_ID=1 | LCORPUS-02 | START | creating 6+ liveness-focused .trs examples (leads-to, nested temporal, multi-role, buggy variants)`

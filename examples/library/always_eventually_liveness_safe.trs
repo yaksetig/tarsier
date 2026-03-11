@@ -1,0 +1,20 @@
+protocol AlwaysEventuallyLivenessSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    role Replica {
+        var making_progress: bool = true;
+
+        init ready;
+        phase ready {}
+    }
+
+    property progress: liveness {
+        forall p: Replica. [] <> (p.making_progress == true)
+    }
+}

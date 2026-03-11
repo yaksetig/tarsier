@@ -1,0 +1,28 @@
+protocol TwoRoleLivenessSafe {
+    params n, t, f;
+    resilience: n > 3*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    role Proposer {
+        var proposed: bool = true;
+
+        init sent;
+        phase sent {}
+    }
+
+    role Replica {
+        var acknowledged: bool = true;
+
+        init acked;
+        phase acked {}
+    }
+
+    property progress: liveness {
+        forall p: Proposer. forall r: Replica.
+            (p.proposed == true) ~> <> (r.acknowledged == true)
+    }
+}
