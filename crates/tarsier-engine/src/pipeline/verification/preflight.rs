@@ -910,6 +910,7 @@ mod tests {
             resilience: None,
             pacemaker: None,
             adversary: vec![],
+            timing: None,
             identities: vec![],
             channels: vec![ast::ChannelDecl {
                 message: "Vote".into(),
@@ -942,6 +943,7 @@ mod tests {
             resilience: None,
             pacemaker: None,
             adversary: vec![],
+            timing: None,
             identities: vec![],
             channels: vec![],
             equivocation_policies: vec![],
@@ -970,6 +972,7 @@ mod tests {
             resilience: None,
             pacemaker: None,
             adversary: vec![],
+            timing: None,
             identities: vec![],
             channels: vec![],
             equivocation_policies: vec![ast::EquivocationDecl {
@@ -1003,6 +1006,7 @@ mod tests {
             resilience: None,
             pacemaker: None,
             adversary: vec![],
+            timing: None,
             identities: vec![],
             channels: vec![],
             equivocation_policies: vec![],
