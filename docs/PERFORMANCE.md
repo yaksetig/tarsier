@@ -130,6 +130,18 @@ These expectations are exercised in
 - `benchmark_liveness_hotstuff_chained_weak_fairness_finds_cycle`
 - `benchmark_liveness_tendermint_locking_weak_fairness_finds_cycle`
 
+For CI regression tracking of unbounded fair-liveness convergence, use:
+
+- `scripts/liveness_perf_regression.py`
+- `examples/liveness_pdr_regression_manifest.json`
+
+The harness runs `tarsier prove-fair` scenarios and checks:
+
+- expected verdict stability (`live_proved`/`fair_cycle_found`)
+- convergence outcome (`converged`/`counterexample`)
+- frontier-frame bounds (`details.convergence.frontier_frame` when present)
+- runtime budget compliance per scenario
+
 ## 6. Pinned-Environment Reproducibility
 
 CI performance benchmark jobs (`library-benchmark-smoke`, `library-benchmark-large`) run on pinned

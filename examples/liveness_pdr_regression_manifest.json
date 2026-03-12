@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "suite": "liveness-pdr-regression",
+  "entries": [
+    {
+      "id": "trivial_live_weak",
+      "file": "examples/library/trivial_live.trs",
+      "fairness": "weak",
+      "k": 12,
+      "expected_result": "live_proved",
+      "expected_outcome": "converged",
+      "max_frontier_frame": 3,
+      "max_runtime_ms": 5000
+    },
+    {
+      "id": "pbft_safe_live_weak",
+      "file": "examples/library/pbft_liveness_safe_ci.trs",
+      "fairness": "weak",
+      "k": 12,
+      "expected_result": "live_proved",
+      "expected_outcome": "converged",
+      "max_frontier_frame": 3,
+      "max_runtime_ms": 5000
+    },
+    {
+      "id": "rb_live_buggy_weak",
+      "file": "examples/library/reliable_broadcast_live_buggy.trs",
+      "fairness": "weak",
+      "k": 12,
+      "expected_result": "fair_cycle_found",
+      "expected_outcome": "counterexample",
+      "max_runtime_ms": 5000
+    },
+    {
+      "id": "pbft_buggy_live_weak",
+      "file": "examples/library/pbft_liveness_buggy_ci.trs",
+      "fairness": "weak",
+      "k": 12,
+      "expected_result": "fair_cycle_found",
+      "expected_outcome": "counterexample",
+      "max_runtime_ms": 5000
+    }
+  ]
+}

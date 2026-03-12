@@ -51,6 +51,12 @@ jobs:
           cargo bench --bench pdr_perf       -- --output-format bencher | tee target/criterion-results/pdr_perf.txt
           cat target/criterion-results/*.txt > target/criterion-results/all.txt
 
+      - name: Run liveness convergence regression checks
+        run: |
+          python3 scripts/liveness_perf_regression.py \
+            --manifest examples/liveness_pdr_regression_manifest.json \
+            --report-out target/criterion-results/liveness_pdr_regression.json
+
       # Upload raw benchmark output as an artifact for manual inspection.
       - name: Upload benchmark results artifact
         uses: actions/upload-artifact@v4

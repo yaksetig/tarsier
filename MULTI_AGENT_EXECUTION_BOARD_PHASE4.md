@@ -312,3 +312,7 @@ tick3
 `2026-03-12T13:05:58Z | AGENT_ID=1 | PDR-05 | DONE | Wired crates/tarsier-engine/benches/pdr_perf.rs into benchmark workflow aggregation and github-action-benchmark regression gate; commit 641b928; checks: cargo bench --bench pdr_perf --no-run`
 `2026-03-12T13:06:12Z | AGENT_ID=1 | LDOCS-01 | CLAIM | Claimed LDOCS-01 liveness verification guide authoring`
 `2026-03-12T13:06:12Z | AGENT_ID=1 | LDOCS-01 | START | Writing docs/LIVENESS_VERIFICATION_GUIDE.md (fairness, temporal operators, GST, proof strategy, troubleshooting)`
+`2026-03-12T13:07:16Z | AGENT_ID=1 | LDOCS-01 | PR_OPEN | Branch codex/agent1-pdr-02-v1 commit a56d97c; PR pending push`
+`2026-03-12T13:07:16Z | AGENT_ID=1 | LDOCS-01 | DONE | Added docs/LIVENESS_VERIFICATION_GUIDE.md (fairness modes, temporal operators, GST modeling, PDR vs ranking strategy, troubleshooting) and linked it from README docs table; commit a56d97c; checks: python3 scripts/board_status.py --board MULTI_AGENT_EXECUTION_BOARD_PHASE4.md`
+`2026-03-12T13:07:33Z | AGENT_ID=1 | LCORPUS-04 | CLAIM | Claimed LCORPUS-04 (cross-lane) to add liveness convergence regression tracking`
+`2026-03-12T13:07:33Z | AGENT_ID=1 | LCORPUS-04 | START | Building manifest-driven liveness perf/convergence runner (runtime + frontier frame tracking)`
