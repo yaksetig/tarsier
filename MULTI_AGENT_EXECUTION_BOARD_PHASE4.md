@@ -322,3 +322,5 @@ tick3
 `2026-03-12T13:11:17Z | AGENT_ID=1 | PDR-04 | START | Adding focused regression tests for core-guided and priority-guided cube generalization behavior`
 `2026-03-12T13:13:34Z | AGENT_ID=1 | PDR-04 | PR_OPEN | Branch codex/agent1-pdr-02-v1 commit 30f464e; PR pending push`
 `2026-03-12T13:13:34Z | AGENT_ID=1 | PDR-04 | DONE | Added regression coverage for aggressive cube generalization: unsat-core-first behavior and priority-guided literal-drop fallback with scripted solver tests; commit 30f464e; checks: cargo test -p tarsier-engine generalization_ -- --nocapture`
+`2026-03-12T13:19:58Z | AGENT_ID=1 | PDR-03 | CLAIM | Claimed PDR-03 (cross-lane) to reduce fairness monitor CE state via enabled-condition classes`
+`2026-03-12T13:19:58Z | AGENT_ID=1 | PDR-03 | START | Implementing fairness class map over rule enabled signatures and sharing mon_ce monitor bits per class`

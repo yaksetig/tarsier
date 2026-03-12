@@ -3,6 +3,7 @@
 use crate::pipeline::verification::*;
 use crate::pipeline::*;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tarsier_ir::threshold_automaton::Rule;
 
 pub(crate) fn run_fair_lasso_search<S: SmtSolver>(
     solver: &mut S,
@@ -273,6 +274,74 @@ pub(crate) fn push_decl_unique(decls: &mut Vec<(String, SmtSort)>, name: String,
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct FairRuleClassMap {
+    pub(crate) rule_to_class: Vec<usize>,
+    pub(crate) classes: Vec<Vec<usize>>,
+}
+
+pub(crate) fn fair_rule_enabled_signature(rule: &Rule) -> String {
+    format!("{:?}|{:?}", rule.guard.atoms, rule.clock_guards)
+}
+
+pub(crate) fn build_fair_rule_class_map(cs: &CounterSystem) -> FairRuleClassMap {
+    let mut class_by_signature: std::collections::BTreeMap<String, usize> =
+        std::collections::BTreeMap::new();
+    let mut classes: Vec<Vec<usize>> = Vec::new();
+    let mut rule_to_class = vec![0usize; cs.num_rules()];
+
+    for (rule_id, rule) in cs.rules.iter().enumerate() {
+        let signature = fair_rule_enabled_signature(rule);
+        let class_id = if let Some(existing) = class_by_signature.get(&signature) {
+            *existing
+        } else {
+            let next = classes.len();
+            class_by_signature.insert(signature, next);
+            classes.push(Vec::new());
+            next
+        };
+        rule_to_class[rule_id] = class_id;
+        classes[class_id].push(rule_id);
+    }
+
+    FairRuleClassMap {
+        rule_to_class,
+        classes,
+    }
+}
+
+pub(crate) fn fair_rule_enabled_condition_pre(
+    rule: &Rule,
+    post_gst_now: Option<SmtTerm>,
+) -> SmtTerm {
+    let mut enabled_now = if rule.guard.atoms.is_empty() {
+        SmtTerm::bool(true)
+    } else {
+        SmtTerm::and(
+            rule.guard
+                .atoms
+                .iter()
+                .map(|a| encode_guard_atom_enabled_at_step(a, 0))
+                .collect(),
+        )
+    };
+    if !rule.clock_guards.is_empty() {
+        enabled_now = SmtTerm::and(vec![
+            enabled_now,
+            SmtTerm::and(
+                rule.clock_guards
+                    .iter()
+                    .map(|g| encode_clock_guard_enabled_at_step(g, 0))
+                    .collect(),
+            ),
+        ]);
+    }
+    if let Some(post_gst_now) = post_gst_now {
+        enabled_now = SmtTerm::and(vec![enabled_now, post_gst_now]);
+    }
+    enabled_now
+}
+
 pub(crate) fn build_unbounded_fair_pdr_artifacts(
     cs: &CounterSystem,
     target: &FairLivenessTarget,
@@ -314,6 +383,8 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
     let mut state_vars_pre = Vec::new();
     let mut state_vars_post = Vec::new();
     let mut state_assertions_pre_extra = Vec::new();
+    let fair_rule_classes = build_fair_rule_class_map(cs);
+    let fairness_class_count = fair_rule_classes.classes.len();
 
     for loc in 0..cs.num_locations() {
         state_vars_pre.push((pdr_kappa_var(0, loc), SmtSort::Int));
@@ -361,8 +432,10 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
         for clock in 0..cs.clocks.len() {
             push_decl_unique(&mut declarations, mon_snap_clock(step, clock), SmtSort::Int);
         }
+        for class_id in 0..fairness_class_count {
+            push_decl_unique(&mut declarations, mon_ce(step, class_id), SmtSort::Int);
+        }
         for rule in 0..cs.num_rules() {
-            push_decl_unique(&mut declarations, mon_ce(step, rule), SmtSort::Int);
             push_decl_unique(&mut declarations, mon_fired(step, rule), SmtSort::Int);
         }
     }
@@ -401,9 +474,11 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
         state_vars_pre.push((mon_snap_clock(0, clock), SmtSort::Int));
         state_vars_post.push((mon_snap_clock(1, clock), SmtSort::Int));
     }
+    for class_id in 0..fairness_class_count {
+        state_vars_pre.push((mon_ce(0, class_id), SmtSort::Int));
+        state_vars_post.push((mon_ce(1, class_id), SmtSort::Int));
+    }
     for rule in 0..cs.num_rules() {
-        state_vars_pre.push((mon_ce(0, rule), SmtSort::Int));
-        state_vars_post.push((mon_ce(1, rule), SmtSort::Int));
         state_vars_pre.push((mon_fired(0, rule), SmtSort::Int));
         state_vars_post.push((mon_fired(1, rule), SmtSort::Int));
     }
@@ -422,8 +497,10 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
 
     // Domains on monitor bits.
     state_assertions_pre_extra.extend(bit_domain(mon_armed(0)));
+    for class_id in 0..fairness_class_count {
+        state_assertions_pre_extra.extend(bit_domain(mon_ce(0, class_id)));
+    }
     for rule in 0..cs.num_rules() {
-        state_assertions_pre_extra.extend(bit_domain(mon_ce(0, rule)));
         state_assertions_pre_extra.extend(bit_domain(mon_fired(0, rule)));
     }
     transition_assertions.extend(bit_domain(mon_choose(0)));
@@ -505,8 +582,10 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
         init_assertions
             .push(SmtTerm::var(mon_snap_clock(0, clock)).eq(SmtTerm::var(pdr_clock_var(0, clock))));
     }
+    for class_id in 0..fairness_class_count {
+        init_assertions.push(bit_is_false(mon_ce(0, class_id)));
+    }
     for rule in 0..cs.num_rules() {
-        init_assertions.push(bit_is_false(mon_ce(0, rule)));
         init_assertions.push(bit_is_false(mon_fired(0, rule)));
     }
     if let Some(automaton) = temporal_automaton {
@@ -587,35 +666,11 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
         }
     }
 
-    for (rule_id, rule) in ta.rules.iter().enumerate() {
-        let mut enabled_now = if rule.guard.atoms.is_empty() {
-            SmtTerm::bool(true)
-        } else {
-            SmtTerm::and(
-                rule.guard
-                    .atoms
-                    .iter()
-                    .map(|a| encode_guard_atom_enabled_at_step(a, 0))
-                    .collect(),
-            )
-        };
-        if !rule.clock_guards.is_empty() {
-            enabled_now = SmtTerm::and(vec![
-                enabled_now,
-                SmtTerm::and(
-                    rule.clock_guards
-                        .iter()
-                        .map(|g| encode_clock_guard_enabled_at_step(g, 0))
-                        .collect(),
-                ),
-            ]);
-        }
-        if let Some(post_gst_now) = post_gst_now.clone() {
-            enabled_now = SmtTerm::and(vec![enabled_now, post_gst_now]);
-        }
-        let fired_now = SmtTerm::var(pdr_delta_var(0, rule_id)).gt(SmtTerm::int(0));
-        let ce0_true = bit_is_true(mon_ce(0, rule_id));
-        let fired0_true = bit_is_true(mon_fired(0, rule_id));
+    for (class_id, rules_in_class) in fair_rule_classes.classes.iter().enumerate() {
+        let representative = rules_in_class[0];
+        let enabled_now =
+            fair_rule_enabled_condition_pre(&ta.rules[representative], post_gst_now.clone());
+        let ce0_true = bit_is_true(mon_ce(0, class_id));
 
         let ce_arm = bool_to_bit(enabled_now.clone());
         let ce_cont = match fairness {
@@ -633,8 +688,13 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
                 Box::new(SmtTerm::int(0)),
             )),
         );
-        transition_assertions.push(SmtTerm::var(mon_ce(1, rule_id)).eq(ce_next));
+        transition_assertions.push(SmtTerm::var(mon_ce(1, class_id)).eq(ce_next));
+        transition_assertions.extend(bit_domain(mon_ce(1, class_id)));
+    }
 
+    for rule_id in 0..cs.num_rules() {
+        let fired_now = SmtTerm::var(pdr_delta_var(0, rule_id)).gt(SmtTerm::int(0));
+        let fired0_true = bit_is_true(mon_fired(0, rule_id));
         let fired_arm = bool_to_bit(fired_now.clone());
         let fired_cont = bool_to_bit(SmtTerm::or(vec![fired0_true, fired_now]));
         let fired_next = SmtTerm::Ite(
@@ -647,7 +707,6 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
             )),
         );
         transition_assertions.push(SmtTerm::var(mon_fired(1, rule_id)).eq(fired_next));
-        transition_assertions.extend(bit_domain(mon_ce(1, rule_id)));
         transition_assertions.extend(bit_domain(mon_fired(1, rule_id)));
     }
     if let Some(automaton) = temporal_automaton {
@@ -720,8 +779,9 @@ pub(crate) fn build_unbounded_fair_pdr_artifacts(
         }
     }
     for rule in 0..cs.num_rules() {
+        let class_id = fair_rule_classes.rule_to_class[rule];
         closure_terms.push(SmtTerm::or(vec![
-            bit_is_true(mon_ce(0, rule)).not(),
+            bit_is_true(mon_ce(0, class_id)).not(),
             bit_is_true(mon_fired(0, rule)),
         ]));
     }
