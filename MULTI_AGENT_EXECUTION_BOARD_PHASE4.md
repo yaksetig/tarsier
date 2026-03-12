@@ -308,3 +308,7 @@ tick3
 `2026-03-12T13:04:45Z | AGENT_ID=1 | PDR-02 | DONE | Incremental fair-PDR query scopes via push/pop (no per-query reset/declaration), with fresh unsat-core assumption IDs and one-time solver prepare; commit c27ace3; checks: cargo test -p tarsier-engine fair_pdr -- --nocapture; cargo test -p tarsier-engine --test liveness_tests fair_liveness_partial_synchrony_ignores_pre_gst_only_cycles -- --nocapture; cargo check --workspace`
 `2026-03-12T13:05:01Z | AGENT_ID=1 | PDR-05 | CLAIM | Claimed PDR-05 (cross-lane) to wire pdr_perf benchmark into CI regression gate`
 `2026-03-12T13:05:01Z | AGENT_ID=1 | PDR-05 | START | Integrating pdr_perf criterion suite into benchmark workflow and regression output aggregation`
+`2026-03-12T13:05:58Z | AGENT_ID=1 | PDR-05 | PR_OPEN | Branch codex/agent1-pdr-02-v1 commit 641b928; PR pending push`
+`2026-03-12T13:05:58Z | AGENT_ID=1 | PDR-05 | DONE | Wired crates/tarsier-engine/benches/pdr_perf.rs into benchmark workflow aggregation and github-action-benchmark regression gate; commit 641b928; checks: cargo bench --bench pdr_perf --no-run`
+`2026-03-12T13:06:12Z | AGENT_ID=1 | LDOCS-01 | CLAIM | Claimed LDOCS-01 liveness verification guide authoring`
+`2026-03-12T13:06:12Z | AGENT_ID=1 | LDOCS-01 | START | Writing docs/LIVENESS_VERIFICATION_GUIDE.md (fairness, temporal operators, GST, proof strategy, troubleshooting)`

@@ -158,6 +158,7 @@ cargo run -p tarsier-playground
 | [Tutorial](docs/TUTORIAL.md) | Detailed feature-by-feature guide |
 | [Example Catalog](docs/EXAMPLE_CATALOG.md) | Annotated guide to all 48 example protocols |
 | [Language Reference](docs/LANGUAGE_REFERENCE.md) | Complete DSL syntax and semantics |
+| [Liveness Verification Guide](docs/LIVENESS_VERIFICATION_GUIDE.md) | Fairness modes, GST modeling, proof strategy selection, troubleshooting |
 | [Advanced Usage](docs/ADVANCED_USAGE.md) | CI integration, governance, certificates, CEGAR, benchmarks |
 | [Parameterized Verification](docs/PARAMETERIZED_VERIFICATION.md) | When results generalize beyond fixed parameters |
 | [Semantics](docs/SEMANTICS.md) | Formal semantics and soundness assumptions |
