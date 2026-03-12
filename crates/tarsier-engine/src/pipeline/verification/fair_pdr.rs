@@ -1726,7 +1726,8 @@ pub(crate) fn run_unbounded_fair_pdr_with_certificate<S: SmtSolver>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
+    use std::io;
     use tarsier_smt::solver::{Model, ModelValue};
 
     // ========================================================================
@@ -2601,5 +2602,188 @@ mod tests {
         assert_eq!(cert.invariant_pre.len(), 1);
         let expected_block = cube.to_block_clause(&artifacts.state_vars_pre);
         assert_eq!(cert.invariant_pre[0], expected_block);
+    }
+
+    // ========================================================================
+    // 15. PDR-04 generalization behavior
+    // ========================================================================
+
+    struct ScriptedSolver {
+        supports_unsat_core: bool,
+        check_sat_queue: VecDeque<SatResult>,
+        check_sat_assuming_result: SatResult,
+        check_sat_calls: usize,
+        check_sat_assuming_calls: usize,
+        last_assumptions: Vec<String>,
+        core_take_first_only: bool,
+    }
+
+    impl Default for ScriptedSolver {
+        fn default() -> Self {
+            Self {
+                supports_unsat_core: false,
+                check_sat_queue: VecDeque::new(),
+                check_sat_assuming_result: SatResult::Sat,
+                check_sat_calls: 0,
+                check_sat_assuming_calls: 0,
+                last_assumptions: Vec::new(),
+                core_take_first_only: false,
+            }
+        }
+    }
+
+    impl ScriptedSolver {
+        fn with_unsat_core(result: SatResult, core_take_first_only: bool) -> Self {
+            Self {
+                supports_unsat_core: true,
+                check_sat_assuming_result: result,
+                core_take_first_only,
+                ..Self::default()
+            }
+        }
+
+        fn with_check_sat_queue(results: &[SatResult]) -> Self {
+            Self {
+                check_sat_queue: results.iter().cloned().collect(),
+                ..Self::default()
+            }
+        }
+
+        fn next_check_sat(&mut self) -> SatResult {
+            self.check_sat_queue.pop_front().unwrap_or(SatResult::Sat)
+        }
+    }
+
+    impl SmtSolver for ScriptedSolver {
+        type Error = io::Error;
+
+        fn declare_var(&mut self, _name: &str, _sort: &SmtSort) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn assert(&mut self, _term: &SmtTerm) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn push(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn pop(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn check_sat(&mut self) -> Result<SatResult, Self::Error> {
+            self.check_sat_calls += 1;
+            Ok(self.next_check_sat())
+        }
+
+        fn check_sat_with_model(
+            &mut self,
+            _var_names: &[(&str, &SmtSort)],
+        ) -> Result<(SatResult, Option<Model>), Self::Error> {
+            Ok((self.check_sat()?, None))
+        }
+
+        fn supports_assumption_unsat_core(&self) -> bool {
+            self.supports_unsat_core
+        }
+
+        fn check_sat_assuming(&mut self, assumptions: &[String]) -> Result<SatResult, Self::Error> {
+            self.check_sat_assuming_calls += 1;
+            self.last_assumptions = assumptions.to_vec();
+            Ok(self.check_sat_assuming_result.clone())
+        }
+
+        fn get_unsat_core_assumptions(&mut self) -> Result<Vec<String>, Self::Error> {
+            if !self.supports_unsat_core || self.last_assumptions.is_empty() {
+                return Ok(Vec::new());
+            }
+            if self.core_take_first_only {
+                return Ok(vec![self.last_assumptions[0].clone()]);
+            }
+            Ok(self.last_assumptions.clone())
+        }
+
+        fn reset(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    fn generalization_artifacts() -> FairPdrArtifacts {
+        FairPdrArtifacts {
+            declarations: vec![
+                ("m_armed_0".to_string(), SmtSort::Int),
+                ("g_0_0".to_string(), SmtSort::Int),
+                ("kappa_0_0".to_string(), SmtSort::Int),
+                ("m_armed_1".to_string(), SmtSort::Int),
+                ("g_1_0".to_string(), SmtSort::Int),
+                ("kappa_1_0".to_string(), SmtSort::Int),
+            ],
+            state_vars_pre: vec![
+                ("m_armed_0".to_string(), SmtSort::Int),
+                ("g_0_0".to_string(), SmtSort::Int),
+                ("kappa_0_0".to_string(), SmtSort::Int),
+            ],
+            state_vars_post: vec![
+                ("m_armed_1".to_string(), SmtSort::Int),
+                ("g_1_0".to_string(), SmtSort::Int),
+                ("kappa_1_0".to_string(), SmtSort::Int),
+            ],
+            state_assertions_pre: Vec::new(),
+            init_assertions: Vec::new(),
+            transition_assertions: Vec::new(),
+            bad_pre: SmtTerm::bool(false),
+        }
+    }
+
+    #[test]
+    fn generalization_prefers_unsat_core_before_literal_dropping() {
+        let artifacts = generalization_artifacts();
+        let frames = vec![FairPdrFrame::default(), FairPdrFrame::default()];
+        let cube = make_cube(&[(0, 1), (1, 2), (2, 3)]);
+        let mut solver = ScriptedSolver::with_unsat_core(SatResult::Unsat, true);
+
+        let (generalized, reason) =
+            fair_try_generalize_cube(&mut solver, &artifacts, &frames, 1, &cube, &[], None)
+                .expect("generalization should succeed");
+
+        assert!(reason.is_none());
+        let generalized = generalized.expect("core-based cube expected");
+        assert_eq!(generalized.lits.len(), 1);
+        assert_eq!(solver.check_sat_assuming_calls, 1);
+        assert_eq!(
+            solver.check_sat_calls, 0,
+            "single/pair literal dropping should not run when core generalization succeeds"
+        );
+    }
+
+    #[test]
+    fn generalization_fallback_uses_priority_guided_literal_dropping() {
+        let artifacts = generalization_artifacts();
+        let frames = vec![FairPdrFrame::default(), FairPdrFrame::default()];
+        let cube = make_cube(&[(0, 1), (1, 7), (2, 3)]);
+        let mut solver = ScriptedSolver::with_check_sat_queue(&[
+            SatResult::Sat,   // dropping monitor literal (idx=0) fails
+            SatResult::Unsat, // dropping gamma literal (idx=1) succeeds
+            SatResult::Sat,   // no further single literal drop from reduced cube
+            SatResult::Sat,
+        ]);
+
+        let (generalized, reason) =
+            fair_try_generalize_cube(&mut solver, &artifacts, &frames, 1, &cube, &[], None)
+                .expect("generalization should succeed");
+
+        assert!(reason.is_none());
+        let generalized = generalized.expect("literal-drop generalized cube expected");
+        assert_eq!(generalized.lits.len(), 2);
+        assert!(
+            generalized.lits.iter().all(|lit| lit.state_var_idx != 1),
+            "gamma literal should be dropped in fallback generalization"
+        );
+        assert!(
+            solver.check_sat_calls >= 2,
+            "fallback path should exercise predecessor SAT checks"
+        );
     }
 }

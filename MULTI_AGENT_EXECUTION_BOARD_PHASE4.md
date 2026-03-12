@@ -316,3 +316,7 @@ tick3
 `2026-03-12T13:07:16Z | AGENT_ID=1 | LDOCS-01 | DONE | Added docs/LIVENESS_VERIFICATION_GUIDE.md (fairness modes, temporal operators, GST modeling, PDR vs ranking strategy, troubleshooting) and linked it from README docs table; commit a56d97c; checks: python3 scripts/board_status.py --board MULTI_AGENT_EXECUTION_BOARD_PHASE4.md`
 `2026-03-12T13:07:33Z | AGENT_ID=1 | LCORPUS-04 | CLAIM | Claimed LCORPUS-04 (cross-lane) to add liveness convergence regression tracking`
 `2026-03-12T13:07:33Z | AGENT_ID=1 | LCORPUS-04 | START | Building manifest-driven liveness perf/convergence runner (runtime + frontier frame tracking)`
+`2026-03-12T13:11:06Z | AGENT_ID=1 | LCORPUS-04 | PR_OPEN | Branch codex/agent1-pdr-02-v1 commit 203da38; PR pending push`
+`2026-03-12T13:11:06Z | AGENT_ID=1 | LCORPUS-04 | DONE | Added manifest-driven liveness convergence regression harness (scripts/liveness_perf_regression.py + examples/liveness_pdr_regression_manifest.json), wired benchmark workflow step, and documented in docs/PERFORMANCE.md; commit 203da38; checks: python3 scripts/liveness_perf_regression.py --manifest examples/liveness_pdr_regression_manifest.json --report-out /tmp/liveness-pdr-regression-report.json`
+`2026-03-12T13:11:17Z | AGENT_ID=1 | PDR-04 | CLAIM | Claimed PDR-04 (cross-lane) to finalize aggressive unsat-core + literal-drop generalization coverage`
+`2026-03-12T13:11:17Z | AGENT_ID=1 | PDR-04 | START | Adding focused regression tests for core-guided and priority-guided cube generalization behavior`
