@@ -619,7 +619,7 @@ pub(super) fn sum_terms_balanced(terms: Vec<SmtTerm>) -> SmtTerm {
 /// Delegates to [`encoding_helpers::encode_linear_combination`] with the
 /// standard `p_i` naming convention.
 pub(super) fn encode_lc(lc: &LinearCombination) -> SmtTerm {
-    encoding_helpers::encode_linear_combination(lc, |i| param_var(i))
+    encoding_helpers::encode_linear_combination(lc, param_var)
 }
 
 /// Encode a [`LinearCombination`] using step-dependent variables for time-varying
@@ -657,7 +657,7 @@ pub(super) fn encode_threshold_guard_at_step(
         .iter()
         .map(|var| SmtTerm::var(gamma_var(step, *var)))
         .collect();
-    encoding_helpers::encode_threshold_guard(var_terms, op, bound, distinct, |i| param_var(i))
+    encoding_helpers::encode_threshold_guard(var_terms, op, bound, distinct, param_var)
 }
 
 /// Like [`encode_threshold_guard_at_step`] but uses step-dependent variables

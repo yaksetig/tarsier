@@ -1150,11 +1150,13 @@ pub fn prove_safety_with_cegar(
             &ta,
             &property,
             &cti_summary,
-            &cs,
-            options,
-            &committee_bounds,
-            max_refinements,
-            deadline,
+            CtiSynthesisContext {
+                cs: &cs,
+                options,
+                committee_bounds: &committee_bounds,
+                max_refinements,
+                deadline,
+            },
         ) {
             Ok(locs) => locs,
             Err(PipelineError::Solver(reason)) if reason.contains("timed out") => {

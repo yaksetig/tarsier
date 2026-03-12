@@ -544,16 +544,27 @@ pub(crate) fn prove_location_unreachable_for_synthesis(
     Ok(matches!(kind_result, KInductionResult::Proved { .. }))
 }
 
+pub(crate) struct CtiSynthesisContext<'a> {
+    pub(crate) cs: &'a CounterSystem,
+    pub(crate) options: &'a PipelineOptions,
+    pub(crate) committee_bounds: &'a [(usize, u64)],
+    pub(crate) max_refinements: usize,
+    pub(crate) deadline: Option<Instant>,
+}
+
 pub(crate) fn synthesize_cti_zero_location_invariants(
     ta: &ThresholdAutomaton,
     property: &SafetyProperty,
     cti: &InductionCtiSummary,
-    cs: &CounterSystem,
-    options: &PipelineOptions,
-    committee_bounds: &[(usize, u64)],
-    max_refinements: usize,
-    deadline: Option<Instant>,
+    ctx: CtiSynthesisContext<'_>,
 ) -> Result<Vec<usize>, PipelineError> {
+    let CtiSynthesisContext {
+        cs,
+        options,
+        committee_bounds,
+        max_refinements,
+        deadline,
+    } = ctx;
     let candidate_budget = (max_refinements.max(1)) * 2;
     let candidates = cti_zero_location_candidates(ta, property, cti, candidate_budget);
     if candidates.is_empty() {

@@ -458,7 +458,11 @@ pub fn run_refinement_solver<S: SmtSolver>(
         return Ok(SimulationCheckResult::SimulationHolds { depth });
     }
 
-    info!(depth, mismatches = product.mismatch_locations.len(), "refinement: encoding product");
+    info!(
+        depth,
+        mismatches = product.mismatch_locations.len(),
+        "refinement: encoding product"
+    );
 
     let encoding = encode_refinement_check(product, depth);
 
@@ -514,14 +518,15 @@ fn extract_violation(
     depth: usize,
     model: &Option<crate::solver::Model>,
 ) -> (usize, ProductLocationId) {
-    let default_mismatch = product
-        .mismatch_locations
-        .first()
-        .cloned()
-        .unwrap_or(ProductLocationId {
-            concrete: tarsier_ir::threshold_automaton::LocationId::from(0),
-            abstract_loc: tarsier_ir::threshold_automaton::LocationId::from(0),
-        });
+    let default_mismatch =
+        product
+            .mismatch_locations
+            .first()
+            .copied()
+            .unwrap_or(ProductLocationId {
+                concrete: tarsier_ir::threshold_automaton::LocationId::from(0),
+                abstract_loc: tarsier_ir::threshold_automaton::LocationId::from(0),
+            });
 
     let Some(model) = model else {
         return (0, default_mismatch);
@@ -534,7 +539,7 @@ fn extract_violation(
                 let var_name = prod_kappa(step, idx);
                 if let Some(val) = model.get_int(&var_name) {
                     if val > 0 {
-                        return (step, mismatch.clone());
+                        return (step, *mismatch);
                     }
                 }
             }
@@ -616,7 +621,7 @@ fn extract_witness(
     RefinementWitness {
         depth,
         violation_step,
-        mismatch_location: mismatch_location.clone(),
+        mismatch_location: *mismatch_location,
         parameter_values,
         trace,
     }

@@ -1080,10 +1080,10 @@ impl<'a> BmcEncoderBuilder<'a> {
                     let mut append_deltas: Vec<SmtTerm> = Vec::new();
                     for &r in active_rule_ids {
                         for cu in &ta.rules[r].collection_updates {
-                            if cu.collection.as_usize() == cid {
-                                if matches!(cu.kind, CollectionUpdateKind::Append(_)) {
-                                    append_deltas.push(SmtTerm::var(delta_var(k, r)));
-                                }
+                            if cu.collection.as_usize() == cid
+                                && matches!(cu.kind, CollectionUpdateKind::Append(_))
+                            {
+                                append_deltas.push(SmtTerm::var(delta_var(k, r)));
                             }
                         }
                     }

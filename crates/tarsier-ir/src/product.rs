@@ -16,6 +16,17 @@ use crate::threshold_automaton::{
     SharedVarId, ThresholdAutomaton, Update, UpdateKind,
 };
 
+/// Shared context required while constructing synchronized product rules.
+struct ProductRuleBuildContext<'a> {
+    concrete: &'a ThresholdAutomaton,
+    abstract_ta: &'a ThresholdAutomaton,
+    mapping: &'a RefinementMapping,
+    concrete_var_map: &'a HashMap<SharedVarId, SharedVarId>,
+    abstract_var_map: &'a HashMap<SharedVarId, SharedVarId>,
+    concrete_param_map: &'a HashMap<ParamId, ParamId>,
+    abstract_param_map: &'a HashMap<ParamId, ParamId>,
+}
+
 /// A location in the product automaton, pairing a concrete and abstract location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ProductLocationId {
@@ -192,16 +203,15 @@ pub fn build_product(
     }
 
     // --- 4. Build product rules ---
-    let rules = build_product_rules(
+    let rules = build_product_rules(ProductRuleBuildContext {
         concrete,
         abstract_ta,
         mapping,
-        relation.simulation_kind,
-        &concrete_var_map,
-        &abstract_var_map,
-        &concrete_param_map,
-        &abstract_param_map,
-    );
+        concrete_var_map: &concrete_var_map,
+        abstract_var_map: &abstract_var_map,
+        concrete_param_map: &concrete_param_map,
+        abstract_param_map: &abstract_param_map,
+    });
 
     Ok(ProductAutomaton {
         locations,
@@ -358,16 +368,17 @@ fn remap_updates(
 ///
 /// Additionally, for concrete rules where the source maps to an internal
 /// location (None), create stutter rules where the abstract side doesn't move.
-fn build_product_rules(
-    concrete: &ThresholdAutomaton,
-    abstract_ta: &ThresholdAutomaton,
-    mapping: &RefinementMapping,
-    _simulation_kind: SimulationKind,
-    concrete_var_map: &HashMap<SharedVarId, SharedVarId>,
-    abstract_var_map: &HashMap<SharedVarId, SharedVarId>,
-    concrete_param_map: &HashMap<ParamId, ParamId>,
-    abstract_param_map: &HashMap<ParamId, ParamId>,
-) -> Vec<ProductRule> {
+fn build_product_rules(ctx: ProductRuleBuildContext<'_>) -> Vec<ProductRule> {
+    let ProductRuleBuildContext {
+        concrete,
+        abstract_ta,
+        mapping,
+        concrete_var_map,
+        abstract_var_map,
+        concrete_param_map,
+        abstract_param_map,
+    } = ctx;
+
     let mut rules = Vec::new();
 
     for (c_idx, c_rule) in concrete.rules.iter().enumerate() {

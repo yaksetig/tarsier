@@ -230,9 +230,8 @@ pub(super) fn build_common_encoder_context(cs: &CounterSystem) -> CommonEncoderC
             .iter()
             .enumerate()
             .filter(|(_, loc)| {
-                loc.local_vars.get("__alive").map_or(false, |v| {
-                    v == &tarsier_ir::threshold_automaton::LocalValue::Bool(false)
-                })
+                loc.local_vars.get("__alive")
+                    == Some(&tarsier_ir::threshold_automaton::LocalValue::Bool(false))
             })
             .map(|(i, _)| i)
             .collect()
