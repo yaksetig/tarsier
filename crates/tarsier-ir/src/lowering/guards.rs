@@ -190,18 +190,15 @@ pub(super) fn normalize_guard_clause(guard: &ast::GuardExpr) -> Vec<(String, ast
     keyed
 }
 
-pub(super) fn rebuild_guard_clause(conjuncts: Vec<(String, ast::GuardExpr)>) -> ast::GuardExpr {
+pub(super) fn rebuild_guard_clause(
+    conjuncts: Vec<(String, ast::GuardExpr)>,
+) -> Option<ast::GuardExpr> {
     let mut iter = conjuncts.into_iter().map(|(_, expr)| expr);
-    // Safety: callers only pass conjunct lists produced by normalize_guard_clause(),
-    // which always yields at least one element since guard_to_dnf_raw_clauses()
-    // never produces empty clauses.
-    let mut clause = iter
-        .next()
-        .expect("normalized DNF guard clause should contain at least one conjunct");
+    let mut clause = iter.next()?;
     for expr in iter {
         clause = ast::GuardExpr::And(Box::new(clause), Box::new(expr));
     }
-    clause
+    Some(clause)
 }
 
 pub(super) fn sorted_guard_keys_subset(subset: &[String], superset: &[String]) -> bool {
@@ -292,7 +289,9 @@ pub(super) fn guard_to_dnf_clauses(guard: &ast::GuardExpr) -> Vec<ast::GuardExpr
         .into_iter()
         .enumerate()
         .filter_map(|(idx, (_keys, conjuncts))| {
-            (!subsumed[idx]).then(|| rebuild_guard_clause(conjuncts))
+            (!subsumed[idx])
+                .then(|| rebuild_guard_clause(conjuncts))
+                .flatten()
         })
         .collect()
 }
@@ -697,7 +696,7 @@ mod tests {
     #[test]
     fn rebuild_single_conjunct() {
         let conjuncts = vec![("key".into(), threshold_guard("X"))];
-        let rebuilt = rebuild_guard_clause(conjuncts);
+        let rebuilt = rebuild_guard_clause(conjuncts).expect("single conjunct rebuilds");
         assert!(matches!(rebuilt, ast::GuardExpr::Threshold(_)));
     }
 
@@ -707,7 +706,7 @@ mod tests {
             ("a".into(), threshold_guard("A")),
             ("b".into(), threshold_guard("B")),
         ];
-        let rebuilt = rebuild_guard_clause(conjuncts);
+        let rebuilt = rebuild_guard_clause(conjuncts).expect("multi conjunct rebuilds");
         assert!(matches!(rebuilt, ast::GuardExpr::And(_, _)));
     }
 }

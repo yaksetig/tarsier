@@ -202,8 +202,10 @@ impl<'a> ConformanceChecker<'a> {
                             continue;
                         }
 
-                        let from_lid = from_lid.unwrap();
-                        let to_lid = to_lid.unwrap();
+                        let (Some(from_lid), Some(to_lid)) = (from_lid, to_lid) else {
+                            // Defensive fallback: unknown locations already emitted above.
+                            continue;
+                        };
 
                         // Verify transition validity
                         if let Some(rid) = rule_id {
@@ -1133,10 +1135,7 @@ mod tests {
         };
 
         let result = checker.check(&trace_fail);
-        assert!(
-            !result.passed,
-            "distinct count is 2, need 3 — should fail"
-        );
+        assert!(!result.passed, "distinct count is 2, need 3 — should fail");
 
         // 3 messages from 3 distinct senders: should satisfy >= t+1 = 3
         let trace_pass = RuntimeTrace {

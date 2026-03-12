@@ -189,10 +189,10 @@ fn parse_solver_result_token(stdout: &str) -> miette::Result<String> {
         );
     }
 
-    Ok(distinct
+    distinct
         .into_iter()
         .next()
-        .expect("set should contain one token"))
+        .ok_or_else(|| miette::miette!("malformed solver output: missing result token"))
 }
 
 fn parse_solver_result_prefix(stdout: &str) -> miette::Result<String> {

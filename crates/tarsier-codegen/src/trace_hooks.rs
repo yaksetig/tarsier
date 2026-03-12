@@ -4,7 +4,8 @@ use std::fmt::Write;
 /// as Rust source code to be included in generated skeleton output.
 pub fn generate_trace_recorder_trait() -> String {
     let mut out = String::new();
-    write_trait(&mut out).expect("writing to String");
+    // Writing into an in-memory `String` is infallible in practice.
+    let _ = write_trait(&mut out);
     out
 }
 
