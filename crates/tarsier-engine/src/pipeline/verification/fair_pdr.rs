@@ -2,6 +2,7 @@
 
 use crate::pipeline::verification::*;
 use crate::pipeline::*;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub(crate) fn run_fair_lasso_search<S: SmtSolver>(
     solver: &mut S,
@@ -888,6 +889,36 @@ pub(crate) fn fair_assert_frame<S: SmtSolver>(
     Ok(())
 }
 
+static FAIR_PDR_ASSUMPTION_NONCE: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) fn fair_prepare_incremental_solver<S: SmtSolver>(
+    solver: &mut S,
+    artifacts: &FairPdrArtifacts,
+) -> Result<(), PipelineError> {
+    solver
+        .reset()
+        .map_err(|e| PipelineError::Solver(e.to_string()))?;
+    fair_declare_all(solver, &artifacts.declarations)
+}
+
+pub(crate) fn fair_with_solver_scope<S: SmtSolver, T>(
+    solver: &mut S,
+    op: impl FnOnce(&mut S) -> Result<T, PipelineError>,
+) -> Result<T, PipelineError> {
+    solver
+        .push()
+        .map_err(|e| PipelineError::Solver(e.to_string()))?;
+    let op_result = op(solver);
+    let pop_result = solver
+        .pop()
+        .map_err(|e| PipelineError::Solver(e.to_string()));
+    match (op_result, pop_result) {
+        (_, Err(pop_error)) => Err(pop_error),
+        (Err(op_error), Ok(())) => Err(op_error),
+        (Ok(value), Ok(())) => Ok(value),
+    }
+}
+
 pub(crate) enum FairCubeQueryResult {
     Sat(FairPdrCube),
     Unsat,
@@ -906,42 +937,40 @@ pub(crate) fn fair_query_bad_in_frame<S: SmtSolver>(
     frame: &FairPdrFrame,
     extra_assertions: &[SmtTerm],
 ) -> Result<FairCubeQueryResult, PipelineError> {
-    solver
-        .reset()
-        .map_err(|e| PipelineError::Solver(e.to_string()))?;
-    fair_declare_all(solver, &artifacts.declarations)?;
-    fair_assert_all(solver, &artifacts.state_assertions_pre)?;
-    fair_assert_all(solver, extra_assertions)?;
-    fair_assert_frame(solver, frame, &artifacts.state_vars_pre)?;
-    solver
-        .assert(&artifacts.bad_pre)
-        .map_err(|e| PipelineError::Solver(e.to_string()))?;
+    fair_with_solver_scope(solver, |solver| {
+        fair_assert_all(solver, &artifacts.state_assertions_pre)?;
+        fair_assert_all(solver, extra_assertions)?;
+        fair_assert_frame(solver, frame, &artifacts.state_vars_pre)?;
+        solver
+            .assert(&artifacts.bad_pre)
+            .map_err(|e| PipelineError::Solver(e.to_string()))?;
 
-    let var_refs: Vec<(&str, &SmtSort)> = artifacts
-        .state_vars_pre
-        .iter()
-        .map(|(n, s)| (n.as_str(), s))
-        .collect();
-    let (sat, model) = solver
-        .check_sat_with_model(&var_refs)
-        .map_err(|e| PipelineError::Solver(e.to_string()))?;
-    match sat {
-        SatResult::Unsat => Ok(FairCubeQueryResult::Unsat),
-        SatResult::Unknown(reason) => Ok(FairCubeQueryResult::Unknown(reason)),
-        SatResult::Sat => {
-            let Some(model) = model else {
-                return Ok(FairCubeQueryResult::Unknown(
-                    "Fair PDR: SAT without model".into(),
-                ));
-            };
-            let Some(cube) = FairPdrCube::from_model(&model, &artifacts.state_vars_pre) else {
-                return Ok(FairCubeQueryResult::Unknown(
-                    "Fair PDR: failed to extract bad-state cube".into(),
-                ));
-            };
-            Ok(FairCubeQueryResult::Sat(cube))
+        let var_refs: Vec<(&str, &SmtSort)> = artifacts
+            .state_vars_pre
+            .iter()
+            .map(|(n, s)| (n.as_str(), s))
+            .collect();
+        let (sat, model) = solver
+            .check_sat_with_model(&var_refs)
+            .map_err(|e| PipelineError::Solver(e.to_string()))?;
+        match sat {
+            SatResult::Unsat => Ok(FairCubeQueryResult::Unsat),
+            SatResult::Unknown(reason) => Ok(FairCubeQueryResult::Unknown(reason)),
+            SatResult::Sat => {
+                let Some(model) = model else {
+                    return Ok(FairCubeQueryResult::Unknown(
+                        "Fair PDR: SAT without model".into(),
+                    ));
+                };
+                let Some(cube) = FairPdrCube::from_model(&model, &artifacts.state_vars_pre) else {
+                    return Ok(FairCubeQueryResult::Unknown(
+                        "Fair PDR: failed to extract bad-state cube".into(),
+                    ));
+                };
+                Ok(FairCubeQueryResult::Sat(cube))
+            }
         }
-    }
+    })
 }
 
 pub(crate) fn fair_predecessor_query<S: SmtSolver>(
@@ -953,66 +982,65 @@ pub(crate) fn fair_predecessor_query<S: SmtSolver>(
     extra_assertions: &[SmtTerm],
     with_model: bool,
 ) -> Result<(FairSatQueryResult, Option<FairPdrCube>), PipelineError> {
-    solver
-        .reset()
-        .map_err(|e| PipelineError::Solver(e.to_string()))?;
-    fair_declare_all(solver, &artifacts.declarations)?;
-    fair_assert_all(solver, &artifacts.state_assertions_pre)?;
-    fair_assert_all(solver, &artifacts.transition_assertions)?;
-    fair_assert_all(solver, extra_assertions)?;
+    fair_with_solver_scope(solver, |solver| {
+        fair_assert_all(solver, &artifacts.state_assertions_pre)?;
+        fair_assert_all(solver, &artifacts.transition_assertions)?;
+        fair_assert_all(solver, extra_assertions)?;
 
-    if level == 1 {
-        fair_assert_all(solver, &artifacts.init_assertions)?;
-    } else {
-        fair_assert_frame(solver, &frames[level - 1], &artifacts.state_vars_pre)?;
-    }
+        if level == 1 {
+            fair_assert_all(solver, &artifacts.init_assertions)?;
+        } else {
+            fair_assert_frame(solver, &frames[level - 1], &artifacts.state_vars_pre)?;
+        }
 
-    solver
-        .assert(&cube.to_conjunction(&artifacts.state_vars_post))
-        .map_err(|e| PipelineError::Solver(e.to_string()))?;
-
-    if with_model {
-        let var_refs: Vec<(&str, &SmtSort)> = artifacts
-            .state_vars_pre
-            .iter()
-            .map(|(n, s)| (n.as_str(), s))
-            .collect();
-        let (sat, model) = solver
-            .check_sat_with_model(&var_refs)
+        solver
+            .assert(&cube.to_conjunction(&artifacts.state_vars_post))
             .map_err(|e| PipelineError::Solver(e.to_string()))?;
-        return match sat {
+
+        if with_model {
+            let var_refs: Vec<(&str, &SmtSort)> = artifacts
+                .state_vars_pre
+                .iter()
+                .map(|(n, s)| (n.as_str(), s))
+                .collect();
+            let (sat, model) = solver
+                .check_sat_with_model(&var_refs)
+                .map_err(|e| PipelineError::Solver(e.to_string()))?;
+            return match sat {
+                SatResult::Unsat => Ok((FairSatQueryResult::Unsat, None)),
+                SatResult::Unknown(reason) => Ok((FairSatQueryResult::Unknown(reason), None)),
+                SatResult::Sat => {
+                    let Some(model) = model else {
+                        return Ok((
+                            FairSatQueryResult::Unknown(
+                                "Fair PDR: SAT predecessor without model".into(),
+                            ),
+                            None,
+                        ));
+                    };
+                    let Some(pred) = FairPdrCube::from_model(&model, &artifacts.state_vars_pre)
+                    else {
+                        return Ok((
+                            FairSatQueryResult::Unknown(
+                                "Fair PDR: failed to extract predecessor cube".into(),
+                            ),
+                            None,
+                        ));
+                    };
+                    Ok((FairSatQueryResult::Sat, Some(pred)))
+                }
+            };
+        }
+
+        match solver
+            .check_sat()
+            .map_err(|e| PipelineError::Solver(e.to_string()))?
+        {
+            SatResult::Sat => Ok((FairSatQueryResult::Sat, None)),
             SatResult::Unsat => Ok((FairSatQueryResult::Unsat, None)),
             SatResult::Unknown(reason) => Ok((FairSatQueryResult::Unknown(reason), None)),
-            SatResult::Sat => {
-                let Some(model) = model else {
-                    return Ok((
-                        FairSatQueryResult::Unknown(
-                            "Fair PDR: SAT predecessor without model".into(),
-                        ),
-                        None,
-                    ));
-                };
-                let Some(pred) = FairPdrCube::from_model(&model, &artifacts.state_vars_pre) else {
-                    return Ok((
-                        FairSatQueryResult::Unknown(
-                            "Fair PDR: failed to extract predecessor cube".into(),
-                        ),
-                        None,
-                    ));
-                };
-                Ok((FairSatQueryResult::Sat, Some(pred)))
-            }
-        };
-    }
-
-    match solver
-        .check_sat()
-        .map_err(|e| PipelineError::Solver(e.to_string()))?
-    {
-        SatResult::Sat => Ok((FairSatQueryResult::Sat, None)),
-        SatResult::Unsat => Ok((FairSatQueryResult::Unsat, None)),
-        SatResult::Unknown(reason) => Ok((FairSatQueryResult::Unknown(reason), None)),
-    }
+        }
+    })
 }
 
 pub(crate) fn fair_cube_literal_to_term(
@@ -1038,62 +1066,61 @@ pub(crate) fn fair_try_generalize_cube_with_unsat_core<S: SmtSolver>(
         return Ok((None, None));
     }
 
-    solver
-        .reset()
-        .map_err(|e| PipelineError::Solver(e.to_string()))?;
-    fair_declare_all(solver, &artifacts.declarations)?;
-    fair_assert_all(solver, &artifacts.state_assertions_pre)?;
-    fair_assert_all(solver, &artifacts.transition_assertions)?;
-    fair_assert_all(solver, extra_assertions)?;
+    fair_with_solver_scope(solver, |solver| {
+        fair_assert_all(solver, &artifacts.state_assertions_pre)?;
+        fair_assert_all(solver, &artifacts.transition_assertions)?;
+        fair_assert_all(solver, extra_assertions)?;
 
-    if level == 1 {
-        fair_assert_all(solver, &artifacts.init_assertions)?;
-    } else {
-        fair_assert_frame(solver, &frames[level - 1], &artifacts.state_vars_pre)?;
-    }
-
-    let mut assumptions = Vec::with_capacity(cube.lits.len());
-    let mut lit_by_assumption = HashMap::with_capacity(cube.lits.len());
-    for (idx, lit) in cube.lits.iter().enumerate() {
-        let Some(lit_term) = fair_cube_literal_to_term(lit, &artifacts.state_vars_post) else {
-            return Ok((None, None));
-        };
-        let assumption_name = format!("__fair_pdr_assume_{level}_{idx}");
-        solver
-            .declare_var(&assumption_name, &SmtSort::Bool)
-            .map_err(|e| PipelineError::Solver(e.to_string()))?;
-        solver
-            .assert(&SmtTerm::var(assumption_name.clone()).implies(lit_term))
-            .map_err(|e| PipelineError::Solver(e.to_string()))?;
-        assumptions.push(assumption_name.clone());
-        lit_by_assumption.insert(assumption_name, lit.clone());
-    }
-
-    match solver
-        .check_sat_assuming(&assumptions)
-        .map_err(|e| PipelineError::Solver(e.to_string()))?
-    {
-        SatResult::Unsat => {
-            let core_names = solver
-                .get_unsat_core_assumptions()
-                .map_err(|e| PipelineError::Solver(e.to_string()))?;
-            if core_names.is_empty() {
-                return Ok((None, None));
-            }
-            let mut core_lits: Vec<FairPdrCubeLit> = core_names
-                .iter()
-                .filter_map(|name| lit_by_assumption.get(name).cloned())
-                .collect();
-            if core_lits.is_empty() {
-                return Ok((None, None));
-            }
-            core_lits.sort();
-            core_lits.dedup();
-            Ok((Some(FairPdrCube { lits: core_lits }), None))
+        if level == 1 {
+            fair_assert_all(solver, &artifacts.init_assertions)?;
+        } else {
+            fair_assert_frame(solver, &frames[level - 1], &artifacts.state_vars_pre)?;
         }
-        SatResult::Sat => Ok((None, None)),
-        SatResult::Unknown(reason) => Ok((None, Some(reason))),
-    }
+
+        let query_nonce = FAIR_PDR_ASSUMPTION_NONCE.fetch_add(1, Ordering::Relaxed);
+        let mut assumptions = Vec::with_capacity(cube.lits.len());
+        let mut lit_by_assumption = HashMap::with_capacity(cube.lits.len());
+        for (idx, lit) in cube.lits.iter().enumerate() {
+            let Some(lit_term) = fair_cube_literal_to_term(lit, &artifacts.state_vars_post) else {
+                return Ok((None, None));
+            };
+            let assumption_name = format!("__fair_pdr_assume_{query_nonce}_{level}_{idx}");
+            solver
+                .declare_var(&assumption_name, &SmtSort::Bool)
+                .map_err(|e| PipelineError::Solver(e.to_string()))?;
+            solver
+                .assert(&SmtTerm::var(assumption_name.clone()).implies(lit_term))
+                .map_err(|e| PipelineError::Solver(e.to_string()))?;
+            assumptions.push(assumption_name.clone());
+            lit_by_assumption.insert(assumption_name, lit.clone());
+        }
+
+        match solver
+            .check_sat_assuming(&assumptions)
+            .map_err(|e| PipelineError::Solver(e.to_string()))?
+        {
+            SatResult::Unsat => {
+                let core_names = solver
+                    .get_unsat_core_assumptions()
+                    .map_err(|e| PipelineError::Solver(e.to_string()))?;
+                if core_names.is_empty() {
+                    return Ok((None, None));
+                }
+                let mut core_lits: Vec<FairPdrCubeLit> = core_names
+                    .iter()
+                    .filter_map(|name| lit_by_assumption.get(name).cloned())
+                    .collect();
+                if core_lits.is_empty() {
+                    return Ok((None, None));
+                }
+                core_lits.sort();
+                core_lits.dedup();
+                Ok((Some(FairPdrCube { lits: core_lits }), None))
+            }
+            SatResult::Sat => Ok((None, None)),
+            SatResult::Unknown(reason) => Ok((None, Some(reason))),
+        }
+    })
 }
 
 pub(crate) fn fair_pdr_bad_cube_budget(state_var_count: usize, frontier: usize) -> usize {
@@ -1432,25 +1459,23 @@ pub(crate) fn fair_can_push<S: SmtSolver>(
     cube: &FairPdrCube,
     extra_assertions: &[SmtTerm],
 ) -> Result<FairSatQueryResult, PipelineError> {
-    solver
-        .reset()
-        .map_err(|e| PipelineError::Solver(e.to_string()))?;
-    fair_declare_all(solver, &artifacts.declarations)?;
-    fair_assert_all(solver, &artifacts.state_assertions_pre)?;
-    fair_assert_all(solver, &artifacts.transition_assertions)?;
-    fair_assert_all(solver, extra_assertions)?;
-    fair_assert_frame(solver, frame, &artifacts.state_vars_pre)?;
-    solver
-        .assert(&cube.to_conjunction(&artifacts.state_vars_post))
-        .map_err(|e| PipelineError::Solver(e.to_string()))?;
-    match solver
-        .check_sat()
-        .map_err(|e| PipelineError::Solver(e.to_string()))?
-    {
-        SatResult::Unsat => Ok(FairSatQueryResult::Unsat),
-        SatResult::Sat => Ok(FairSatQueryResult::Sat),
-        SatResult::Unknown(reason) => Ok(FairSatQueryResult::Unknown(reason)),
-    }
+    fair_with_solver_scope(solver, |solver| {
+        fair_assert_all(solver, &artifacts.state_assertions_pre)?;
+        fair_assert_all(solver, &artifacts.transition_assertions)?;
+        fair_assert_all(solver, extra_assertions)?;
+        fair_assert_frame(solver, frame, &artifacts.state_vars_pre)?;
+        solver
+            .assert(&cube.to_conjunction(&artifacts.state_vars_post))
+            .map_err(|e| PipelineError::Solver(e.to_string()))?;
+        match solver
+            .check_sat()
+            .map_err(|e| PipelineError::Solver(e.to_string()))?
+        {
+            SatResult::Unsat => Ok(FairSatQueryResult::Unsat),
+            SatResult::Sat => Ok(FairSatQueryResult::Sat),
+            SatResult::Unknown(reason) => Ok(FairSatQueryResult::Unknown(reason)),
+        }
+    })
 }
 
 pub(crate) fn run_unbounded_fair_pdr_internal<S: SmtSolver>(
@@ -1472,6 +1497,7 @@ pub(crate) fn run_unbounded_fair_pdr_internal<S: SmtSolver>(
     let deadline = overall_timeout.and_then(|t| Instant::now().checked_add(t));
 
     let artifacts = build_unbounded_fair_pdr_artifacts(cs, target, fairness)?;
+    fair_prepare_incremental_solver(solver, &artifacts)?;
     let extra_assertions = committee_bound_assertions(committee_bounds);
 
     let mut frames = vec![FairPdrFrame::default(), FairPdrFrame::default()];
