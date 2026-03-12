@@ -37,7 +37,7 @@ jobs:
           restore-keys: |
             bench-${{ runner.os }}-cargo-
 
-      # Run all four criterion benchmark suites with bencher-compatible output.
+      # Run all criterion benchmark suites with bencher-compatible output.
       # Each suite writes its output to a separate file, then we concatenate
       # them into a single results file that github-action-benchmark can parse.
       - name: Run benchmarks
@@ -48,6 +48,7 @@ jobs:
           cargo bench --bench encoder_bench   -- --output-format bencher | tee target/criterion-results/encoder.txt
           cargo bench --bench engine_bench    -- --output-format bencher | tee target/criterion-results/engine.txt
           cargo bench --bench solver_perf    -- --output-format bencher | tee target/criterion-results/solver_perf.txt
+          cargo bench --bench pdr_perf       -- --output-format bencher | tee target/criterion-results/pdr_perf.txt
           cat target/criterion-results/*.txt > target/criterion-results/all.txt
 
       # Upload raw benchmark output as an artifact for manual inspection.

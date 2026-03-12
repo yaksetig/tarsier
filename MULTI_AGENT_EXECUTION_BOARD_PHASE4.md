@@ -304,3 +304,7 @@ tick3
 `2026-03-12T12:55:30Z | AGENT_ID=1 | PDR-02 | CHANGE | Temporary cross-lane takeover of stalled task to unblock PDR-03/PDR-04/PDR-05, LDOCS-01, and LCORPUS-04`
 `2026-03-12T12:55:30Z | AGENT_ID=1 | PDR-02 | CLAIM | Claimed stalled PDR-02 for completion on branch codex/agent1-pdr-02-v1`
 `2026-03-12T12:55:30Z | AGENT_ID=1 | PDR-02 | START | Refactoring fair_pdr solver queries to incremental push/pop scopes (remove reset-heavy query path)`
+`2026-03-12T13:04:45Z | AGENT_ID=1 | PDR-02 | PR_OPEN | Branch codex/agent1-pdr-02-v1 commit c27ace3; PR pending push`
+`2026-03-12T13:04:45Z | AGENT_ID=1 | PDR-02 | DONE | Incremental fair-PDR query scopes via push/pop (no per-query reset/declaration), with fresh unsat-core assumption IDs and one-time solver prepare; commit c27ace3; checks: cargo test -p tarsier-engine fair_pdr -- --nocapture; cargo test -p tarsier-engine --test liveness_tests fair_liveness_partial_synchrony_ignores_pre_gst_only_cycles -- --nocapture; cargo check --workspace`
+`2026-03-12T13:05:01Z | AGENT_ID=1 | PDR-05 | CLAIM | Claimed PDR-05 (cross-lane) to wire pdr_perf benchmark into CI regression gate`
+`2026-03-12T13:05:01Z | AGENT_ID=1 | PDR-05 | START | Integrating pdr_perf criterion suite into benchmark workflow and regression output aggregation`
