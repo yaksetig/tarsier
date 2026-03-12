@@ -290,7 +290,6 @@ pub(super) fn build_common_encoder_context(cs: &CounterSystem) -> CommonEncoderC
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tarsier_ir::threshold_automaton::*;
 
     fn minimal_ta() -> ThresholdAutomaton {
         let mut ta = ThresholdAutomaton::new();

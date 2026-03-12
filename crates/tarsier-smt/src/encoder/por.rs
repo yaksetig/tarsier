@@ -689,7 +689,6 @@ pub(super) fn encode_threshold_guard_at_step_epoch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tarsier_ir::threshold_automaton::*;
 
     fn make_lc(constant: i64, terms: Vec<(i64, usize)>) -> LinearCombination {
         LinearCombination {
