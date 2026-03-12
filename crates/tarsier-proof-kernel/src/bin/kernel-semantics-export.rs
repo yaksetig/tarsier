@@ -28,16 +28,30 @@ fn main() {
     }
 
     let artifact = tarsier_proof_kernel::kernel_semantics_artifact_v1();
-    let json = serde_json::to_string_pretty(&artifact)
-        .expect("kernel semantics artifact should serialize to JSON");
+    let json = match serde_json::to_string_pretty(&artifact) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("failed to serialize kernel semantics artifact: {err}");
+            std::process::exit(1);
+        }
+    };
 
     if let Some(path) = out {
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent).expect("failed to create output directory");
+                if let Err(err) = fs::create_dir_all(parent) {
+                    eprintln!(
+                        "failed to create output directory {}: {err}",
+                        parent.display()
+                    );
+                    std::process::exit(1);
+                }
             }
         }
-        fs::write(&path, format!("{json}\n")).expect("failed to write output file");
+        if let Err(err) = fs::write(&path, format!("{json}\n")) {
+            eprintln!("failed to write output file {}: {err}", path.display());
+            std::process::exit(1);
+        }
         eprintln!("wrote {}", path.display());
     } else {
         println!("{json}");
