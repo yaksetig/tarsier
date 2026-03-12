@@ -402,10 +402,7 @@ mod tests {
             render_expr(&idx2, &params2, CodegenTarget::Rust),
             "self.buf[1]"
         );
-        assert_eq!(
-            render_expr(&idx2, &params2, CodegenTarget::Go),
-            "s.Buf[1]"
-        );
+        assert_eq!(render_expr(&idx2, &params2, CodegenTarget::Go), "s.Buf[1]");
     }
 
     #[test]
@@ -453,10 +450,7 @@ mod tests {
             var_accessor("count", &params, CodegenTarget::Rust),
             "self.count"
         );
-        assert_eq!(
-            var_accessor("count", &params, CodegenTarget::Go),
-            "s.Count"
-        );
+        assert_eq!(var_accessor("count", &params, CodegenTarget::Go), "s.Count");
     }
 
     // --- uses_distinct_guards / uses_filtered_guards ---
@@ -473,6 +467,7 @@ mod tests {
             parameters: vec![],
             resilience: None,
             pacemaker: None,
+            timing: None,
             adversary: vec![],
             identities: vec![],
             channels: vec![],
@@ -523,23 +518,26 @@ mod tests {
         assert!(!uses_distinct_guards(&protocol));
 
         // Add distinct guard in And → true
-        protocol.roles[0].node.phases[0].node.transitions.push(Spanned {
-            node: TransitionRule {
-                guard: GuardExpr::And(
-                    Box::new(GuardExpr::BoolVar("ready".into())),
-                    Box::new(GuardExpr::Threshold(ThresholdGuard {
-                        message_type: "Ack".into(),
-                        op: CmpOp::Ge,
-                        threshold: LinearExpr::Const(1),
-                        distinct: true,
-                        distinct_role: None,
-                        message_args: vec![],
-                    })),
-                ),
-                actions: vec![],
-            },
-            span: Span::new(0, 0),
-        });
+        protocol.roles[0].node.phases[0]
+            .node
+            .transitions
+            .push(Spanned {
+                node: TransitionRule {
+                    guard: GuardExpr::And(
+                        Box::new(GuardExpr::BoolVar("ready".into())),
+                        Box::new(GuardExpr::Threshold(ThresholdGuard {
+                            message_type: "Ack".into(),
+                            op: CmpOp::Ge,
+                            threshold: LinearExpr::Const(1),
+                            distinct: true,
+                            distinct_role: None,
+                            message_args: vec![],
+                        })),
+                    ),
+                    actions: vec![],
+                },
+                span: Span::new(0, 0),
+            });
         assert!(uses_distinct_guards(&protocol));
     }
 
@@ -555,6 +553,7 @@ mod tests {
             parameters: vec![],
             resilience: None,
             pacemaker: None,
+            timing: None,
             adversary: vec![],
             identities: vec![],
             channels: vec![],
