@@ -18,7 +18,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs" / "CHECKER_SOUNDNESS_ARGUMENT.md"
-KERNEL_SRC = ROOT / "crates" / "tarsier-proof-kernel" / "src" / "lib.rs"
+KERNEL_SOURCES = [
+    ROOT / "crates" / "tarsier-proof-kernel" / "src" / "lib.rs",
+    ROOT / "crates" / "tarsier-proof-kernel" / "src" / "tests.rs",
+]
 CERTCHECK_INTEGRATION = ROOT / "crates" / "tarsier-certcheck" / "tests" / "integration.rs"
 
 
@@ -42,8 +45,10 @@ def main() -> int:
 
     if not DOC.exists():
         errors.append("docs/CHECKER_SOUNDNESS_ARGUMENT.md: required artifact file missing")
-    if not KERNEL_SRC.exists():
-        errors.append("crates/tarsier-proof-kernel/src/lib.rs: required source file missing")
+    missing_kernel_sources = [path for path in KERNEL_SOURCES if not path.exists()]
+    if missing_kernel_sources:
+        for path in missing_kernel_sources:
+            errors.append(f"{path.relative_to(ROOT)}: required source file missing")
     if not CERTCHECK_INTEGRATION.exists():
         errors.append("crates/tarsier-certcheck/tests/integration.rs: required integration tests file missing")
 
@@ -54,7 +59,7 @@ def main() -> int:
         return 1
 
     doc = read(DOC)
-    kernel_src = read(KERNEL_SRC)
+    kernel_src = "\n".join(read(path) for path in KERNEL_SOURCES)
     certcheck_src = read(CERTCHECK_INTEGRATION)
 
     required_sections = [
@@ -82,13 +87,13 @@ def main() -> int:
         kernel_src,
         "soundness_subset_profile_validator_matches_reference_spec",
         errors,
-        "crates/tarsier-proof-kernel/src/lib.rs",
+        "crates/tarsier-proof-kernel/src",
     )
     require_test_exists(
         kernel_src,
         "soundness_subset_bundle_hash_matches_spec_vectors",
         errors,
-        "crates/tarsier-proof-kernel/src/lib.rs",
+        "crates/tarsier-proof-kernel/src",
     )
     require_test_exists(
         certcheck_src,
