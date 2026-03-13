@@ -21,7 +21,7 @@ jobs:
       TARSIER_PROPTEST_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/property-test-failures/${{ matrix.seed }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
