@@ -7,7 +7,7 @@ on:
 
 jobs:
   coverage:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,43 +17,24 @@ jobs:
 
       - name: Install compatible Z3
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import pathlib
-          import urllib.request
-          import zipfile
-
-          version = "4.15.4"
-          api = f"https://api.github.com/repos/Z3Prover/z3/releases/tags/z3-{version}"
-          request = urllib.request.Request(
-              api,
-              headers={"User-Agent": "tarsier-coverage-workflow"},
-          )
-          with urllib.request.urlopen(request) as response:
-              release = json.load(response)
-
-          asset = next(
-              a
-              for a in release["assets"]
-              if "glibc" in a["name"] and "x64" in a["name"] and a["name"].endswith(".zip")
-          )
-          root = pathlib.Path("/tmp/z3")
-          root.mkdir(parents=True, exist_ok=True)
-          archive_path = root / "z3.zip"
-          urllib.request.urlretrieve(asset["browser_download_url"], archive_path)
-          with zipfile.ZipFile(archive_path) as archive:
-              archive.extractall(root)
-
-          extracted = next(path for path in root.iterdir() if path.is_dir() and path.name.startswith(f"z3-{version}"))
-          previous_ld = os.environ.get("LD_LIBRARY_PATH", "")
-          env_path = pathlib.Path(os.environ["GITHUB_ENV"])
-          with env_path.open("a", encoding="utf-8") as env_file:
-              env_file.write(f"Z3_SYS_Z3_HEADER={extracted / 'include' / 'z3.h'}\n")
-              env_file.write(f"Z3_LIBRARY_PATH_OVERRIDE={extracted / 'bin'}\n")
-              ld_path = f"{extracted / 'bin'}:{previous_ld}" if previous_ld else str(extracted / 'bin')
-              env_file.write(f"LD_LIBRARY_PATH={ld_path}\n")
-          PY
+          set -euo pipefail
+          version="4.15.4"
+          asset="z3-${version}-x64-glibc-2.39"
+          root="/tmp/z3"
+          archive="${root}/z3.zip"
+          mkdir -p "${root}"
+          curl -fsSL "https://github.com/Z3Prover/z3/releases/download/z3-${version}/${asset}.zip" -o "${archive}"
+          unzip -q -o "${archive}" -d "${root}"
+          extracted="${root}/${asset}"
+          {
+            echo "Z3_SYS_Z3_HEADER=${extracted}/include/z3.h"
+            echo "Z3_LIBRARY_PATH_OVERRIDE=${extracted}/bin"
+            if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+              echo "LD_LIBRARY_PATH=${extracted}/bin:${LD_LIBRARY_PATH}"
+            else
+              echo "LD_LIBRARY_PATH=${extracted}/bin"
+            fi
+          } >> "${GITHUB_ENV}"
 
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
