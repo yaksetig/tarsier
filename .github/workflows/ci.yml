@@ -160,7 +160,7 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Tests
-        run: cargo test --all-targets -- --include-ignored
+        run: cargo test --workspace --lib --bins --tests --examples -- --include-ignored
 
       - name: Benchmark Smoke Test
         env:
@@ -1847,7 +1847,7 @@ jobs:
       - name: Tests
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-        run: cargo test --all-targets -- --include-ignored
+        run: cargo test --workspace --lib --bins --tests --examples -- --include-ignored
 
   test-summary:
     runs-on: ubuntu-latest

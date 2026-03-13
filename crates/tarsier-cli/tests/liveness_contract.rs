@@ -5,7 +5,7 @@ use std::process::Command;
 
 #[test]
 #[ignore = "slow: ~20s, run with --ignored"]
-fn analyze_proof_mode_reports_machine_readable_fair_liveness_unknown_diagnostics() {
+fn analyze_proof_mode_reports_machine_readable_fair_liveness_counterexample_diagnostics() {
     let output = Command::new(env!("CARGO_BIN_EXE_tarsier"))
         .args([
             "analyze",
@@ -57,19 +57,35 @@ fn analyze_proof_mode_reports_machine_readable_fair_liveness_unknown_diagnostics
 
     let details = &fair_layer["details"];
     assert_eq!(
-        details["reason_code"].as_str(),
-        Some("timeout"),
-        "unknown fair-liveness outcome should expose a machine-readable reason_code"
+        details["result"].as_str(),
+        Some("fair_cycle_found"),
+        "fair-liveness counterexample should expose a machine-readable result kind"
+    );
+    assert_eq!(
+        details["depth"].as_u64(),
+        Some(1),
+        "fair-liveness counterexample should expose the loop depth"
+    );
+    assert_eq!(
+        details["loop_start"].as_u64(),
+        Some(0),
+        "fair-liveness counterexample should expose the loop start"
     );
 
     let convergence = &details["convergence"];
-    assert!(
-        convergence["outcome"].is_string(),
-        "convergence diagnostics must include outcome"
+    assert_eq!(
+        convergence["outcome"].as_str(),
+        Some("counterexample"),
+        "convergence diagnostics should expose a machine-readable counterexample outcome"
     );
     assert_eq!(
-        convergence["reason_code"].as_str(),
-        Some("timeout"),
-        "convergence diagnostics should carry stable unknown reason categories"
+        convergence["counterexample_depth"].as_u64(),
+        Some(1),
+        "convergence diagnostics should expose the counterexample depth"
+    );
+    assert_eq!(
+        convergence["loop_start"].as_u64(),
+        Some(0),
+        "convergence diagnostics should expose the loop start"
     );
 }
