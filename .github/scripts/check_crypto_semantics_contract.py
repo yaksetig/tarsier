@@ -16,7 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SEMANTICS_DOC = ROOT / "docs" / "SEMANTICS.md"
 LOWERING_SRC = ROOT / "crates" / "tarsier-ir" / "src" / "lowering" / "tests.rs"
-ENCODER_SRC = ROOT / "crates" / "tarsier-smt" / "src" / "encoder" / "mod.rs"
+ENCODER_SOURCES = [
+    ROOT / "crates" / "tarsier-smt" / "src" / "encoder" / "mod.rs",
+    ROOT / "crates" / "tarsier-smt" / "src" / "encoder" / "tests.rs",
+]
 ENGINE_INTEGRATION = ROOT / "crates" / "tarsier-engine" / "tests" / "faithful_tests.rs"
 
 
@@ -41,10 +44,12 @@ def main() -> int:
     required_files = [
         SEMANTICS_DOC,
         LOWERING_SRC,
-        ENCODER_SRC,
         ENGINE_INTEGRATION,
     ]
     for path in required_files:
+        if not path.exists():
+            errors.append(f"{path.relative_to(ROOT)}: required file missing")
+    for path in ENCODER_SOURCES:
         if not path.exists():
             errors.append(f"{path.relative_to(ROOT)}: required file missing")
 
@@ -56,7 +61,7 @@ def main() -> int:
 
     doc = read(SEMANTICS_DOC)
     lowering_src = read(LOWERING_SRC)
-    encoder_src = read(ENCODER_SRC)
+    encoder_src = "\n".join(read(path) for path in ENCODER_SOURCES)
     integration_src = read(ENGINE_INTEGRATION)
 
     required_sections = [
@@ -111,7 +116,7 @@ def main() -> int:
             encoder_src,
             test_name,
             errors,
-            "crates/tarsier-smt/src/encoder/mod.rs",
+            "crates/tarsier-smt/src/encoder",
         )
 
     integration_tests = [
