@@ -42,6 +42,7 @@ pub(crate) use self::layers::{
 };
 pub(crate) use self::render::render_analysis_text;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_analysis(
     source: &str,
     filename: &str,

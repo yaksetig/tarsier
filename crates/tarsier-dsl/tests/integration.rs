@@ -441,7 +441,7 @@ fn roundtrip_all_trs_files() {
                 let path = entry.path();
                 if path.is_dir() {
                     visit_dir(&path, count, failures);
-                } else if path.extension().map_or(false, |e| e == "trs") {
+                } else if path.extension().is_some_and(|e| e == "trs") {
                     let source = std::fs::read_to_string(&path).unwrap();
                     let display = path.display().to_string();
                     if let Err(e) = parse(&source, &display) {

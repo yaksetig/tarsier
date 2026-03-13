@@ -7,8 +7,7 @@ const PBFT_CORE: &str = include_str!("../../../examples/library/pbft_core.trs");
 
 fn parse_and_lower(source: &str, filename: &str) -> CounterSystem {
     let program = tarsier_dsl::parse(source, filename).unwrap();
-    let ta = tarsier_ir::lowering::lower(&program).unwrap();
-    ta
+    tarsier_ir::lowering::lower(&program).unwrap()
 }
 
 fn bench_encode_bmc_trivial_depth3(c: &mut Criterion) {

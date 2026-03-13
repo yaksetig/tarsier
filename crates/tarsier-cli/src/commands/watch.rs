@@ -14,6 +14,7 @@ use crate::CliNetworkSemanticsMode;
 
 /// Debounce window: ignore rapid successive events within this duration.
 const DEBOUNCE_MS: u64 = 500;
+const _: () = assert!(DEBOUNCE_MS > 0);
 
 #[derive(Clone)]
 pub(crate) struct WatchCommandArgs {
@@ -179,13 +180,6 @@ pub(crate) fn run_watch_command(args: WatchCommandArgs) -> miette::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // -- DEBOUNCE_MS --
-
-    #[test]
-    fn debounce_ms_is_positive() {
-        assert!(DEBOUNCE_MS > 0);
-    }
 
     // -- chrono_free_timestamp --
 

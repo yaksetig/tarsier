@@ -2339,8 +2339,7 @@ proptest! {
 
 fn parse_and_lower(source: &str) -> CounterSystem {
     let program = tarsier_dsl::parse(source, "test.trs").unwrap();
-    let ta = tarsier_ir::lowering::lower(&program).unwrap();
-    ta
+    tarsier_ir::lowering::lower(&program).unwrap()
 }
 
 const RELIABLE_BROADCAST_SAFE: &str = r#"
@@ -2905,12 +2904,12 @@ fn collection_length_variables_are_declared_and_bounded() {
         kind: CollectionUpdateKind::Append(LinearCombination::constant(1)),
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
     let encoding = encode_bmc(&cs, &property, 2);
-    let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+    let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
 
     // Check collection length var at step 0 is declared and initialized to 0
     let has_len_init = assertions
@@ -2951,12 +2950,12 @@ fn collection_length_update_encodes_append_deltas() {
         kind: CollectionUpdateKind::Append(LinearCombination::constant(42)),
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
     let encoding = encode_bmc(&cs, &property, 1);
-    let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+    let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
 
     // Length at step 1 should reference delta from rule 0 and clen_0_0
     let has_len_update = assertions
@@ -2987,12 +2986,12 @@ fn collection_no_appends_preserves_length() {
         queue_model: QueueModel::None,
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
     let encoding = encode_bmc(&cs, &property, 2);
-    let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+    let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
 
     // Length should be preserved across all steps (= equality constraints)
     let step0_eq = assertions
@@ -3038,7 +3037,7 @@ fn clock_encoding_applies_timeout_guards_and_updates() {
         kind: ClockUpdateKind::TickBy(LinearCombination::constant(3)),
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
@@ -3081,7 +3080,7 @@ fn dag_round_encoding_declares_activation_and_parent_constraints() {
         parent_rounds: vec!["r0".into()],
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
@@ -3138,7 +3137,7 @@ fn dag_round_delta_equals_next_minus_curr() {
         parent_rounds: vec![],
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
@@ -3174,7 +3173,7 @@ fn dag_round_multi_parent_all_parents_constrain_child() {
         parent_rounds: vec!["r0".into(), "r1".into()],
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
@@ -3217,7 +3216,7 @@ fn dag_round_deep_chain_produces_correct_constraint_count() {
         parent_rounds: vec!["r2".into()],
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
@@ -3263,12 +3262,12 @@ fn fifo_queue_encoding_declares_head_tail_variables() {
         kind: CollectionUpdateKind::Enqueue(LinearCombination::constant(1)),
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
     let encoding = encode_bmc(&cs, &property, 2);
-    let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+    let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
 
     // Check head and tail variables are declared at step 0
     let has_head_init = assertions
@@ -3323,12 +3322,12 @@ fn fifo_queue_dequeue_updates_head() {
         kind: CollectionUpdateKind::Dequeue,
     });
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
     let encoding = encode_bmc(&cs, &property, 1);
-    let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+    let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
 
     // head_1 should reference head_0 and delta (dequeue delta)
     let has_head_update = assertions
@@ -3371,7 +3370,7 @@ fn fifo_queue_with_enqueue_and_dequeue_combined() {
     };
     ta.rules.push(dequeue_rule);
 
-    let cs: CounterSystem = ta.into();
+    let cs: CounterSystem = ta;
     let property = SafetyProperty::Agreement {
         conflicting_pairs: vec![],
     };
@@ -3395,7 +3394,7 @@ fn fifo_queue_with_enqueue_and_dequeue_combined() {
     }
 
     // Verify capacity bound (5) appears in assertions
-    let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+    let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
     let has_cap = assertions
         .iter()
         .any(|a| a.contains("clen_") && a.contains("5"));
@@ -3582,7 +3581,7 @@ fn epoch_resilience_reasserted_at_each_step() {
         bad_sets: vec![vec![l1]],
     };
     let encoding = encode_bmc(&cs, &property, 2);
-    let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+    let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
 
     // Should contain resilience re-assertion at step 1 using p_1_1 (step-1 t)
     let has_epoch_resilience = assertions
@@ -3660,7 +3659,7 @@ fn epoch_mutual_exclusion_for_multi_rule_updates() {
         bad_sets: vec![vec![l1]],
     };
     let encoding = encode_bmc(&cs, &property, 1);
-    let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+    let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
 
     // Should contain mutual exclusion constraint (ite-based indicator sum <= 1)
     let has_mutex = assertions
@@ -3681,7 +3680,7 @@ fn epoch_frame_constraint_preserves_unchanged_params() {
         bad_sets: vec![vec![l1]],
     };
     let encoding = encode_bmc(&cs, &property, 3);
-    let assertions: Vec<String> = encoding.assertions.iter().map(|t| to_smtlib(t)).collect();
+    let assertions: Vec<String> = encoding.assertions.iter().map(to_smtlib).collect();
 
     // Check frame constraints exist at each step boundary
     for step in 0..3 {

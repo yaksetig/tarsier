@@ -41,6 +41,7 @@ struct ProfileDefaults<'a> {
     solver: &'a str,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn enforce_beginner_advanced_gating(
     file: &Path,
     profile: &str,
