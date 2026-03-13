@@ -36,6 +36,10 @@ validate:
     python3 scripts/validate_final_completion.py
     python3 scripts/validate_final_completion.py --strict-evidence
 
+# Check rustdoc coverage for externally public Rust APIs.
+doc-coverage:
+    python3 scripts/check_public_api_doc_coverage.py --min-pct 80
+
 # Run the fast generated-artifact drift gate.
 artifact-drift:
     python3 scripts/check_generated_artifact_drift.py
@@ -45,7 +49,7 @@ refresh-cert-suite-hashes:
     python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json
 
 # Local "CI-like" gate for common contributor checks.
-ci: artifact-drift fmt-check clippy test
+ci: artifact-drift doc-coverage fmt-check clippy test
 
 # Summarize multi-agent execution board status.
 board-status:

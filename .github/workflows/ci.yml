@@ -39,6 +39,9 @@ jobs:
       - name: Enforce Workspace Metadata Contract
         run: python3 ./.github/scripts/check_workspace_package_metadata.py
 
+      - name: Public API Rustdoc Coverage
+        run: python3 scripts/check_public_api_doc_coverage.py --min-pct 80
+
       - name: Check Cert-Suite Hashes (Deterministic)
         run: python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json --check
 
