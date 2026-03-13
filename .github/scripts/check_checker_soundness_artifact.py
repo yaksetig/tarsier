@@ -40,27 +40,29 @@ def require_test_exists(src: str, test_name: str, errors: list[str], context: st
         errors.append(f"{context}: missing test function `{test_name}`")
 
 
-def main() -> int:
+def check_checker_soundness_artifact(
+    doc: Path,
+    kernel_sources: list[Path],
+    certcheck_integration: Path,
+    root: Path,
+) -> list[str]:
     errors: list[str] = []
 
-    if not DOC.exists():
+    if not doc.exists():
         errors.append("docs/CHECKER_SOUNDNESS_ARGUMENT.md: required artifact file missing")
-    missing_kernel_sources = [path for path in KERNEL_SOURCES if not path.exists()]
+    missing_kernel_sources = [path for path in kernel_sources if not path.exists()]
     if missing_kernel_sources:
         for path in missing_kernel_sources:
-            errors.append(f"{path.relative_to(ROOT)}: required source file missing")
-    if not CERTCHECK_INTEGRATION.exists():
+            errors.append(f"{path.relative_to(root)}: required source file missing")
+    if not certcheck_integration.exists():
         errors.append("crates/tarsier-certcheck/tests/integration.rs: required integration tests file missing")
 
     if errors:
-        print("Checker soundness artifact check FAILED:")
-        for err in errors:
-            print(f"  - {err}")
-        return 1
+        return errors
 
-    doc = read(DOC)
-    kernel_src = "\n".join(read(path) for path in KERNEL_SOURCES)
-    certcheck_src = read(CERTCHECK_INTEGRATION)
+    doc_text = read(doc)
+    kernel_src = "\n".join(read(path) for path in kernel_sources)
+    certcheck_src = read(certcheck_integration)
 
     required_sections = [
         "## Soundness Claim",
@@ -70,7 +72,7 @@ def main() -> int:
         "## CI Enforcement",
     ]
     for section in required_sections:
-        require_contains(doc, section, errors, "docs/CHECKER_SOUNDNESS_ARGUMENT.md")
+        require_contains(doc_text, section, errors, "docs/CHECKER_SOUNDNESS_ARGUMENT.md")
 
     required_doc_markers = [
         "soundness_subset_profile_validator_matches_reference_spec",
@@ -81,7 +83,7 @@ def main() -> int:
         "Checker Soundness Subset Gate",
     ]
     for marker in required_doc_markers:
-        require_contains(doc, marker, errors, "docs/CHECKER_SOUNDNESS_ARGUMENT.md")
+        require_contains(doc_text, marker, errors, "docs/CHECKER_SOUNDNESS_ARGUMENT.md")
 
     require_test_exists(
         kernel_src,
@@ -108,6 +110,16 @@ def main() -> int:
         "crates/tarsier-certcheck/tests/integration.rs",
     )
 
+    return errors
+
+
+def main() -> int:
+    errors = check_checker_soundness_artifact(
+        DOC,
+        KERNEL_SOURCES,
+        CERTCHECK_INTEGRATION,
+        ROOT,
+    )
     if errors:
         print("Checker soundness artifact check FAILED:")
         for err in errors:

@@ -125,6 +125,9 @@ jobs:
       - name: Cross-Tool Benchmark Runner Tests
         run: python3 -m unittest benchmarks/test_cross_tool_runner.py -v
 
+      - name: CI Contract Script Unit Tests
+        run: python3 -m unittest scripts/test_ci_contract_scripts.py -v
+
       - name: Cross-Tool External Execution Gate
         run: |
           pybin=$(python3 -c 'import sys; print(sys.executable)')

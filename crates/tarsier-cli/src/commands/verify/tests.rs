@@ -1,9 +1,23 @@
 use super::*;
+use tarsier_engine::pipeline::PipelineRunDiagnostics;
+use tarsier_engine::result::UnboundedFairLivenessResult;
 use tarsier_ir::counter_system::{
     Configuration, MessageAuthMetadata, MessageDeliveryEvent, MessageEventKind, MessageIdentity,
     MessagePayloadVariant, SignatureProvenance, Trace, TraceStep,
 };
 use tarsier_ir::threshold_automaton::RuleId;
+
+fn sample_trace() -> Trace {
+    Trace {
+        initial_config: Configuration {
+            kappa: vec![1, 0],
+            gamma: vec![0],
+            params: vec![],
+        },
+        steps: vec![],
+        param_values: vec![("n".into(), 1), ("f".into(), 0)],
+    }
+}
 
 // -----------------------------------------------------------------------
 // RoundSweepPoint struct
@@ -523,4 +537,64 @@ fn liveness_unknown_reason_payload_basic() {
     let p = liveness_unknown_reason_payload("solver timeout");
     assert_eq!(p["reason"], "solver timeout");
     assert!(p.get("reason_code").is_some());
+}
+
+#[test]
+fn liveness_convergence_diagnostics_unknown_includes_reason_code_and_profiles() {
+    let result = UnboundedFairLivenessResult::Unknown {
+        reason: "solver timeout".into(),
+    };
+    let diagnostics = PipelineRunDiagnostics::default();
+    let payload = liveness_convergence_diagnostics(&result, Some(&diagnostics));
+
+    assert_eq!(payload["outcome"], "inconclusive");
+    assert_eq!(payload["reason"], "solver timeout");
+    assert_eq!(payload["phase_profile_entries"], 0);
+    assert_eq!(payload["smt_profile_entries"], 0);
+    assert_eq!(payload["total_solve_calls"], 0);
+    assert_eq!(payload["total_solve_elapsed_ms"], 0);
+    assert_eq!(payload["total_encode_elapsed_ms"], 0);
+    assert!(payload.get("reason_code").is_some());
+}
+
+#[test]
+fn liveness_convergence_diagnostics_counterexample_includes_loop_metadata() {
+    let result = UnboundedFairLivenessResult::FairCycleFound {
+        depth: 3,
+        loop_start: 1,
+        trace: sample_trace(),
+    };
+    let payload =
+        liveness_convergence_diagnostics(&result, Some(&PipelineRunDiagnostics::default()));
+
+    assert_eq!(payload["outcome"], "counterexample");
+    assert_eq!(payload["counterexample_depth"], 3);
+    assert_eq!(payload["loop_start"], 1);
+    assert_eq!(payload["phase_profile_entries"], 0);
+    assert_eq!(payload["smt_profile_entries"], 0);
+}
+
+#[test]
+fn unbounded_fair_result_details_not_proved_marks_bound_exhaustion() {
+    let details =
+        unbounded_fair_result_details(&UnboundedFairLivenessResult::NotProved { max_k: 7 });
+
+    assert_eq!(details["max_k"], 7);
+    assert_eq!(details["convergence"]["outcome"], "not_converged");
+    assert_eq!(details["convergence"]["frontier_frame"], 7);
+    assert_eq!(details["convergence"]["bound_exhausted"], true);
+}
+
+#[test]
+fn fair_liveness_result_details_counterexample_includes_trace_shape() {
+    let details = fair_liveness_result_details(&FairLivenessResult::FairCycleFound {
+        depth: 2,
+        loop_start: 0,
+        trace: sample_trace(),
+    });
+
+    assert_eq!(details["depth"], 2);
+    assert_eq!(details["loop_start"], 0);
+    assert_eq!(details["trace_len"], 0);
+    assert_eq!(details["trace"]["initial"]["kappa"], json!([1, 0]));
 }

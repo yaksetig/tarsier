@@ -38,31 +38,34 @@ def require_test_exists(src: str, test_name: str, errors: list[str], context: st
         errors.append(f"{context}: missing test function `{test_name}`")
 
 
-def main() -> int:
+def check_crypto_semantics_contract(
+    semantics_doc: Path,
+    lowering_src: Path,
+    encoder_sources: list[Path],
+    engine_integration: Path,
+    root: Path,
+) -> list[str]:
     errors: list[str] = []
 
     required_files = [
-        SEMANTICS_DOC,
-        LOWERING_SRC,
-        ENGINE_INTEGRATION,
+        semantics_doc,
+        lowering_src,
+        engine_integration,
     ]
     for path in required_files:
         if not path.exists():
-            errors.append(f"{path.relative_to(ROOT)}: required file missing")
-    for path in ENCODER_SOURCES:
+            errors.append(f"{path.relative_to(root)}: required file missing")
+    for path in encoder_sources:
         if not path.exists():
-            errors.append(f"{path.relative_to(ROOT)}: required file missing")
+            errors.append(f"{path.relative_to(root)}: required file missing")
 
     if errors:
-        print("Crypto semantics contract check FAILED:")
-        for err in errors:
-            print(f"  - {err}")
-        return 1
+        return errors
 
-    doc = read(SEMANTICS_DOC)
-    lowering_src = read(LOWERING_SRC)
-    encoder_src = "\n".join(read(path) for path in ENCODER_SOURCES)
-    integration_src = read(ENGINE_INTEGRATION)
+    doc_text = read(semantics_doc)
+    lowering_src_text = read(lowering_src)
+    encoder_src = "\n".join(read(path) for path in encoder_sources)
+    integration_src = read(engine_integration)
 
     required_sections = [
         "## 2.5 Crypto Object Operational Semantics",
@@ -73,7 +76,7 @@ def main() -> int:
         "### IR and SMT Mapping (Test-Linked)",
     ]
     for section in required_sections:
-        require_contains(doc, section, errors, "docs/SEMANTICS.md")
+        require_contains(doc_text, section, errors, "docs/SEMANTICS.md")
 
     required_doc_markers = [
         "lower_crypto_object_form_lock_justify",
@@ -88,7 +91,7 @@ def main() -> int:
         "crypto_justify_independent_of_lock",
     ]
     for marker in required_doc_markers:
-        require_contains(doc, marker, errors, "docs/SEMANTICS.md")
+        require_contains(doc_text, marker, errors, "docs/SEMANTICS.md")
 
     lowering_tests = [
         "lower_crypto_object_form_lock_justify",
@@ -100,7 +103,7 @@ def main() -> int:
     ]
     for test_name in lowering_tests:
         require_test_exists(
-            lowering_src,
+            lowering_src_text,
             test_name,
             errors,
             "crates/tarsier-ir/src/lowering/tests.rs",
@@ -130,6 +133,17 @@ def main() -> int:
             "crates/tarsier-engine/tests/faithful_tests.rs",
         )
 
+    return errors
+
+
+def main() -> int:
+    errors = check_crypto_semantics_contract(
+        SEMANTICS_DOC,
+        LOWERING_SRC,
+        ENCODER_SOURCES,
+        ENGINE_INTEGRATION,
+        ROOT,
+    )
     if errors:
         print("Crypto semantics contract check FAILED:")
         for err in errors:
