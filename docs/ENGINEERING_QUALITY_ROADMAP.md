@@ -41,12 +41,12 @@ These rules exist to stop cleanup work from turning into open-ended drift:
 Do these first. They reduce the most risk per hour and make the later work
 less error-prone.
 
-- [ ] `EQ-01` Split `analyze` into focused modules.
-- [ ] `EQ-02` Split `verify` into focused modules.
-- [ ] `EQ-03` Add a fast generated-artifact drift gate for examples/manifests/schemas.
-- [ ] `EQ-04` Raise public API rustdoc coverage gate from `60%` to `80%`.
-- [ ] `EQ-05` Add maintainability size guards for oversized production files.
-- [ ] `EQ-06` Publish a crate-by-crate supported API matrix.
+- [x] `EQ-01` Split `analyze` into focused modules.
+- [x] `EQ-02` Split `verify` into focused modules.
+- [x] `EQ-03` Add a fast generated-artifact drift gate for examples/manifests/schemas.
+- [x] `EQ-04` Raise public API rustdoc coverage gate from `60%` to `80%`.
+- [x] `EQ-05` Add maintainability size guards for oversized production files.
+- [x] `EQ-06` Publish a crate-by-crate supported API matrix.
 
 ## Milestone 1: Maintainability and Change Safety
 
@@ -358,11 +358,11 @@ If we want the highest leverage sequence, do the work in this order:
 
 If the goal is to stop circling and start shipping, the first sprint should be:
 
-- [ ] `EQ-01` Split `analyze`
-- [ ] `EQ-02` Split `verify`
-- [ ] `EQ-03` Add fast drift gate
-- [ ] `EQ-04` Raise rustdoc coverage gate to `80%`
-- [ ] `EQ-05` Add maintainability size guard
+- [x] `EQ-01` Split `analyze`
+- [x] `EQ-02` Split `verify`
+- [x] `EQ-03` Add fast drift gate
+- [x] `EQ-04` Raise rustdoc coverage gate to `80%`
+- [x] `EQ-05` Add maintainability size guard
 
 That sprint gives us structural improvement, prevents fresh drift, and raises
 the minimum quality bar immediately.

@@ -1,4 +1,5 @@
 use super::*;
+use crate::pipeline::*;
 
 fn default_options() -> PipelineOptions {
     PipelineOptions::default()

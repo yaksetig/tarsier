@@ -1,4 +1,10 @@
 use super::*;
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
+fn sandbox_test_lock() -> MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+}
 
 /// Reset global state between tests (tests run in parallel, so we need
 /// to be careful).  In practice, each test that activates a sandbox
@@ -18,6 +24,7 @@ fn default_config_has_sane_values() {
 
 #[test]
 fn sandbox_guard_activation_and_deactivation() {
+    let _lock = sandbox_test_lock();
     reset_globals();
     let config = SandboxConfig {
         allow_degraded: true,
@@ -35,6 +42,7 @@ fn sandbox_guard_activation_and_deactivation() {
 
 #[test]
 fn sandbox_timeout_check() {
+    let _lock = sandbox_test_lock();
     reset_globals();
     let config = SandboxConfig {
         timeout_secs: 0, // instant timeout
@@ -53,6 +61,7 @@ fn sandbox_timeout_check() {
 
 #[test]
 fn sandbox_input_size_validation() {
+    let _lock = sandbox_test_lock();
     reset_globals();
     let config = SandboxConfig {
         max_input_bytes: 100,
@@ -74,6 +83,7 @@ fn sandbox_input_size_validation() {
 
 #[test]
 fn sandbox_memory_check_zero_budget_always_ok() {
+    let _lock = sandbox_test_lock();
     reset_globals();
     let config = SandboxConfig {
         memory_budget_mb: 0,
@@ -111,6 +121,7 @@ fn current_rss_returns_nonzero_on_supported_platforms() {
 
 #[test]
 fn sandbox_memory_budget_enforced() {
+    let _lock = sandbox_test_lock();
     reset_globals();
     // Set an absurdly low memory budget (1 MiB) — the test process
     // itself uses more than that.
@@ -138,6 +149,7 @@ fn sandbox_memory_budget_enforced() {
 
 #[test]
 fn fail_closed_without_allow_degraded() {
+    let _lock = sandbox_test_lock();
     reset_globals();
     // On platforms without memory monitoring and without allow_degraded,
     // activation should fail.
@@ -170,6 +182,7 @@ fn fail_closed_without_allow_degraded() {
 
 #[test]
 fn enforce_active_limits_ok_when_no_sandbox() {
+    let _lock = sandbox_test_lock();
     reset_globals();
     // No sandbox activated — should return Ok
     assert!(enforce_active_limits().is_ok());
@@ -184,6 +197,7 @@ fn enforce_active_limits_ok_when_no_sandbox() {
 
 #[test]
 fn enforce_active_limits_returns_ok_or_err_when_active() {
+    let _lock = sandbox_test_lock();
     // When SANDBOX_ACTIVE is true, enforce_active_limits reads globals.
     // In parallel tests the OnceLock values may be set by any test that
     // called activate(), so we just verify it doesn't panic.
