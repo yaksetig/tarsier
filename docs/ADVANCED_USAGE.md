@@ -238,6 +238,7 @@ tarsier cert-suite --manifest examples/library/cert_suite.json --engine kinducti
 The manifest (`examples/library/cert_suite.json`, schema v2) includes expected safety/liveness outcomes, protocol metadata, variant pairing, and model fingerprints. See `docs/CERT_SUITE_SCHEMA.md` for the schema contract.
 
 After model edits, refresh fingerprints: `python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json`.
+Run the fast drift gate locally before pushing: `python3 scripts/check_generated_artifact_drift.py` or `just artifact-drift`.
 
 ## Soundness Profiles
 

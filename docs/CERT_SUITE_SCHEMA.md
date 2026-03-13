@@ -58,6 +58,7 @@ Migration checklist for older manifests:
 3. Ensure each entry has at least one expected outcome key (`verify`/`liveness`/`fair_liveness`/`prove`/`prove_fair`).
 4. Add at least one intentional `class=known_bug` regression sentinel.
 5. Refresh hashes with `python3 scripts/update-cert-suite-hashes.py --manifest <manifest>`.
+6. Run the fast drift gate with `python3 scripts/check_generated_artifact_drift.py` or `just artifact-drift`.
 
 ## Validation Contract (v2)
 
@@ -95,6 +96,7 @@ Migration checklist for older manifests:
 - `notes` is required and non-empty (rationale per protocol).
 - `model_sha256` is required and must be a 64-char hex SHA-256 digest of the `.trs` file content.
   - helper: `python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json`
+  - fast drift gate: `python3 scripts/check_generated_artifact_drift.py`
 - Each entry must define at least one expected outcome field:
   - `verify`
   - `liveness`

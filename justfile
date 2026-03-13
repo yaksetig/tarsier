@@ -36,8 +36,16 @@ validate:
     python3 scripts/validate_final_completion.py
     python3 scripts/validate_final_completion.py --strict-evidence
 
+# Run the fast generated-artifact drift gate.
+artifact-drift:
+    python3 scripts/check_generated_artifact_drift.py
+
+# Refresh cert-suite model hashes after protocol edits.
+refresh-cert-suite-hashes:
+    python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json
+
 # Local "CI-like" gate for common contributor checks.
-ci: fmt-check clippy test
+ci: artifact-drift fmt-check clippy test
 
 # Summarize multi-agent execution board status.
 board-status:

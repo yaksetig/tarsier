@@ -5,7 +5,17 @@ on:
   pull_request:
 
 jobs:
+  artifact-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generated Artifact Drift Gate
+        run: python3 scripts/check_generated_artifact_drift.py
+
   build-test:
+    needs: artifact-drift
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,8 +39,8 @@ jobs:
       - name: Enforce Workspace Metadata Contract
         run: python3 ./.github/scripts/check_workspace_package_metadata.py
 
-      - name: Refresh Cert-Suite Hashes (Deterministic)
-        run: python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json
+      - name: Check Cert-Suite Hashes (Deterministic)
+        run: python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json --check
 
       - name: Completion Workflow Contract
         run: |

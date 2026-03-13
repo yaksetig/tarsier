@@ -100,4 +100,8 @@ python3 benchmarks/run_library_bench.py --mode standard
 `cert-suite` JSON/text output includes per-protocol verdict, timing, assumptions, artifact links, and failure triage labels (`model_change`, `engine_regression`, `expected_update`).
 Refresh entry fingerprints after protocol edits:
 `python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json`.
+Fast drift check:
+`python3 scripts/check_generated_artifact_drift.py` or `just artifact-drift`.
+Shortcut to refresh hashes:
+`just refresh-cert-suite-hashes`.
 `./scripts/certify-corpus.sh` enforces hash consistency by default (`CHECK_HASHES=1`).
