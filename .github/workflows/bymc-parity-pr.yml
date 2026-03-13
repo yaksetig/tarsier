@@ -61,7 +61,7 @@ jobs:
 
       - name: Upload ByMC PR parity report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cross-tool-real-bymc-pr-report
           path: artifacts/cross-tool-real-bymc-pr-report.json
