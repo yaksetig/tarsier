@@ -21,7 +21,7 @@ jobs:
       EXPECTED_OS: "ubuntu-22.04"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Rust (Pinned)
         uses: dtolnay/rust-toolchain@master
@@ -53,7 +53,7 @@ jobs:
       EXPECTED_OS: "ubuntu-22.04"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Enforce Certification Gate Contract
         run: python3 ./.github/scripts/check_certification_gate_contract.py
@@ -108,7 +108,7 @@ jobs:
       TARSIER_REQUIRE_CARCARA: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Rust (Pinned)
         uses: dtolnay/rust-toolchain@master
@@ -219,7 +219,7 @@ jobs:
       EXPECTED_OS: "ubuntu-22.04"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Rust (Pinned)
         uses: dtolnay/rust-toolchain@master
