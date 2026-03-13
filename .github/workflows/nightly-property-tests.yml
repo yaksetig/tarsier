@@ -35,7 +35,7 @@ jobs:
 
       - name: Upload Property-Test Failure Artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-property-failures-${{ matrix.seed }}
           path: artifacts/property-test-failures/${{ matrix.seed }}/**

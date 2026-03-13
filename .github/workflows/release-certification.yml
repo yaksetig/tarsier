@@ -90,7 +90,7 @@ jobs:
         run: ./scripts/certify-corpus.sh
 
       - name: Upload Certification Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-cert-suite-report
           path: artifacts/cert-suite.json
@@ -171,7 +171,7 @@ jobs:
             --json-report certs/release-proof/live/certcheck-report.json
 
       - name: Upload Release Proof Gate Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-proof-independent-gate
           path: |
@@ -199,7 +199,7 @@ jobs:
             artifacts/trust-report.json
 
       - name: Upload Signed Trust Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-trust-report
           path: |
@@ -274,7 +274,7 @@ jobs:
 
       - name: Upload Release Conformance Suite Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-conformance-suite-report
           path: artifacts/release-conformance-suite.json

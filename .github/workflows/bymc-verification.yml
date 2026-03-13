@@ -19,7 +19,7 @@ jobs:
       - name: Save Docker image
         run: docker save tarsier-bymc:latest | gzip > /tmp/tarsier-bymc.tar.gz
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bymc-docker-image
           path: /tmp/tarsier-bymc.tar.gz
@@ -65,7 +65,7 @@ jobs:
       - name: Verdict parity check
         run: python3 .github/scripts/check_cross_tool_verdict_parity.py /tmp/cross-tool-real-bymc.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bymc-verification-report

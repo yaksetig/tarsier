@@ -192,7 +192,7 @@ jobs:
 
       - name: Upload Property-Test Failure Artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: property-test-failures
           path: artifacts/property-test-failures/**
@@ -499,7 +499,7 @@ jobs:
 
       - name: Upload Real ByMC Cross-Tool Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cross-tool-real-bymc-report
           path: artifacts/cross-tool-real-bymc-report.json
@@ -546,7 +546,7 @@ jobs:
 
       - name: Upload Real SPIN Cross-Tool Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cross-tool-real-spin-report
           path: artifacts/cross-tool-real-spin-report.json
@@ -592,7 +592,7 @@ jobs:
 
       - name: Upload LLVM Coverage Artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: llvm-cov-report
           path: artifacts/coverage
@@ -628,7 +628,7 @@ jobs:
 
       - name: Upload crash artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-crashes-${{ matrix.target }}
           path: |
@@ -742,7 +742,7 @@ jobs:
           "
       - name: Upload Adapter Suite Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: conformance-adapter-suite-report
           path: artifacts/conformance-adapter-suite.json
@@ -1296,7 +1296,7 @@ jobs:
             --json-report certs/proof-gate/live/certcheck-report.json
 
       - name: Upload Proof-Mode Gate Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: proof-mode-independent-gate
           path: |
@@ -1446,7 +1446,7 @@ jobs:
             --json-report "${out_dir}/certcheck-report.json"
 
       - name: Upload Proof Validation Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: certcheck-proof-validation-report
           path: certs/proof-validation/certcheck-report.json
@@ -1508,7 +1508,7 @@ jobs:
           ./scripts/certify-corpus.sh
 
       - name: Upload Certification Suite Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cert-suite-report
           path: artifacts/cert-suite.json
@@ -1561,7 +1561,7 @@ jobs:
           ARTIFACTS_DIR: artifacts/cert-suite-${{ matrix.solver }}-${{ matrix.engine }}
 
       - name: Upload Certification Suite Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cert-suite-report-${{ matrix.solver }}-${{ matrix.engine }}
           path: artifacts/cert-suite-${{ matrix.solver }}-${{ matrix.engine }}.json
@@ -1630,7 +1630,7 @@ jobs:
 
       - name: Upload Conformance Suite Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: conformance-suite-report
           path: artifacts/conformance-suite.json
@@ -1702,7 +1702,7 @@ jobs:
             --out-comparison benchmarks/results/ci-library-smoke-replay-compare.json
 
       - name: Upload Library Benchmark Smoke Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: library-benchmark-smoke
           path: |
@@ -1769,7 +1769,7 @@ jobs:
           PY
 
       - name: Upload Large-Model Benchmark Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: library-benchmark-large
           path: benchmarks/results/ci-library-large-smoke.json
