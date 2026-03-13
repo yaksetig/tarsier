@@ -40,6 +40,10 @@ validate:
 doc-coverage:
     python3 scripts/check_public_api_doc_coverage.py --min-pct 80
 
+# Guard against oversized production Rust files and functions.
+maintainability-guard:
+    python3 scripts/check_maintainability_limits.py --base HEAD
+
 # Run the fast generated-artifact drift gate.
 artifact-drift:
     python3 scripts/check_generated_artifact_drift.py
@@ -49,7 +53,7 @@ refresh-cert-suite-hashes:
     python3 scripts/update-cert-suite-hashes.py --manifest examples/library/cert_suite.json
 
 # Local "CI-like" gate for common contributor checks.
-ci: artifact-drift doc-coverage fmt-check clippy test
+ci: artifact-drift doc-coverage maintainability-guard fmt-check clippy test
 
 # Summarize multi-agent execution board status.
 board-status:

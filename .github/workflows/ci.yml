@@ -20,6 +20,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enforce Maintainability Limits
+        env:
+          CI_EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "${CI_EVENT_NAME}" = "pull_request" ] && [ -n "${PR_BASE_SHA}" ]; then
+            base_ref="${PR_BASE_SHA}"
+          elif [ "${CI_EVENT_NAME}" = "push" ] && [ -n "${PUSH_BEFORE_SHA}" ] && [ "${PUSH_BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]; then
+            base_ref="${PUSH_BEFORE_SHA}"
+          elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            base_ref="HEAD^"
+          else
+            base_ref="HEAD"
+          fi
+          python3 scripts/check_maintainability_limits.py --base "${base_ref}"
 
       - name: Enforce Certification Gate Contract
         run: python3 ./.github/scripts/check_certification_gate_contract.py
