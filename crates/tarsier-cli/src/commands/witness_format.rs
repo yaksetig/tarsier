@@ -8,7 +8,10 @@ use tarsier_ir::product::ProductAutomaton;
 use tarsier_smt::refinement_encoder::RefinementWitness;
 
 /// Convert the parameter values of a witness to JSON.
-fn params_to_json(witness: &RefinementWitness, product: &ProductAutomaton) -> Vec<serde_json::Value> {
+fn params_to_json(
+    witness: &RefinementWitness,
+    product: &ProductAutomaton,
+) -> Vec<serde_json::Value> {
     witness
         .parameter_values
         .iter()
@@ -24,7 +27,10 @@ fn params_to_json(witness: &RefinementWitness, product: &ProductAutomaton) -> Ve
 }
 
 /// Convert the trace steps of a witness to JSON.
-fn steps_to_json(witness: &RefinementWitness, product: &ProductAutomaton) -> Vec<serde_json::Value> {
+fn steps_to_json(
+    witness: &RefinementWitness,
+    product: &ProductAutomaton,
+) -> Vec<serde_json::Value> {
     witness
         .trace
         .iter()
@@ -73,7 +79,10 @@ fn steps_to_json(witness: &RefinementWitness, product: &ProductAutomaton) -> Vec
 /// Convert a witness to JSON with parameters and trace only (no violation metadata).
 ///
 /// Used by the refinement-check command which stores violation info separately.
-pub fn witness_to_json(witness: &RefinementWitness, product: &ProductAutomaton) -> serde_json::Value {
+pub fn witness_to_json(
+    witness: &RefinementWitness,
+    product: &ProductAutomaton,
+) -> serde_json::Value {
     json!({
         "parameters": params_to_json(witness, product),
         "trace": steps_to_json(witness, product),

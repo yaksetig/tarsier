@@ -180,6 +180,7 @@ mod tests {
                     resilience: None,
                     pacemaker: None,
                     adversary: vec![],
+                    timing: None,
                     identities: vec![],
                     channels: vec![],
                     equivocation_policies: vec![],
@@ -209,18 +210,61 @@ mod tests {
     #[test]
     fn keyword_docs_all_known_keywords_return_some() {
         let keywords = [
-            "protocol", "parameters", "resilience", "adversary", "message",
-            "role", "var", "init", "phase", "when", "send", "goto", "decide",
-            "received", "property", "agreement", "validity", "safety",
-            "invariant", "liveness", "committee", "identity", "channel",
-            "equivocation", "forall", "exists", "enum", "certificate",
-            "threshold_signature", "pacemaker", "module", "import", "refines",
-            "dag_round", "extends", "log", "sequence", "fifo_channel",
-            "true", "false", "bool", "nat", "int", "distinct", "append",
-            "enqueue", "dequeue", "reconfigure",
+            "protocol",
+            "parameters",
+            "resilience",
+            "adversary",
+            "message",
+            "role",
+            "var",
+            "init",
+            "phase",
+            "when",
+            "send",
+            "goto",
+            "decide",
+            "received",
+            "property",
+            "agreement",
+            "validity",
+            "safety",
+            "invariant",
+            "liveness",
+            "committee",
+            "identity",
+            "channel",
+            "equivocation",
+            "forall",
+            "exists",
+            "enum",
+            "certificate",
+            "threshold_signature",
+            "pacemaker",
+            "module",
+            "import",
+            "refines",
+            "dag_round",
+            "extends",
+            "log",
+            "sequence",
+            "fifo_channel",
+            "true",
+            "false",
+            "bool",
+            "nat",
+            "int",
+            "distinct",
+            "append",
+            "enqueue",
+            "dequeue",
+            "reconfigure",
         ];
         for kw in keywords {
-            assert!(keyword_docs(kw).is_some(), "keyword '{}' should have docs", kw);
+            assert!(
+                keyword_docs(kw).is_some(),
+                "keyword '{}' should have docs",
+                kw
+            );
         }
     }
 
@@ -258,8 +302,16 @@ mod tests {
         prog.protocol.node.messages.push(MessageDecl {
             name: "Vote".to_string(),
             fields: vec![
-                FieldDef { name: "value".into(), ty: "nat".into(), range: None },
-                FieldDef { name: "round".into(), ty: "nat".into(), range: None },
+                FieldDef {
+                    name: "value".into(),
+                    ty: "nat".into(),
+                    range: None,
+                },
+                FieldDef {
+                    name: "round".into(),
+                    ty: "nat".into(),
+                    range: None,
+                },
             ],
             span: Span { start: 0, end: 0 },
         });
@@ -284,11 +336,17 @@ mod tests {
                 init_phase: Some("start".into()),
                 phases: vec![
                     Spanned::new(
-                        PhaseDecl { name: "start".into(), transitions: vec![] },
+                        PhaseDecl {
+                            name: "start".into(),
+                            transitions: vec![],
+                        },
                         Span { start: 0, end: 0 },
                     ),
                     Spanned::new(
-                        PhaseDecl { name: "done".into(), transitions: vec![] },
+                        PhaseDecl {
+                            name: "done".into(),
+                            transitions: vec![],
+                        },
                         Span { start: 0, end: 0 },
                     ),
                 ],
@@ -312,7 +370,10 @@ mod tests {
                 vars: vec![],
                 init_phase: Some("idle".into()),
                 phases: vec![Spanned::new(
-                    PhaseDecl { name: "idle".into(), transitions: vec![] },
+                    PhaseDecl {
+                        name: "idle".into(),
+                        transitions: vec![],
+                    },
                     Span { start: 0, end: 0 },
                 )],
             },

@@ -1343,8 +1343,14 @@ protocol ExportTemporalLiveness {
 #[test]
 fn temporal_and_false_absorbs() {
     let a = TemporalFormula::Atom(0);
-    assert_eq!(temporal_and(TemporalFormula::False, a.clone()), TemporalFormula::False);
-    assert_eq!(temporal_and(a, TemporalFormula::False), TemporalFormula::False);
+    assert_eq!(
+        temporal_and(TemporalFormula::False, a.clone()),
+        TemporalFormula::False
+    );
+    assert_eq!(
+        temporal_and(a, TemporalFormula::False),
+        TemporalFormula::False
+    );
 }
 
 #[test]
@@ -1372,7 +1378,10 @@ fn temporal_and_canonical_order() {
 #[test]
 fn temporal_or_true_absorbs() {
     let a = TemporalFormula::Atom(0);
-    assert_eq!(temporal_or(TemporalFormula::True, a.clone()), TemporalFormula::True);
+    assert_eq!(
+        temporal_or(TemporalFormula::True, a.clone()),
+        TemporalFormula::True
+    );
     assert_eq!(temporal_or(a, TemporalFormula::True), TemporalFormula::True);
 }
 
@@ -1401,13 +1410,19 @@ fn temporal_or_canonical_order() {
 #[test]
 fn temporal_until_rhs_true() {
     let a = TemporalFormula::Atom(0);
-    assert_eq!(temporal_until(a, TemporalFormula::True), TemporalFormula::True);
+    assert_eq!(
+        temporal_until(a, TemporalFormula::True),
+        TemporalFormula::True
+    );
 }
 
 #[test]
 fn temporal_until_rhs_false() {
     let a = TemporalFormula::Atom(0);
-    assert_eq!(temporal_until(a, TemporalFormula::False), TemporalFormula::False);
+    assert_eq!(
+        temporal_until(a, TemporalFormula::False),
+        TemporalFormula::False
+    );
 }
 
 #[test]
@@ -1425,13 +1440,19 @@ fn temporal_until_same_lhs_rhs() {
 #[test]
 fn temporal_release_rhs_true() {
     let a = TemporalFormula::Atom(0);
-    assert_eq!(temporal_release(a, TemporalFormula::True), TemporalFormula::True);
+    assert_eq!(
+        temporal_release(a, TemporalFormula::True),
+        TemporalFormula::True
+    );
 }
 
 #[test]
 fn temporal_release_rhs_false() {
     let a = TemporalFormula::Atom(0);
-    assert_eq!(temporal_release(a, TemporalFormula::False), TemporalFormula::False);
+    assert_eq!(
+        temporal_release(a, TemporalFormula::False),
+        TemporalFormula::False
+    );
 }
 
 #[test]
@@ -1451,7 +1472,11 @@ fn temporal_release_same_lhs_rhs() {
 #[test]
 fn atom_table_intern_dedup() {
     let mut table = TemporalAtomTable::default();
-    let expr = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let expr = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let id1 = table.intern(&expr);
     let id2 = table.intern(&expr);
     assert_eq!(id1, id2);
@@ -1461,8 +1486,16 @@ fn atom_table_intern_dedup() {
 #[test]
 fn atom_table_distinct_exprs_get_distinct_ids() {
     let mut table = TemporalAtomTable::default();
-    let e1 = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
-    let e2 = cmp(qvar("p", "y"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(false));
+    let e1 = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
+    let e2 = cmp(
+        qvar("p", "y"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(false),
+    );
     let id1 = table.intern(&e1);
     let id2 = table.intern(&e2);
     assert_ne!(id1, id2);
@@ -1479,8 +1512,14 @@ fn canonical_true_false() {
 
 #[test]
 fn canonical_atom() {
-    assert_eq!(temporal_formula_canonical(&TemporalFormula::Atom(0)), "atom(0)");
-    assert_eq!(temporal_formula_canonical(&TemporalFormula::NotAtom(3)), "not_atom(3)");
+    assert_eq!(
+        temporal_formula_canonical(&TemporalFormula::Atom(0)),
+        "atom(0)"
+    );
+    assert_eq!(
+        temporal_formula_canonical(&TemporalFormula::NotAtom(3)),
+        "not_atom(3)"
+    );
 }
 
 #[test]
@@ -1539,7 +1578,11 @@ fn collect_until_nested() {
 
 #[test]
 fn nnf_comparison_positive() {
-    let expr = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let expr = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let mut atoms = TemporalAtomTable::default();
     let result = formula_to_temporal_nnf(&expr, &mut atoms, false).unwrap();
     assert_eq!(result, TemporalFormula::Atom(0));
@@ -1547,7 +1590,11 @@ fn nnf_comparison_positive() {
 
 #[test]
 fn nnf_comparison_negated() {
-    let expr = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let expr = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let mut atoms = TemporalAtomTable::default();
     let result = formula_to_temporal_nnf(&expr, &mut atoms, true).unwrap();
     assert_eq!(result, TemporalFormula::NotAtom(0));
@@ -1555,7 +1602,11 @@ fn nnf_comparison_negated() {
 
 #[test]
 fn nnf_double_negation_eliminated() {
-    let inner = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let inner = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let expr = ast::FormulaExpr::Not(Box::new(ast::FormulaExpr::Not(Box::new(inner))));
     let mut atoms = TemporalAtomTable::default();
     let result = formula_to_temporal_nnf(&expr, &mut atoms, false).unwrap();
@@ -1565,12 +1616,16 @@ fn nnf_double_negation_eliminated() {
 #[test]
 fn nnf_negated_and_becomes_or() {
     // Use temporal sub-formulas so the NNF conversion recurses into And
-    let a = ast::FormulaExpr::Eventually(Box::new(
-        cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true)),
-    ));
-    let b = ast::FormulaExpr::Eventually(Box::new(
-        cmp(qvar("p", "y"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(false)),
-    ));
+    let a = ast::FormulaExpr::Eventually(Box::new(cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    )));
+    let b = ast::FormulaExpr::Eventually(Box::new(cmp(
+        qvar("p", "y"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(false),
+    )));
     let expr = ast::FormulaExpr::And(Box::new(a), Box::new(b));
     let mut atoms = TemporalAtomTable::default();
     let result = formula_to_temporal_nnf(&expr, &mut atoms, true).unwrap();
@@ -1578,7 +1633,7 @@ fn nnf_negated_and_becomes_or() {
     match result {
         TemporalFormula::And(_, _) => {} // negation of And(<>phi, <>psi) = And([]!phi, []!psi)
         // which becomes And(Release(False,_), Release(False,_))
-        TemporalFormula::Or(_, _) => {} // also acceptable
+        TemporalFormula::Or(_, _) => {}      // also acceptable
         TemporalFormula::Release(_, _) => {} // also acceptable for simplified formulas
         _ => {
             // The key property: the result should NOT be a plain Atom/NotAtom
@@ -1595,9 +1650,11 @@ fn nnf_negated_and_becomes_or() {
 
 #[test]
 fn nnf_eventually_becomes_until_true() {
-    let inner = ast::FormulaExpr::Eventually(Box::new(
-        cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true)),
-    ));
+    let inner = ast::FormulaExpr::Eventually(Box::new(cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    )));
     let mut atoms = TemporalAtomTable::default();
     let result = formula_to_temporal_nnf(&inner, &mut atoms, false).unwrap();
     // <> phi = true U phi
@@ -1609,9 +1666,11 @@ fn nnf_eventually_becomes_until_true() {
 
 #[test]
 fn nnf_always_becomes_release_false() {
-    let inner = ast::FormulaExpr::Always(Box::new(
-        cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true)),
-    ));
+    let inner = ast::FormulaExpr::Always(Box::new(cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    )));
     let mut atoms = TemporalAtomTable::default();
     let result = formula_to_temporal_nnf(&inner, &mut atoms, false).unwrap();
     // [] phi = false R phi
@@ -1671,7 +1730,11 @@ fn classify_agreement_two_forall_same_role() {
 
 #[test]
 fn classify_agreement_wrong_quantifier_count() {
-    let body = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let prop = agreement_prop("agree", vec![forall("p", "R")], body);
     let err = classify_property_fragment(&prop).unwrap_err();
     assert!(err.message.contains("exactly 2"));
@@ -1695,7 +1758,11 @@ fn classify_agreement_different_roles_rejected() {
 
 #[test]
 fn classify_safety_forall_invariant() {
-    let body = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let prop = safety_prop("safe", vec![forall("p", "R")], body);
     let frag = classify_property_fragment(&prop).unwrap();
     assert_eq!(frag, QuantifiedFragment::UniversalInvariant);
@@ -1703,7 +1770,11 @@ fn classify_safety_forall_invariant() {
 
 #[test]
 fn classify_safety_exists_temporal() {
-    let body = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let prop = safety_prop("safe", vec![exists("p", "R")], body);
     let frag = classify_property_fragment(&prop).unwrap();
     assert_eq!(frag, QuantifiedFragment::ExistentialTemporal);
@@ -1711,9 +1782,11 @@ fn classify_safety_exists_temporal() {
 
 #[test]
 fn classify_invariant_forall_temporal_body() {
-    let body = ast::FormulaExpr::Always(Box::new(
-        cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true)),
-    ));
+    let body = ast::FormulaExpr::Always(Box::new(cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    )));
     let prop = invariant_prop("inv", vec![forall("p", "R")], body);
     let frag = classify_property_fragment(&prop).unwrap();
     assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
@@ -1721,7 +1794,11 @@ fn classify_invariant_forall_temporal_body() {
 
 #[test]
 fn classify_liveness_forall_propositional() {
-    let body = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let prop = liveness_prop("live", vec![forall("p", "R")], body);
     let frag = classify_property_fragment(&prop).unwrap();
     assert_eq!(frag, QuantifiedFragment::UniversalTermination);
@@ -1729,9 +1806,11 @@ fn classify_liveness_forall_propositional() {
 
 #[test]
 fn classify_liveness_forall_temporal() {
-    let body = ast::FormulaExpr::Eventually(Box::new(
-        cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true)),
-    ));
+    let body = ast::FormulaExpr::Eventually(Box::new(cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    )));
     let prop = liveness_prop("live", vec![forall("p", "R")], body);
     let frag = classify_property_fragment(&prop).unwrap();
     assert_eq!(frag, QuantifiedFragment::UniversalTemporal);
@@ -1739,9 +1818,11 @@ fn classify_liveness_forall_temporal() {
 
 #[test]
 fn classify_liveness_exists_temporal() {
-    let body = ast::FormulaExpr::Eventually(Box::new(
-        cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true)),
-    ));
+    let body = ast::FormulaExpr::Eventually(Box::new(cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    )));
     let prop = liveness_prop("live", vec![exists("p", "R")], body);
     let frag = classify_property_fragment(&prop).unwrap();
     assert_eq!(frag, QuantifiedFragment::ExistentialTemporal);
@@ -1749,7 +1830,11 @@ fn classify_liveness_exists_temporal() {
 
 #[test]
 fn classify_liveness_no_quantifiers_rejected() {
-    let body = cmp(ast::FormulaAtom::BoolLit(true), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        ast::FormulaAtom::BoolLit(true),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let prop = liveness_prop("live", vec![], body);
     let err = classify_property_fragment(&prop).unwrap_err();
     assert!(err.message.contains("at least 1 quantifier"));
@@ -1757,7 +1842,11 @@ fn classify_liveness_no_quantifiers_rejected() {
 
 #[test]
 fn classify_safety_no_quantifiers_rejected() {
-    let body = cmp(ast::FormulaAtom::BoolLit(true), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        ast::FormulaAtom::BoolLit(true),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let prop = safety_prop("safe", vec![], body);
     let err = classify_property_fragment(&prop).unwrap_err();
     assert!(err.message.contains("at least 1 quantifier"));
@@ -1767,21 +1856,33 @@ fn classify_safety_no_quantifiers_rejected() {
 
 #[test]
 fn resolve_single_quantifier_index_zero() {
-    let body = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let idx = resolve_effective_quantifier_index(&[forall("p", "R")], &body, "test").unwrap();
     assert_eq!(idx, 0);
 }
 
 #[test]
 fn resolve_empty_quantifiers_error() {
-    let body = cmp(ast::FormulaAtom::BoolLit(true), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        ast::FormulaAtom::BoolLit(true),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let err = resolve_effective_quantifier_index(&[], &body, "test").unwrap_err();
     assert!(err.contains("at least 1 quantifier"));
 }
 
 #[test]
 fn resolve_extra_exists_rejected() {
-    let body = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let quantifiers = vec![forall("p", "R"), exists("q", "R")];
     let err = resolve_effective_quantifier_index(&quantifiers, &body, "test").unwrap_err();
     assert!(err.contains("unsupported existential extras"));
@@ -1791,7 +1892,11 @@ fn resolve_extra_exists_rejected() {
 
 #[test]
 fn formula_refs_finds_qualified_var() {
-    let body = cmp(qvar("p", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        qvar("p", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let qvars: HashSet<&str> = ["p", "q"].iter().copied().collect();
     let refs = formula_quantified_var_refs(&body, &qvars);
     assert!(refs.contains("p"));
@@ -1800,7 +1905,11 @@ fn formula_refs_finds_qualified_var() {
 
 #[test]
 fn formula_refs_ignores_non_quantified() {
-    let body = cmp(qvar("z", "x"), ast::CmpOp::Eq, ast::FormulaAtom::BoolLit(true));
+    let body = cmp(
+        qvar("z", "x"),
+        ast::CmpOp::Eq,
+        ast::FormulaAtom::BoolLit(true),
+    );
     let qvars: HashSet<&str> = ["p"].iter().copied().collect();
     let refs = formula_quantified_var_refs(&body, &qvars);
     assert!(refs.is_empty());

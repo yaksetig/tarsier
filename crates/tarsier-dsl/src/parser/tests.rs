@@ -2805,7 +2805,7 @@ protocol FifoTest {
     assert_eq!(proto.collections.len(), 1);
     let coll = &proto.collections[0];
     assert_eq!(coll.name, "VoteQueue");
-    assert!(matches!(coll.kind, CollectionKind::Sequence));
+    assert!(matches!(coll.kind, CollectionKind::FifoChannel));
     assert_eq!(coll.element_type, "int");
 }
 
@@ -2911,55 +2911,6 @@ protocol LenTest {
         }
         other => panic!("Expected Assign, got {:?}", other),
     }
-}
-
-#[test]
-fn parse_fifo_channel_declaration() {
-    let src = r#"
-protocol FifoTest {
-    params n, t;
-    resilience: n > 3*t;
-    fifo_channel MsgQueue: int[n];
-    message Vote;
-    role Voter {
-        init Idle;
-        phase Idle {}
-    }
-    property safe: safety {
-        forall p: Voter. p.Idle == 0
-    }
-}
-"#;
-    let program = parse(src, "fifo_test.trs").expect("should parse");
-    let proto = &program.protocol.node;
-    assert_eq!(proto.collections.len(), 1);
-    let coll = &proto.collections[0];
-    assert_eq!(coll.name, "MsgQueue");
-    assert!(matches!(coll.kind, CollectionKind::FifoChannel));
-    assert_eq!(coll.element_type, "int");
-}
-
-#[test]
-fn parse_refines_declaration() {
-    let src = r#"
-protocol Refined {
-    refines "base_protocol.trs";
-    params n, t;
-    resilience: n > 3*t;
-    message Vote;
-    role Voter {
-        init Idle;
-        phase Idle {}
-    }
-    property safe: safety {
-        forall p: Voter. p.Idle == 0
-    }
-}
-"#;
-    let program = parse(src, "refines_test.trs").expect("should parse");
-    let proto = &program.protocol.node;
-    let refines = proto.refines.as_ref().expect("should have refines");
-    assert_eq!(refines.path, "base_protocol.trs");
 }
 
 #[test]

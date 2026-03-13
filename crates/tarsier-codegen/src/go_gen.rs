@@ -879,6 +879,5 @@ fn write_distinct_helpers(out: &mut String) -> std::fmt::Result {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests;

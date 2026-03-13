@@ -485,10 +485,7 @@ mod tests {
             Path::new("/home/user/bundle.json"),
             "artifacts/report.json",
         );
-        assert_eq!(
-            path,
-            PathBuf::from("/home/user/artifacts/report.json")
-        );
+        assert_eq!(path, PathBuf::from("/home/user/artifacts/report.json"));
     }
 
     #[test]

@@ -167,6 +167,7 @@ cargo run -p tarsier-playground
 | [Migration Guide](docs/MIGRATION.md) | Legacy command mapping to V2 `analyze` workflow |
 | [API Stability](docs/API_STABILITY.md) | SemVer guarantees and compatibility policy |
 | [Certificate Schema](docs/CERTIFICATE_SCHEMA.md) | Proof certificate bundle format |
+| [Engineering Quality Roadmap](docs/ENGINEERING_QUALITY_ROADMAP.md) | Task backlog for maintainability, docs, process, and hardening work |
 
 ## Development
 

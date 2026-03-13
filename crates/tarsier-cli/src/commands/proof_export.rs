@@ -654,24 +654,18 @@ mod tests {
 
     #[test]
     fn parse_solver_soundness_and_fairness_metadata_reject_invalid_values() {
-        assert!(
-            parse_solver_choice("minisat")
-                .expect_err("unknown solver should fail")
-                .to_string()
-                .contains("Unsupported solver")
-        );
-        assert!(
-            parse_soundness_mode("relaxed")
-                .expect_err("unknown soundness mode should fail")
-                .to_string()
-                .contains("Unsupported soundness mode")
-        );
-        assert!(
-            parse_fairness_mode("eventual")
-                .expect_err("unknown fairness mode should fail")
-                .to_string()
-                .contains("Unsupported fairness mode")
-        );
+        assert!(parse_solver_choice("minisat")
+            .expect_err("unknown solver should fail")
+            .to_string()
+            .contains("Unsupported solver"));
+        assert!(parse_soundness_mode("relaxed")
+            .expect_err("unknown soundness mode should fail")
+            .to_string()
+            .contains("Unsupported soundness mode"));
+        assert!(parse_fairness_mode("eventual")
+            .expect_err("unknown fairness mode should fail")
+            .to_string()
+            .contains("Unsupported fairness mode"));
     }
 
     #[test]
@@ -684,10 +678,7 @@ mod tests {
 
     #[test]
     fn coq_ident_from_name_normalizes_symbols_and_trailing_separator() {
-        assert_eq!(
-            coq_ident_from_name("step#1?"),
-            "obligation_step_1_x"
-        );
+        assert_eq!(coq_ident_from_name("step#1?"), "obligation_step_1_x");
     }
 
     #[test]

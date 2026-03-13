@@ -702,6 +702,87 @@
       "cegar_iters": 0,
       "notes": "Pacemaker unsafe counterpart: under-constrained view progression plus weak commit thresholds permits conflicting decisions across the same logical view workflow.",
       "model_sha256": "231c21a0ab584f6436d393651ca9d44a430a0b5eb1f56889ac4d0e1d0955d57d"
+    },
+    {
+      "file": "always_eventually_liveness_safe.trs",
+      "family": "temporal-liveness",
+      "class": "expected_safe",
+      "liveness": "live",
+      "depth": 6,
+      "notes": "Temporal liveness anchor for []<> progress: the making_progress flag starts true and never changes, so every bounded path already satisfies the always-eventually obligation.",
+      "model_sha256": "b98ed2b55da111ebe7257745839f0bd6278cc618bd64a070eedf9ac43ed98151"
+    },
+    {
+      "file": "always_eventually_liveness_buggy.trs",
+      "family": "temporal-liveness",
+      "class": "known_bug",
+      "liveness": "not_live",
+      "depth": 6,
+      "notes": "Temporal liveness bug seed for []<> progress: the making_progress flag is permanently false in the only phase, so the bounded liveness checker finds a non-live counterexample immediately.",
+      "model_sha256": "ad2d8cab3b1243177d1c1c6055dc276a1012e1fc29ba927a66dee905fd9f712e"
+    },
+    {
+      "file": "leads_to_liveness_safe.trs",
+      "family": "temporal-liveness",
+      "class": "expected_safe",
+      "liveness": "live",
+      "depth": 6,
+      "notes": "Temporal leads-to safe anchor: once active is true, delivered is also already true in the steady phase, so the response obligation is satisfied on every reachable execution prefix.",
+      "model_sha256": "23c56ff25fd3c8d78afa5ddd867148366869eb3be8021d1379e614090bc4e131"
+    },
+    {
+      "file": "leads_to_liveness_buggy.trs",
+      "family": "temporal-liveness",
+      "class": "known_bug",
+      "liveness": "not_live",
+      "depth": 6,
+      "notes": "Temporal leads-to bug seed: active is permanently true while delivered is permanently false in the stalled phase, yielding an immediate bounded non-liveness witness.",
+      "model_sha256": "a6752382cd99e1ce00e9d665f90622c946a34b78c6be478df73ee57c8aabda36"
+    },
+    {
+      "file": "multi_phase_liveness_safe.trs",
+      "family": "temporal-liveness",
+      "class": "expected_safe",
+      "liveness": "live",
+      "depth": 6,
+      "notes": "Nested temporal liveness safe anchor: all three phase-completion flags start true, so the chained leads-to/eventually obligation closes without requiring any additional transitions.",
+      "model_sha256": "8cdb2428778054ca9d5d6c79436a2e8074bf804362cb2c99fdf9964041e1daf3"
+    },
+    {
+      "file": "multi_phase_liveness_buggy.trs",
+      "family": "temporal-liveness",
+      "class": "known_bug",
+      "liveness": "not_live",
+      "depth": 6,
+      "notes": "Nested temporal liveness bug seed: the third completion flag is permanently false, so the multi-stage eventuality cannot be satisfied and bounded liveness reports a counterexample.",
+      "model_sha256": "7ad8c9f11bc2f0db70132b30a53a0bd4ab9f2595af8681771338bf1a17751748"
+    },
+    {
+      "file": "two_role_liveness_safe.trs",
+      "family": "temporal-liveness",
+      "class": "expected_safe",
+      "liveness": "live",
+      "depth": 6,
+      "notes": "Two-role liveness anchor: the proposer's proposed flag and the replica's acknowledged flag both start true, so the cross-role response obligation holds on every reachable state.",
+      "model_sha256": "beb803df194f84057455f708ac00bdbbf98fb46d23cffbf4ce4093db5b016c85"
+    },
+    {
+      "file": "reproducer_gap1_resilience_break.trs",
+      "family": "reconfigure",
+      "class": "expected_safe",
+      "verify": "unknown",
+      "depth": 6,
+      "notes": "Reconfiguration gap reproducer: strict mode now rejects the resilience-weakening update before verification. The manifest records an inconclusive placeholder until cert-suite supports expected validation-error outcomes.",
+      "model_sha256": "1da95ed46bbb765e3dd08c6bdf4512a4986453df9c98319cc4d89b0d8459f02b"
+    },
+    {
+      "file": "reproducer_gap2_multi_update_conflict.trs",
+      "family": "reconfigure",
+      "class": "expected_safe",
+      "verify": "unknown",
+      "depth": 6,
+      "notes": "Reconfiguration multi-update reproducer: strict mode now rejects conflicting parameter rewrites before BMC runs. The manifest uses an inconclusive placeholder because validation errors are not yet first-class cert-suite outcomes.",
+      "model_sha256": "1aa98b375de3205abbfed9a41fdfe79ab1de404dfe40e7bcc7b6a8d2998e04ac"
     }
   ]
 }

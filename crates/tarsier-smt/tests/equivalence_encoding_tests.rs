@@ -253,7 +253,8 @@ fn solver_equivalent_with_internal_location() {
 
     // Internal locations produce stutter rules; simulation should hold in both directions.
     match &result {
-        EquivalenceCheckResult::EquivalentUpTo { .. } | EquivalenceCheckResult::TriviallyEquivalent => {}
+        EquivalenceCheckResult::EquivalentUpTo { .. }
+        | EquivalenceCheckResult::TriviallyEquivalent => {}
         other => panic!("expected equivalent with internal location, got: {other:?}"),
     }
 }
@@ -312,20 +313,8 @@ fn fixture_equivalent_branching() {
 
 #[test]
 fn fixture_equivalent_with_multiple_params_and_vars() {
-    let a = make_ta(
-        &["A", "B"],
-        &[0],
-        &[(0, 1)],
-        &["n", "t", "f"],
-        &["x", "y"],
-    );
-    let b = make_ta(
-        &["A", "B"],
-        &[0],
-        &[(0, 1)],
-        &["n", "t", "f"],
-        &["x", "y"],
-    );
+    let a = make_ta(&["A", "B"], &[0], &[(0, 1)], &["n", "t", "f"], &["x", "y"]);
+    let b = make_ta(&["A", "B"], &[0], &[(0, 1)], &["n", "t", "f"], &["x", "y"]);
     let products = build_equivalence_products(&a, &b).unwrap();
 
     let mut fs = Z3Solver::new();

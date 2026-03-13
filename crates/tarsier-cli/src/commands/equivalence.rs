@@ -101,7 +101,9 @@ pub(crate) fn run_equivalence_check(
             println!();
             match &result {
                 EquivalenceCheckResult::TriviallyEquivalent => {
-                    println!("Result: TRIVIALLY EQUIVALENT (no mismatch locations in either direction)");
+                    println!(
+                        "Result: TRIVIALLY EQUIVALENT (no mismatch locations in either direction)"
+                    );
                 }
                 EquivalenceCheckResult::EquivalentUpTo { depth } => {
                     println!("Result: EQUIVALENT up to depth {depth}");
@@ -110,14 +112,22 @@ pub(crate) fn run_equivalence_check(
                     println!("Result: FORWARD DIVERGENCE (A has behavior B cannot match)");
                     if let Some(w) = witness {
                         println!();
-                        super::witness_format::print_witness_text_with_direction("Forward", &w.minimized(), &products.forward);
+                        super::witness_format::print_witness_text_with_direction(
+                            "Forward",
+                            &w.minimized(),
+                            &products.forward,
+                        );
                     }
                 }
                 EquivalenceCheckResult::BackwardDivergence { witness, .. } => {
                     println!("Result: BACKWARD DIVERGENCE (B has behavior A cannot match)");
                     if let Some(w) = witness {
                         println!();
-                        super::witness_format::print_witness_text_with_direction("Backward", &w.minimized(), &products.backward);
+                        super::witness_format::print_witness_text_with_direction(
+                            "Backward",
+                            &w.minimized(),
+                            &products.backward,
+                        );
                     }
                 }
                 EquivalenceCheckResult::BidirectionalDivergence {
@@ -125,14 +135,24 @@ pub(crate) fn run_equivalence_check(
                     backward_witness,
                     ..
                 } => {
-                    println!("Result: BIDIRECTIONAL DIVERGENCE (neither protocol simulates the other)");
+                    println!(
+                        "Result: BIDIRECTIONAL DIVERGENCE (neither protocol simulates the other)"
+                    );
                     if let Some(w) = forward_witness {
                         println!();
-                        super::witness_format::print_witness_text_with_direction("Forward", &w.minimized(), &products.forward);
+                        super::witness_format::print_witness_text_with_direction(
+                            "Forward",
+                            &w.minimized(),
+                            &products.forward,
+                        );
                     }
                     if let Some(w) = backward_witness {
                         println!();
-                        super::witness_format::print_witness_text_with_direction("Backward", &w.minimized(), &products.backward);
+                        super::witness_format::print_witness_text_with_direction(
+                            "Backward",
+                            &w.minimized(),
+                            &products.backward,
+                        );
                     }
                 }
                 EquivalenceCheckResult::Unknown { reason, .. } => {
@@ -202,19 +222,41 @@ fn extract_witnesses(
     products: &tarsier_ir::equivalence::EquivalenceProducts,
 ) -> (Option<serde_json::Value>, Option<serde_json::Value>) {
     match result {
-        EquivalenceCheckResult::ForwardDivergence { witness, .. } => {
-            (witness.as_ref().map(|w| super::witness_format::witness_to_json_with_violation(&w.minimized(), &products.forward)), None)
-        }
-        EquivalenceCheckResult::BackwardDivergence { witness, .. } => {
-            (None, witness.as_ref().map(|w| super::witness_format::witness_to_json_with_violation(&w.minimized(), &products.backward)))
-        }
+        EquivalenceCheckResult::ForwardDivergence { witness, .. } => (
+            witness.as_ref().map(|w| {
+                super::witness_format::witness_to_json_with_violation(
+                    &w.minimized(),
+                    &products.forward,
+                )
+            }),
+            None,
+        ),
+        EquivalenceCheckResult::BackwardDivergence { witness, .. } => (
+            None,
+            witness.as_ref().map(|w| {
+                super::witness_format::witness_to_json_with_violation(
+                    &w.minimized(),
+                    &products.backward,
+                )
+            }),
+        ),
         EquivalenceCheckResult::BidirectionalDivergence {
             forward_witness,
             backward_witness,
             ..
         } => (
-            forward_witness.as_ref().map(|w| super::witness_format::witness_to_json_with_violation(&w.minimized(), &products.forward)),
-            backward_witness.as_ref().map(|w| super::witness_format::witness_to_json_with_violation(&w.minimized(), &products.backward)),
+            forward_witness.as_ref().map(|w| {
+                super::witness_format::witness_to_json_with_violation(
+                    &w.minimized(),
+                    &products.forward,
+                )
+            }),
+            backward_witness.as_ref().map(|w| {
+                super::witness_format::witness_to_json_with_violation(
+                    &w.minimized(),
+                    &products.backward,
+                )
+            }),
         ),
         _ => (None, None),
     }

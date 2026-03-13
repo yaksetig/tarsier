@@ -1127,7 +1127,7 @@ pub(crate) fn run_lint_command(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tarsier_dsl::ast::{Span as DslSpan, LinearExpr};
+    use tarsier_dsl::ast::{LinearExpr, Span as DslSpan};
 
     // -- LintFix serialization --
 
@@ -1209,7 +1209,12 @@ mod tests {
 
     // -- guard_has_non_monotone_threshold --
 
-    fn make_threshold(op: tarsier_dsl::ast::CmpOp, distinct: bool, distinct_role: Option<&str>, msg: &str) -> tarsier_dsl::ast::GuardExpr {
+    fn make_threshold(
+        op: tarsier_dsl::ast::CmpOp,
+        distinct: bool,
+        distinct_role: Option<&str>,
+        msg: &str,
+    ) -> tarsier_dsl::ast::GuardExpr {
         tarsier_dsl::ast::GuardExpr::Threshold(tarsier_dsl::ast::ThresholdGuard {
             op,
             threshold: LinearExpr::Const(1),
@@ -1549,11 +1554,8 @@ mod tests {
 
     #[test]
     fn faithful_missing_identity_suggestion_nonempty() {
-        let suggestion = faithful_missing_identity_suggestion(
-            &["Validator".to_string()],
-            "classic",
-        )
-        .unwrap();
+        let suggestion =
+            faithful_missing_identity_suggestion(&["Validator".to_string()], "classic").unwrap();
         assert!(suggestion.contains("identity Validator"));
     }
 
@@ -1564,8 +1566,7 @@ mod tests {
 
     #[test]
     fn faithful_missing_auth_suggestion_nonempty() {
-        let suggestion =
-            faithful_missing_auth_suggestion(&["Vote".to_string()]).unwrap();
+        let suggestion = faithful_missing_auth_suggestion(&["Vote".to_string()]).unwrap();
         assert!(suggestion.contains("channel Vote: authenticated;"));
     }
 
@@ -1582,8 +1583,7 @@ mod tests {
     #[test]
     fn faithful_missing_process_identity_suggestion_nonempty() {
         let suggestion =
-            faithful_missing_process_identity_suggestion(&["Node".to_string()])
-                .unwrap();
+            faithful_missing_process_identity_suggestion(&["Node".to_string()]).unwrap();
         assert!(suggestion.contains("identity Node: process(pid)"));
     }
 }

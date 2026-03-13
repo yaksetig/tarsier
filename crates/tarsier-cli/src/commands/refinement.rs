@@ -137,7 +137,9 @@ pub(crate) fn run_refinement_check(
                     if product.mismatch_locations.is_empty() {
                         println!("Result: SIMULATION TRIVIALLY HOLDS (no mismatch locations)");
                     } else {
-                        println!("Result: SIMULATION HOLDS (no mismatch reachable within depth {depth})");
+                        println!(
+                            "Result: SIMULATION HOLDS (no mismatch reachable within depth {depth})"
+                        );
                     }
                 }
                 SimulationCheckResult::SimulationViolated {

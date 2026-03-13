@@ -565,9 +565,7 @@ mod tests {
 
     #[test]
     fn proof_object_error_text() {
-        assert!(!proof_object_looks_nontrivial(
-            "(error\n  unsupported\n)"
-        ));
+        assert!(!proof_object_looks_nontrivial("(error\n  unsupported\n)"));
     }
 
     #[test]
@@ -718,18 +716,16 @@ mod tests {
         let metadata = strict_unsat_metadata();
         let solvers = vec!["z3".to_string(), "cvc5".to_string()];
         let checker = std::path::PathBuf::from("/tmp/fake-proof-checker");
-        assert!(
-            validate_trusted_check_requirements(
-                true,
-                2,
-                &solvers,
-                &metadata,
-                true,
-                Some(&checker),
-                false
-            )
-            .is_ok()
-        );
+        assert!(validate_trusted_check_requirements(
+            true,
+            2,
+            &solvers,
+            &metadata,
+            true,
+            Some(&checker),
+            false
+        )
+        .is_ok());
     }
 
     #[test]
@@ -778,18 +774,15 @@ mod tests {
     fn validate_trusted_check_requires_checker_unless_explicitly_waived() {
         let metadata = strict_unsat_metadata();
         let solvers = vec!["z3".to_string(), "cvc5".to_string()];
-        let err = validate_trusted_check_requirements(
-            true, 2, &solvers, &metadata, true, None, false,
-        )
-        .expect_err("trusted-check without proof checker should fail");
+        let err =
+            validate_trusted_check_requirements(true, 2, &solvers, &metadata, true, None, false)
+                .expect_err("trusted-check without proof checker should fail");
         assert!(format!("{err:?}").contains("requires --proof-checker"));
 
-        assert!(
-            validate_trusted_check_requirements(
-                true, 2, &solvers, &metadata, true, None, true
-            )
-            .is_ok()
-        );
+        assert!(validate_trusted_check_requirements(
+            true, 2, &solvers, &metadata, true, None, true
+        )
+        .is_ok());
     }
 
     #[test]
@@ -829,8 +822,14 @@ mod tests {
         ];
         let triplets = obligation_triplets_from_metadata(&metadata);
         assert_eq!(triplets.len(), 2);
-        assert_eq!(triplets[0], ("a_obligation".into(), "sat".into(), "d".repeat(64)));
-        assert_eq!(triplets[1], ("z_obligation".into(), "unsat".into(), "".into()));
+        assert_eq!(
+            triplets[0],
+            ("a_obligation".into(), "sat".into(), "d".repeat(64))
+        );
+        assert_eq!(
+            triplets[1],
+            ("z_obligation".into(), "unsat".into(), "".into())
+        );
     }
 
     #[cfg(unix)]
@@ -860,10 +859,7 @@ mod tests {
         let tmp = unique_tmp_dir("tarsier-gov-utils-solver-fail");
         fs::create_dir_all(&tmp).expect("temp directory should be created");
         let solver = tmp.join("solver.sh");
-        write_executable_script(
-            &solver,
-            "#!/bin/sh\nset -eu\necho 'boom' >&2\nexit 2\n",
-        );
+        write_executable_script(&solver, "#!/bin/sh\nset -eu\necho 'boom' >&2\nexit 2\n");
         let smt = tmp.join("obligation.smt2");
         fs::write(&smt, "(check-sat)\n").expect("smt file should be written");
         let err = run_external_solver_on_file(

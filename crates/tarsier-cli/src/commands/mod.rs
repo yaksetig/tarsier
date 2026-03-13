@@ -15,5 +15,5 @@ pub(crate) mod prove;
 pub(crate) mod refinement;
 pub(crate) mod verify;
 pub(crate) mod visualize;
-pub(crate) mod witness_format;
 pub(crate) mod watch;
+pub(crate) mod witness_format;

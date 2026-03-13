@@ -45,10 +45,7 @@ pub enum EquivalenceCheckResult {
     /// Trivially equivalent — no mismatch locations in either product.
     TriviallyEquivalent,
     /// Solver returned unknown for at least one direction.
-    Unknown {
-        depth: usize,
-        reason: String,
-    },
+    Unknown { depth: usize, reason: String },
 }
 
 /// Encode the bounded equivalence check for both simulation directions.
@@ -91,21 +88,24 @@ fn merge_results(
     depth: usize,
 ) -> EquivalenceCheckResult {
     match (&fwd, &bwd) {
-        (SimulationCheckResult::SimulationHolds { .. }, SimulationCheckResult::SimulationHolds { .. }) => {
-            EquivalenceCheckResult::EquivalentUpTo { depth }
-        }
-        (SimulationCheckResult::SimulationViolated { witness, .. }, SimulationCheckResult::SimulationHolds { .. }) => {
-            EquivalenceCheckResult::ForwardDivergence {
-                depth,
-                witness: witness.clone(),
-            }
-        }
-        (SimulationCheckResult::SimulationHolds { .. }, SimulationCheckResult::SimulationViolated { witness, .. }) => {
-            EquivalenceCheckResult::BackwardDivergence {
-                depth,
-                witness: witness.clone(),
-            }
-        }
+        (
+            SimulationCheckResult::SimulationHolds { .. },
+            SimulationCheckResult::SimulationHolds { .. },
+        ) => EquivalenceCheckResult::EquivalentUpTo { depth },
+        (
+            SimulationCheckResult::SimulationViolated { witness, .. },
+            SimulationCheckResult::SimulationHolds { .. },
+        ) => EquivalenceCheckResult::ForwardDivergence {
+            depth,
+            witness: witness.clone(),
+        },
+        (
+            SimulationCheckResult::SimulationHolds { .. },
+            SimulationCheckResult::SimulationViolated { witness, .. },
+        ) => EquivalenceCheckResult::BackwardDivergence {
+            depth,
+            witness: witness.clone(),
+        },
         (
             SimulationCheckResult::SimulationViolated { witness: fw, .. },
             SimulationCheckResult::SimulationViolated { witness: bw, .. },
@@ -114,12 +114,11 @@ fn merge_results(
             forward_witness: fw.clone(),
             backward_witness: bw.clone(),
         },
-        (SimulationCheckResult::Unknown { reason, .. }, _) | (_, SimulationCheckResult::Unknown { reason, .. }) => {
-            EquivalenceCheckResult::Unknown {
-                depth,
-                reason: reason.clone(),
-            }
-        }
+        (SimulationCheckResult::Unknown { reason, .. }, _)
+        | (_, SimulationCheckResult::Unknown { reason, .. }) => EquivalenceCheckResult::Unknown {
+            depth,
+            reason: reason.clone(),
+        },
     }
 }
 
@@ -225,9 +224,15 @@ mod tests {
     #[test]
     fn equivalence_check_result_variants() {
         let r1 = EquivalenceCheckResult::EquivalentUpTo { depth: 5 };
-        assert!(matches!(r1, EquivalenceCheckResult::EquivalentUpTo { depth: 5 }));
+        assert!(matches!(
+            r1,
+            EquivalenceCheckResult::EquivalentUpTo { depth: 5 }
+        ));
 
-        let r2 = EquivalenceCheckResult::ForwardDivergence { depth: 3, witness: None };
+        let r2 = EquivalenceCheckResult::ForwardDivergence {
+            depth: 3,
+            witness: None,
+        };
         assert!(matches!(
             r2,
             EquivalenceCheckResult::ForwardDivergence { .. }
@@ -236,7 +241,10 @@ mod tests {
         let r3 = EquivalenceCheckResult::TriviallyEquivalent;
         assert!(matches!(r3, EquivalenceCheckResult::TriviallyEquivalent));
 
-        let r4 = EquivalenceCheckResult::Unknown { depth: 1, reason: "timeout".into() };
+        let r4 = EquivalenceCheckResult::Unknown {
+            depth: 1,
+            reason: "timeout".into(),
+        };
         assert!(matches!(r4, EquivalenceCheckResult::Unknown { .. }));
     }
 
@@ -245,7 +253,10 @@ mod tests {
         let fwd = SimulationCheckResult::SimulationHolds { depth: 5 };
         let bwd = SimulationCheckResult::SimulationHolds { depth: 5 };
         let result = merge_results(fwd, bwd, 5);
-        assert!(matches!(result, EquivalenceCheckResult::EquivalentUpTo { depth: 5 }));
+        assert!(matches!(
+            result,
+            EquivalenceCheckResult::EquivalentUpTo { depth: 5 }
+        ));
     }
 
     #[test]
@@ -263,6 +274,9 @@ mod tests {
         };
         let bwd = SimulationCheckResult::SimulationHolds { depth: 3 };
         let result = merge_results(fwd, bwd, 3);
-        assert!(matches!(result, EquivalenceCheckResult::ForwardDivergence { .. }));
+        assert!(matches!(
+            result,
+            EquivalenceCheckResult::ForwardDivergence { .. }
+        ));
     }
 }

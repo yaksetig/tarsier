@@ -914,6 +914,5 @@ impl std::str::FromStr for GovernanceProfile {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

@@ -177,13 +177,8 @@ mod tests {
     fn guard_ge() {
         let bound = make_lc(1, vec![]);
         let var_terms = vec![SmtTerm::var("g_0"), SmtTerm::var("g_1")];
-        let term = encode_threshold_guard(
-            var_terms,
-            CmpOp::Ge,
-            &bound,
-            false,
-            |i| format!("p_{i}"),
-        );
+        let term =
+            encode_threshold_guard(var_terms, CmpOp::Ge, &bound, false, |i| format!("p_{i}"));
         let expected_lhs = SmtTerm::var("g_0").add(SmtTerm::var("g_1"));
         assert_eq!(term, expected_lhs.ge(SmtTerm::int(1)));
     }
@@ -192,13 +187,8 @@ mod tests {
     fn guard_ne() {
         let bound = make_lc(0, vec![(1, 0)]);
         let var_terms = vec![SmtTerm::var("g_2")];
-        let term = encode_threshold_guard(
-            var_terms,
-            CmpOp::Ne,
-            &bound,
-            false,
-            |i| format!("p_{i}"),
-        );
+        let term =
+            encode_threshold_guard(var_terms, CmpOp::Ne, &bound, false, |i| format!("p_{i}"));
         assert_eq!(
             term,
             SmtTerm::not(SmtTerm::var("g_2").eq(SmtTerm::var("p_0"))),

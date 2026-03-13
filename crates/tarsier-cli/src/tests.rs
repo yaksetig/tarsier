@@ -402,12 +402,7 @@ fn parse_prove_accepts_cegar_report_out_flag() {
 
 #[test]
 fn parse_prove_rejects_removed_assist_flag() {
-    match Cli::try_parse_from([
-        "tarsier",
-        "prove",
-        "examples/pbft_simple.trs",
-        "--assist",
-    ]) {
+    match Cli::try_parse_from(["tarsier", "prove", "examples/pbft_simple.trs", "--assist"]) {
         Err(err) => {
             let rendered = err.to_string();
             assert!(rendered.contains("--assist"));

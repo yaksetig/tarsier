@@ -938,8 +938,7 @@ fn dag_diamond_safe_verifies() {
 #[test]
 fn dag_deep_chain_safe_parses_and_lowers() {
     let src = load_example("examples/experimental/dag_deep_chain_safe.trs");
-    let program =
-        pipeline::parse(&src, "dag_deep_chain_safe.trs").expect("parse should succeed");
+    let program = pipeline::parse(&src, "dag_deep_chain_safe.trs").expect("parse should succeed");
     assert_eq!(program.protocol.node.dag_rounds.len(), 5);
 
     let ta = pipeline::lower(&program).expect("lower should succeed");
@@ -967,8 +966,7 @@ fn dag_deep_chain_safe_verifies() {
 #[test]
 fn dag_multi_root_safe_parses_and_lowers() {
     let src = load_example("examples/experimental/dag_multi_root_safe.trs");
-    let program =
-        pipeline::parse(&src, "dag_multi_root_safe.trs").expect("parse should succeed");
+    let program = pipeline::parse(&src, "dag_multi_root_safe.trs").expect("parse should succeed");
     assert_eq!(program.protocol.node.dag_rounds.len(), 3);
 
     let ta = pipeline::lower(&program).expect("lower should succeed");
@@ -993,8 +991,7 @@ fn dag_multi_root_safe_verifies() {
 #[test]
 fn dag_self_loop_invalid_is_rejected() {
     let src = load_example("examples/experimental/dag_self_loop_invalid.trs");
-    let program =
-        pipeline::parse(&src, "dag_self_loop_invalid.trs").expect("parse should succeed");
+    let program = pipeline::parse(&src, "dag_self_loop_invalid.trs").expect("parse should succeed");
     let err = pipeline::lower(&program).expect_err("self-loop should be rejected");
     assert!(
         format!("{err}").contains("self-loop"),
@@ -1242,8 +1239,14 @@ fn dag_corpus_perf_all_proofs_under_10s() {
     for (file, name) in [
         ("examples/experimental/dag_round_alpha_safe.trs", "alpha"),
         ("examples/experimental/dag_diamond_safe.trs", "diamond"),
-        ("examples/experimental/dag_deep_chain_safe.trs", "deep_chain"),
-        ("examples/experimental/dag_multi_root_safe.trs", "multi_root"),
+        (
+            "examples/experimental/dag_deep_chain_safe.trs",
+            "deep_chain",
+        ),
+        (
+            "examples/experimental/dag_multi_root_safe.trs",
+            "multi_root",
+        ),
     ] {
         let src = load_example(file);
         let result = pipeline::prove_safety(&src, file, &opts)

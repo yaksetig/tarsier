@@ -146,10 +146,11 @@ impl<'a> KInductionEncoderBuilder<'a> {
             enc.assert_term(SmtTerm::var(gst_step_var()).le(SmtTerm::int(k as i64)));
             if let Some(gst_pid) = ta.semantics.gst_param {
                 let gst_idx = gst_pid.as_usize();
-                enc.assert_term(
-                    SmtTerm::var(gst_step_var())
-                        .eq(param_term_at_step(0, gst_idx, time_varying_param_ids)),
-                );
+                enc.assert_term(SmtTerm::var(gst_step_var()).eq(param_term_at_step(
+                    0,
+                    gst_idx,
+                    time_varying_param_ids,
+                )));
             }
         }
         for &i in time_varying_param_ids {
@@ -742,16 +743,17 @@ impl<'a> KInductionEncoderBuilder<'a> {
                                 .copied()
                                 .flatten()
                             {
-                                let honest_sender =
-                                    SmtTerm::var(byz_sender_var(step, sender_idx))
-                                        .eq(SmtTerm::int(0));
+                                let honest_sender = SmtTerm::var(byz_sender_var(step, sender_idx))
+                                    .eq(SmtTerm::int(0));
                                 enc.assert_term(
                                     SmtTerm::and(vec![post_gst.clone(), honest_sender])
                                         .implies(net_deliver.clone().eq(available.clone())),
                                 );
                             }
                         } else {
-                            enc.assert_term(post_gst.implies(net_deliver.clone().eq(available.clone())));
+                            enc.assert_term(
+                                post_gst.implies(net_deliver.clone().eq(available.clone())),
+                            );
                         }
                     }
                     if ta.semantics.timing_model == TimingModel::PartialSynchrony && lossy_delivery
@@ -1607,7 +1609,8 @@ mod tests {
         assert!(
             !assertions
                 .iter()
-                .any(|a| a.contains("(= gst_step p_") || a.contains("(= p_") && a.contains("gst_step")),
+                .any(|a| a.contains("(= gst_step p_")
+                    || a.contains("(= p_") && a.contains("gst_step")),
             "gst_step should not be tied to a parameter when gst_param is absent"
         );
     }

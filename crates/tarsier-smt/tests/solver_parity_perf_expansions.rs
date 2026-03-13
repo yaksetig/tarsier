@@ -317,11 +317,7 @@ fn fixture_safe_stutter_abstraction() {
 fn fixture_safe_with_shared_vars() {
     let concrete = make_ta_with_params(&["A", "B"], &[0], &[(0, 1)], &["n"], &["x", "y"]);
     let abstract_ta = make_ta_with_params(&["A", "B"], &[0], &[(0, 1)], &["n"], &["x", "y"]);
-    let product = build_product_for_fixture(
-        &concrete,
-        &abstract_ta,
-        &[(0, Some(0)), (1, Some(1))],
-    );
+    let product = build_product_for_fixture(&concrete, &abstract_ta, &[(0, Some(0)), (1, Some(1))]);
 
     let mut solver = Z3Solver::new();
     let result = run_refinement_solver(&mut solver, &product, 3).unwrap();

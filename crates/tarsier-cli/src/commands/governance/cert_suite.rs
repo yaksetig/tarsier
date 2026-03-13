@@ -9,9 +9,10 @@ use std::path::{Path, PathBuf};
 use tarsier_proof_kernel::sha256_hex_bytes;
 
 use super::{
-    is_valid_sha256_hex, CertSuiteEntry, CertSuiteEntryReport, CertSuiteManifest, CertSuiteReport, CERT_SUITE_CANONICAL_MIN_FAMILIES,
-    CERT_SUITE_SCHEMA_DOC_PATH, CERT_SUITE_SCHEMA_VERSION, CERT_SUITE_TRIAGE_CATEGORIES,
-    TRIAGE_ENGINE_REGRESSION, TRIAGE_EXPECTED_UPDATE, TRIAGE_MODEL_CHANGE,
+    is_valid_sha256_hex, CertSuiteEntry, CertSuiteEntryReport, CertSuiteManifest, CertSuiteReport,
+    CERT_SUITE_CANONICAL_MIN_FAMILIES, CERT_SUITE_SCHEMA_DOC_PATH, CERT_SUITE_SCHEMA_VERSION,
+    CERT_SUITE_TRIAGE_CATEGORIES, TRIAGE_ENGINE_REGRESSION, TRIAGE_EXPECTED_UPDATE,
+    TRIAGE_MODEL_CHANGE,
 };
 #[cfg(test)]
 use super::{CertSuiteAssumptions, CertSuiteCheckReport};
@@ -753,7 +754,6 @@ pub(crate) fn validate_manifest_library_coverage(
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-
 
 #[cfg(test)]
 mod tests;

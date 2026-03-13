@@ -15,10 +15,8 @@ const RB_SAFE_LIVE: &str =
     include_str!("../../../examples/library/reliable_broadcast_safe_live.trs");
 const RB_LIVE_BUGGY: &str =
     include_str!("../../../examples/library/reliable_broadcast_live_buggy.trs");
-const PBFT_LIVE_SAFE: &str =
-    include_str!("../../../examples/library/pbft_liveness_safe_ci.trs");
-const PBFT_LIVE_BUGGY: &str =
-    include_str!("../../../examples/library/pbft_liveness_buggy_ci.trs");
+const PBFT_LIVE_SAFE: &str = include_str!("../../../examples/library/pbft_liveness_safe_ci.trs");
+const PBFT_LIVE_BUGGY: &str = include_str!("../../../examples/library/pbft_liveness_buggy_ci.trs");
 
 fn pdr_options(depth: usize) -> PipelineOptions {
     PipelineOptions {

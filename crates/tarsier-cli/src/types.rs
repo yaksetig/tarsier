@@ -344,7 +344,10 @@ mod tests {
         assert_eq!(json["mode"], "quick");
         assert_eq!(json["overall"], "pass");
         // liveness_governance should be skipped when None
-        assert!(!json.as_object().unwrap().contains_key("liveness_governance"));
+        assert!(!json
+            .as_object()
+            .unwrap()
+            .contains_key("liveness_governance"));
     }
 
     // -- LayerRunCfg --

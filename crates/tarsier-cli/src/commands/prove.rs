@@ -1283,7 +1283,10 @@ mod tests {
     #[test]
     fn prove_auto_target_debug() {
         assert_eq!(format!("{:?}", ProveAutoTarget::Safety), "Safety");
-        assert_eq!(format!("{:?}", ProveAutoTarget::FairLiveness), "FairLiveness");
+        assert_eq!(
+            format!("{:?}", ProveAutoTarget::FairLiveness),
+            "FairLiveness"
+        );
     }
 
     #[test]
@@ -1370,7 +1373,10 @@ mod tests {
         let cloned = args.clone();
         assert_eq!(cloned.fairness, "strong");
         assert!(cloned.portfolio);
-        assert_eq!(cloned.cert_out.as_deref(), Some(std::path::Path::new("cert/")));
+        assert_eq!(
+            cloned.cert_out.as_deref(),
+            Some(std::path::Path::new("cert/"))
+        );
     }
 
     // -- ProveRoundCommandArgs --

@@ -8,13 +8,22 @@ fn parse_model(source: &str, name: &str) -> tarsier_dsl::ast::Program {
 #[test]
 fn go_semantic_validation_matches_model_oracle_for_core_examples() {
     let fixtures = [
-        ("reliable_broadcast.trs", include_str!("../../../examples/reliable_broadcast.trs")),
-        ("pbft_simple.trs", include_str!("../../../examples/pbft_simple.trs")),
+        (
+            "reliable_broadcast.trs",
+            include_str!("../../../examples/reliable_broadcast.trs"),
+        ),
+        (
+            "pbft_simple.trs",
+            include_str!("../../../examples/pbft_simple.trs"),
+        ),
         (
             "pbft_faithful_liveness.trs",
             include_str!("../../../examples/pbft_faithful_liveness.trs"),
         ),
-        ("crypto_objects.trs", include_str!("../../../examples/crypto_objects.trs")),
+        (
+            "crypto_objects.trs",
+            include_str!("../../../examples/crypto_objects.trs"),
+        ),
     ];
 
     for (name, source) in fixtures {
@@ -44,7 +53,10 @@ fn go_semantic_validation_flags_missing_send_semantics() {
     );
 
     let report = validate_generated_trace_oracle(&oracle, CodegenTarget::Go, &broken);
-    assert!(!report.is_match(), "broken output should fail oracle checks");
+    assert!(
+        !report.is_match(),
+        "broken output should fail oracle checks"
+    );
     assert!(
         report
             .missing

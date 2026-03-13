@@ -326,11 +326,7 @@ fn solver_holds_matching_transitions() {
     // Concrete: A→B, Abstract: A→B, identity mapping → simulation holds.
     let concrete = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &[]);
     let abstract_ta = make_ta(&["A", "B"], &[0], &[(0, 1)], &[], &[]);
-    let product = build_product_for_test(
-        &concrete,
-        &abstract_ta,
-        &[(0, Some(0)), (1, Some(1))],
-    );
+    let product = build_product_for_test(&concrete, &abstract_ta, &[(0, Some(0)), (1, Some(1))]);
 
     let mut solver = Z3Solver::new();
     let result = run_refinement_solver(&mut solver, &product, 5).unwrap();
@@ -354,7 +350,10 @@ fn solver_holds_with_mismatches_unreachable() {
         &[(0, Some(0)), (1, Some(1)), (2, Some(2))],
     );
 
-    assert!(product.has_mismatches(), "product should have mismatch locations");
+    assert!(
+        product.has_mismatches(),
+        "product should have mismatch locations"
+    );
 
     let mut solver = Z3Solver::new();
     let result = run_refinement_solver(&mut solver, &product, 5).unwrap();
@@ -415,8 +414,20 @@ fn witness_minimized_trims_trace_and_zeros() {
             WitnessStep {
                 step: 0,
                 location_counters: vec![
-                    (ProductLocationId { concrete: LocationId::from(0), abstract_loc: LocationId::from(0) }, 5),
-                    (ProductLocationId { concrete: LocationId::from(1), abstract_loc: LocationId::from(0) }, 0),
+                    (
+                        ProductLocationId {
+                            concrete: LocationId::from(0),
+                            abstract_loc: LocationId::from(0),
+                        },
+                        5,
+                    ),
+                    (
+                        ProductLocationId {
+                            concrete: LocationId::from(1),
+                            abstract_loc: LocationId::from(0),
+                        },
+                        0,
+                    ),
                 ],
                 shared_var_values: vec![(0, 0)],
                 rule_firings: vec![(0, 3), (1, 0)],

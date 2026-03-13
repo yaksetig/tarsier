@@ -834,6 +834,5 @@ fn field_type_to_rust(ty: &str) -> &str {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

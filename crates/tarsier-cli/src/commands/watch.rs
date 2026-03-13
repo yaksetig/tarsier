@@ -193,11 +193,22 @@ mod tests {
     fn chrono_free_timestamp_format() {
         let ts = chrono_free_timestamp();
         // Expected format: HH:MM:SS UTC
-        assert!(ts.ends_with(" UTC"), "timestamp should end with ' UTC': {ts}");
+        assert!(
+            ts.ends_with(" UTC"),
+            "timestamp should end with ' UTC': {ts}"
+        );
         let parts: Vec<&str> = ts.trim_end_matches(" UTC").split(':').collect();
-        assert_eq!(parts.len(), 3, "timestamp should have 3 colon-separated parts");
+        assert_eq!(
+            parts.len(),
+            3,
+            "timestamp should have 3 colon-separated parts"
+        );
         for part in &parts {
-            assert_eq!(part.len(), 2, "each time component should be 2 digits: {part}");
+            assert_eq!(
+                part.len(),
+                2,
+                "each time component should be 2 digits: {part}"
+            );
             assert!(part.chars().all(|c| c.is_ascii_digit()));
         }
     }
