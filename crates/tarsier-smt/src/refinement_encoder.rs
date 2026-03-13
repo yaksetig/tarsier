@@ -1,10 +1,11 @@
 //! SMT encoding for bounded simulation-preservation checking.
 //!
-//! Given a [`ProductAutomaton`] from the product construction (REF-03),
-//! this module encodes the simulation check as a bounded reachability
-//! problem in QF_LIA: can any mismatch state in the product be reached
-//! within `k` steps? If SAT, the simulation relation is violated and the
-//! solver model provides a concrete counterexample trace.
+//! Given a
+//! [`ProductAutomaton`](tarsier_ir::product::ProductAutomaton) from the
+//! product construction (REF-03), this module encodes the simulation check as
+//! a bounded reachability problem in QF_LIA: can any mismatch state in the
+//! product be reached within `k` steps? If SAT, the simulation relation is
+//! violated and the solver model provides a concrete counterexample trace.
 
 use tarsier_ir::product::{ProductAutomaton, ProductLocationId};
 use tarsier_ir::threshold_automaton::{GuardAtom, SharedVarId, UpdateKind};

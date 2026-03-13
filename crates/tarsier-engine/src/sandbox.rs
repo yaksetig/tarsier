@@ -2,12 +2,14 @@
 //!
 //! This module enforces resource constraints (CPU/time, memory, filesystem,
 //! network) on all verification and proof pipelines. Controls are configured
-//! via [`SandboxConfig`] and enforced by [`SandboxGuard`].
+//! via [`SandboxConfig`](crate::sandbox::SandboxConfig) and enforced by
+//! [`SandboxGuard`](crate::sandbox::SandboxGuard).
 //!
 //! **Fail-closed semantics:** If a required control cannot be enforced on the
 //! current platform (e.g., memory monitoring is unavailable on non-Linux),
-//! [`SandboxGuard::activate`] returns an error unless the caller explicitly
-//! opts into degraded mode via [`SandboxConfig::allow_degraded`].
+//! [`SandboxGuard::activate`](crate::sandbox::SandboxGuard::activate) returns
+//! an error unless the caller explicitly opts into degraded mode via
+//! [`SandboxConfig::allow_degraded`](crate::sandbox::SandboxConfig::allow_degraded).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;

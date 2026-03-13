@@ -269,14 +269,17 @@ pub(crate) fn cegar_stage_counterexample_analysis_unbounded_safety(
                 ),
             })
         }
-        UnboundedSafetyResult::NotProved { .. } | UnboundedSafetyResult::Unknown { .. } => {
-            let reason = match result {
-                UnboundedSafetyResult::NotProved { max_k, .. } => {
-                    format!("proof did not close up to k={max_k}")
-                }
-                UnboundedSafetyResult::Unknown { reason } => reason.clone(),
-                _ => unreachable!("match arm already covered by outer pattern"),
-            };
+        UnboundedSafetyResult::NotProved { max_k, .. } => {
+            let reason = format!("proof did not close up to k={max_k}");
+            Some(CegarCounterexampleAnalysis {
+                classification: "inconclusive".into(),
+                rationale: format!(
+                    "Stage {} could not decisively confirm or eliminate the baseline UNSAFE witness under refinements [{}]: {}",
+                    stage, refinements_text, reason
+                ),
+            })
+        }
+        UnboundedSafetyResult::Unknown { reason } => {
             Some(CegarCounterexampleAnalysis {
                 classification: "inconclusive".into(),
                 rationale: format!(

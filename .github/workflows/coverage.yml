@@ -29,6 +29,7 @@ jobs:
           {
             echo "Z3_SYS_Z3_HEADER=${extracted}/include/z3.h"
             echo "Z3_LIBRARY_PATH_OVERRIDE=${extracted}/bin"
+            echo "Z3_NO_PKG_CONFIG=1"
             if [ -n "${LD_LIBRARY_PATH:-}" ]; then
               echo "LD_LIBRARY_PATH=${extracted}/bin:${LD_LIBRARY_PATH}"
             else

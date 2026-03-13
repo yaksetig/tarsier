@@ -1,9 +1,12 @@
-//! BMC encoder: translates a [`CounterSystem`] and [`SafetyProperty`] into a
+//! BMC encoder: translates a
+//! [`CounterSystem`](tarsier_ir::counter_system::CounterSystem) and
+//! [`SafetyProperty`](tarsier_ir::properties::SafetyProperty) into a
 //! quantifier-free linear integer arithmetic (QF_LIA) encoding suitable for
 //! bounded model checking, k-induction, and PDR/IC3.
 //!
-//! The main entry point is [`encode_bmc`], which produces a [`BmcEncoding`]
-//! containing variable declarations and assertions that can be fed to any
+//! The main entry point is [`encode_bmc`](crate::encoder::encode_bmc), which
+//! produces a [`BmcEncoding`](crate::encoder::BmcEncoding) containing variable
+//! declarations and assertions that can be fed to any
 //! [`SmtSolver`](crate::solver::SmtSolver) backend.
 
 mod context;

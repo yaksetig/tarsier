@@ -1,9 +1,12 @@
 //! Verification drivers for bounded model checking (BMC), k-induction, and
 //! property-directed reachability (PDR/IC3).
 //!
-//! Each driver accepts a generic [`SmtSolver`] backend plus a
-//! [`CounterSystem`] / [`SafetyProperty`] pair, and returns a structured
-//! result indicating safety, a counterexample, or inconclusive.
+//! Each driver accepts a generic [`SmtSolver`](crate::solver::SmtSolver)
+//! backend plus a
+//! [`CounterSystem`](tarsier_ir::counter_system::CounterSystem) /
+//! [`SafetyProperty`](tarsier_ir::properties::SafetyProperty) pair, and
+//! returns a structured result indicating safety, a counterexample, or
+//! inconclusive.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
