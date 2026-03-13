@@ -3,6 +3,52 @@
 use crate::pipeline::verification::*;
 use crate::pipeline::*;
 
+/// Run bounded verification over the declared properties in `source`.
+///
+/// A passing result means no violating execution was found up to
+/// `options.max_depth`. This is primarily a bug-finding and bounded-analysis
+/// entrypoint, not an unbounded proof.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use tarsier_engine::pipeline::verification::verify;
+/// use tarsier_engine::pipeline::{PipelineOptions, ProofEngine, SolverChoice, SoundnessMode};
+///
+/// let source = r#"
+/// protocol TrivialLive {
+///     params n, t, f;
+///     resilience: n > 3*t;
+///
+///     adversary {
+///         model: byzantine;
+///         bound: f;
+///     }
+///
+///     role R {
+///         var decided: bool = true;
+///         init done;
+///         phase done {}
+///     }
+///
+///     property inv: safety {
+///         forall p: R. p.decided == true
+///     }
+/// }
+/// "#;
+///
+/// let options = PipelineOptions {
+///     solver: SolverChoice::Z3,
+///     max_depth: 8,
+///     timeout_secs: 30,
+///     dump_smt: None,
+///     soundness: SoundnessMode::Strict,
+///     proof_engine: ProofEngine::KInduction,
+/// };
+///
+/// let _result = verify(source, "trivial_live.trs", &options)?;
+/// # Ok::<(), tarsier_engine::pipeline::PipelineError>(())
+/// ```
 pub fn verify(
     source: &str,
     filename: &str,

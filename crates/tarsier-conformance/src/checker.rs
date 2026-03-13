@@ -45,10 +45,13 @@ pub enum ViolationKind {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ConformanceMode {
+    /// Accept unknown message kinds and incomplete decide-context details.
     Permissive,
+    /// Fail on unknown message kinds and malformed decide-context details.
     Strict,
 }
 
+/// Strictness knobs for runtime-trace checking.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CheckerOptions {
     pub mode: ConformanceMode,
@@ -57,6 +60,7 @@ pub struct CheckerOptions {
 }
 
 impl CheckerOptions {
+    /// Build permissive checker options for exploratory replay.
     pub fn permissive() -> Self {
         Self {
             mode: ConformanceMode::Permissive,
@@ -65,6 +69,7 @@ impl CheckerOptions {
         }
     }
 
+    /// Build strict checker options for CI and release validation.
     pub fn strict() -> Self {
         Self {
             mode: ConformanceMode::Strict,
@@ -91,10 +96,65 @@ impl<'a> ConformanceChecker<'a> {
     /// Create a new checker for the given automaton and parameter bindings.
     ///
     /// `param_bindings` maps parameter names to concrete values.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use tarsier_conformance::checker::ConformanceChecker;
+    /// use tarsier_dsl::parse;
+    /// use tarsier_ir::lowering::lower;
+    /// use tarsier_ir::runtime_trace::{ProcessEvent, ProcessEventKind, ProcessTrace, RuntimeTrace};
+    ///
+    /// let source = r#"
+    /// protocol TrivialLive {
+    ///     params n, t, f;
+    ///     resilience: n > 3*t;
+    ///
+    ///     adversary {
+    ///         model: byzantine;
+    ///         bound: f;
+    ///     }
+    ///
+    ///     role R {
+    ///         var decided: bool = true;
+    ///         init done;
+    ///         phase done {}
+    ///     }
+    ///
+    ///     property inv: safety {
+    ///         forall p: R. p.decided == true
+    ///     }
+    /// }
+    /// "#;
+    ///
+    /// let program = parse(source, "trivial_live.trs")?;
+    /// let automaton = lower(&program)?;
+    /// let checker = ConformanceChecker::new(&automaton, &[("n".into(), 4), ("t".into(), 1)]);
+    ///
+    /// let trace = RuntimeTrace {
+    ///     schema_version: 1,
+    ///     protocol_name: "TrivialLive".into(),
+    ///     params: vec![("n".into(), 4), ("t".into(), 1)],
+    ///     processes: vec![ProcessTrace {
+    ///         process_id: 0,
+    ///         role: "R".into(),
+    ///         events: vec![ProcessEvent {
+    ///             sequence: 0,
+    ///             kind: ProcessEventKind::Init {
+    ///                 location: "R_done".into(),
+    ///             },
+    ///         }],
+    ///     }],
+    /// };
+    ///
+    /// let _result = checker.check(&trace);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn new(automaton: &'a ThresholdAutomaton, param_bindings: &[(String, i64)]) -> Self {
         Self::new_with_options(automaton, param_bindings, CheckerOptions::default())
     }
 
+    /// Create a checker with one of the built-in strictness presets.
     pub fn new_with_mode(
         automaton: &'a ThresholdAutomaton,
         param_bindings: &[(String, i64)],
@@ -107,6 +167,7 @@ impl<'a> ConformanceChecker<'a> {
         Self::new_with_options(automaton, param_bindings, options)
     }
 
+    /// Create a checker with explicit options.
     pub fn new_with_options(
         automaton: &'a ThresholdAutomaton,
         param_bindings: &[(String, i64)],
@@ -125,6 +186,7 @@ impl<'a> ConformanceChecker<'a> {
         }
     }
 
+    /// Return the effective checker options.
     pub fn options(&self) -> CheckerOptions {
         self.options
     }
@@ -137,6 +199,10 @@ impl<'a> ConformanceChecker<'a> {
     }
 
     /// Check a runtime trace against the model.
+    ///
+    /// A passing result means the supplied trace is consistent with the model's
+    /// transition semantics. It does not prove the implementation is correct
+    /// for executions that were not recorded.
     pub fn check(&self, trace: &RuntimeTrace) -> CheckResult {
         let mut violations = Vec::new();
 

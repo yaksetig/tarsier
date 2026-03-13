@@ -2,6 +2,9 @@
 
 This document states exactly what Tarsier verifies vs what remains trusted.
 
+If you want the short CLI-oriented version first, start with
+`docs/COMMAND_SOUNDNESS.md` and then come back here for the full trust model.
+
 ## 1. Claim Layers
 
 Tarsier outputs are only as strong as the claim layer being used.

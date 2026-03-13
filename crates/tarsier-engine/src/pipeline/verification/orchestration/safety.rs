@@ -111,6 +111,47 @@ pub fn prove_safety_program_ast(
 /// Run an unbounded safety proof attempt via k-induction.
 ///
 /// Uses `options.max_depth` as the maximum induction depth `k`.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use tarsier_engine::pipeline::verification::prove_safety;
+/// use tarsier_engine::pipeline::{PipelineOptions, ProofEngine, SolverChoice, SoundnessMode};
+///
+/// let source = r#"
+/// protocol TrivialLive {
+///     params n, t, f;
+///     resilience: n > 3*t;
+///
+///     adversary {
+///         model: byzantine;
+///         bound: f;
+///     }
+///
+///     role R {
+///         var decided: bool = true;
+///         init done;
+///         phase done {}
+///     }
+///
+///     property inv: safety {
+///         forall p: R. p.decided == true
+///     }
+/// }
+/// "#;
+///
+/// let options = PipelineOptions {
+///     solver: SolverChoice::Z3,
+///     max_depth: 12,
+///     timeout_secs: 30,
+///     dump_smt: None,
+///     soundness: SoundnessMode::Strict,
+///     proof_engine: ProofEngine::KInduction,
+/// };
+///
+/// let _result = prove_safety(source, "trivial_live.trs", &options)?;
+/// # Ok::<(), tarsier_engine::pipeline::PipelineError>(())
+/// ```
 pub fn prove_safety(
     source: &str,
     filename: &str,

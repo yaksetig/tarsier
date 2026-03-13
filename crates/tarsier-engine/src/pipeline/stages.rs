@@ -109,6 +109,38 @@ impl PipelineStage<ThresholdAutomaton> for AbstractStage {
 }
 
 /// Canonical parse -> lower -> abstract stage pipeline.
+///
+/// # Examples
+///
+/// ```rust
+/// use tarsier_engine::pipeline::stages::parse_lower_abstract;
+///
+/// let source = r#"
+/// protocol Tiny {
+///     params n, t, f;
+///     resilience: n > 3*t;
+///
+///     adversary {
+///         model: byzantine;
+///         bound: f;
+///     }
+///
+///     role R {
+///         var decided: bool = true;
+///         init done;
+///         phase done {}
+///     }
+///
+///     property inv: safety {
+///         forall p: R. p.decided == true
+///     }
+/// }
+/// "#;
+///
+/// let counter_system = parse_lower_abstract(source, "tiny.trs")?;
+/// assert!(counter_system.num_locations() >= 1);
+/// # Ok::<(), tarsier_engine::pipeline::PipelineError>(())
+/// ```
 pub fn parse_lower_abstract(source: &str, filename: &str) -> Result<CounterSystem, PipelineError> {
     ParseStage
         .then(LowerStage)

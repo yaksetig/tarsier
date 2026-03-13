@@ -318,6 +318,21 @@ pub fn compute_bundle_sha256(metadata: &CertificateMetadata) -> String {
 ///
 /// # Returns
 /// [`BundleIntegrityReport`] with all discovered issues, or load/decode errors.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use std::path::Path;
+/// use tarsier_proof_kernel::check_bundle_integrity;
+///
+/// let report = check_bundle_integrity(Path::new("artifacts/certs/my_protocol"))?;
+/// if !report.is_ok() {
+///     for issue in &report.issues {
+///         eprintln!("[{}] {}", issue.code, issue.message);
+///     }
+/// }
+/// # Ok::<(), tarsier_proof_kernel::ProofKernelError>(())
+/// ```
 pub fn check_bundle_integrity(
     bundle_dir: &Path,
 ) -> Result<BundleIntegrityReport, ProofKernelError> {

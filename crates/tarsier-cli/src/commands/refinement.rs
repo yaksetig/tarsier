@@ -8,7 +8,7 @@ use std::path::Path;
 use std::process;
 
 use serde::Serialize;
-use tarsier_dsl::parser::parse;
+use tarsier_dsl::parse;
 use tarsier_ir::lowering::lower;
 use tarsier_ir::product::build_product;
 use tarsier_ir::refinement::{RefinementMapping, RefinementRelation};

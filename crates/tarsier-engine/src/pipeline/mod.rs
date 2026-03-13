@@ -465,6 +465,38 @@ pub struct RoundAbstractionFairProofResult {
 /// If the filename refers to a real file path, any `import` declarations in
 /// the parsed program are automatically resolved by loading and merging the
 /// referenced files.
+///
+/// # Examples
+///
+/// ```rust
+/// use tarsier_engine::pipeline::parse;
+///
+/// let source = r#"
+/// protocol Tiny {
+///     params n, t, f;
+///     resilience: n > 3*t;
+///
+///     adversary {
+///         model: byzantine;
+///         bound: f;
+///     }
+///
+///     role R {
+///         var decided: bool = true;
+///         init done;
+///         phase done {}
+///     }
+///
+///     property inv: safety {
+///         forall p: R. p.decided == true
+///     }
+/// }
+/// "#;
+///
+/// let program = parse(source, "tiny.trs")?;
+/// assert_eq!(program.protocol.node.roles.len(), 1);
+/// # Ok::<(), tarsier_engine::pipeline::PipelineError>(())
+/// ```
 pub fn parse(source: &str, filename: &str) -> Result<ast::Program, PipelineError> {
     let started = Instant::now();
     let mut program = tarsier_dsl::parse(source, filename).map_err(PipelineError::from)?;
@@ -496,6 +528,39 @@ pub fn resolve_imports(
 }
 
 /// Lower an AST into a threshold automaton.
+///
+/// # Examples
+///
+/// ```rust
+/// use tarsier_engine::pipeline::{lower, parse};
+///
+/// let source = r#"
+/// protocol Tiny {
+///     params n, t, f;
+///     resilience: n > 3*t;
+///
+///     adversary {
+///         model: byzantine;
+///         bound: f;
+///     }
+///
+///     role R {
+///         var decided: bool = true;
+///         init done;
+///         phase done {}
+///     }
+///
+///     property inv: safety {
+///         forall p: R. p.decided == true
+///     }
+/// }
+/// "#;
+///
+/// let program = parse(source, "tiny.trs")?;
+/// let automaton = lower(&program)?;
+/// assert!(!automaton.locations.is_empty());
+/// # Ok::<(), tarsier_engine::pipeline::PipelineError>(())
+/// ```
 pub fn lower(program: &ast::Program) -> Result<ThresholdAutomaton, PipelineError> {
     let started = Instant::now();
     let ta = lowering::lower(program).map_err(PipelineError::from)?;

@@ -162,6 +162,7 @@ cargo run -p tarsier-playground
 | [Advanced Usage](docs/ADVANCED_USAGE.md) | CI integration, governance, certificates, CEGAR, benchmarks |
 | [Parameterized Verification](docs/PARAMETERIZED_VERIFICATION.md) | When results generalize beyond fixed parameters |
 | [Semantics](docs/SEMANTICS.md) | Formal semantics and soundness assumptions |
+| [Command Soundness Guide](docs/COMMAND_SOUNDNESS.md) | What each command proves, what it still assumes, and when to use it |
 | [Trust Boundary](docs/TRUST_BOUNDARY.md) | What is trusted vs. independently verified |
 | [Architecture](docs/ARCHITECTURE.md) | 12-crate pipeline map and trust boundary overview |
 | [Migration Guide](docs/MIGRATION.md) | Legacy command mapping to V2 `analyze` workflow |
@@ -181,6 +182,8 @@ just proptest     # Property-based randomized pipeline tests
 ## Current Boundary
 
 Tarsier is a threshold-automata symbolic checker. Unbounded safety uses k-induction and IC3/PDR. Unbounded fair-liveness uses fair-cycle IC3/PDR. Cryptographic claims are symbolic, not computational — see [Semantics](docs/SEMANTICS.md) and [Trust Boundary](docs/TRUST_BOUNDARY.md).
+
+For a command-by-command strength comparison, see the [Command Soundness Guide](docs/COMMAND_SOUNDNESS.md).
 
 ## License
 

@@ -7,7 +7,7 @@ use std::path::Path;
 use std::process;
 
 use serde::Serialize;
-use tarsier_dsl::parser::parse;
+use tarsier_dsl::parse;
 use tarsier_ir::equivalence::build_equivalence_products;
 use tarsier_ir::lowering::lower;
 use tarsier_smt::backends::z3_backend::Z3Solver;

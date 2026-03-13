@@ -22,6 +22,52 @@ pub enum ReplayError {
 /// Creates concrete processes from initial kappa values and replays each
 /// trace step by moving `delta` processes from the rule's source to
 /// destination location.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use tarsier_conformance::replay::concretize_trace;
+/// use tarsier_dsl::parse;
+/// use tarsier_ir::counter_system::{Configuration, Trace};
+/// use tarsier_ir::lowering::lower;
+///
+/// let source = r#"
+/// protocol TrivialLive {
+///     params n, t, f;
+///     resilience: n > 3*t;
+///
+///     adversary {
+///         model: byzantine;
+///         bound: f;
+///     }
+///
+///     role R {
+///         var decided: bool = true;
+///         init done;
+///         phase done {}
+///     }
+///
+///     property inv: safety {
+///         forall p: R. p.decided == true
+///     }
+/// }
+/// "#;
+///
+/// let program = parse(source, "trivial_live.trs")?;
+/// let automaton = lower(&program)?;
+/// let counter_trace = Trace {
+///     initial_config: Configuration {
+///         kappa: vec![1],
+///         gamma: vec![0],
+///         params: vec![4, 1, 1],
+///     },
+///     steps: vec![],
+///     param_values: vec![("n".into(), 4), ("t".into(), 1), ("f".into(), 1)],
+/// };
+///
+/// let _runtime_trace = concretize_trace(&counter_trace, &automaton)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn concretize_trace(
     counter_trace: &Trace,
     automaton: &ThresholdAutomaton,

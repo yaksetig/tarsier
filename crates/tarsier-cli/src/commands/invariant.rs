@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use serde_json::json;
-use tarsier_dsl::parser::parse;
+use tarsier_dsl::parse;
 use tarsier_engine::pipeline::verification::{
     generate_linear_predicate_candidates, score_candidates, InductivenessResult,
 };
