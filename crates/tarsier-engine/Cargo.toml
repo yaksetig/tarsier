@@ -35,3 +35,7 @@ harness = false
 [[bench]]
 name = "solver_perf"
 harness = false
+
+[[bench]]
+name = "pdr_perf"
+harness = false

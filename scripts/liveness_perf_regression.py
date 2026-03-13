@@ -195,6 +195,17 @@ def main() -> int:
         print(f"Manifest has no entries: {manifest_path}", file=sys.stderr)
         return 2
 
+    build = subprocess.run(
+        ["cargo", "build", "-q", "-p", "tarsier-cli"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    if build.returncode != 0:
+        stderr = build.stderr.strip() or f"command exited {build.returncode}"
+        print(f"Failed to prebuild tarsier-cli: {stderr}", file=sys.stderr)
+        return 1
+
     results = [run_entry(root, entry) for entry in entries]
     passed = sum(1 for r in results if r.status == "pass")
     failed = len(results) - passed

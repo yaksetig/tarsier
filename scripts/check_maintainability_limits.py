@@ -9,6 +9,7 @@ grows an already-oversized module/function beyond a small allowance.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import subprocess
 import sys
@@ -38,6 +39,7 @@ class FunctionSpan:
     name: str
     start_line: int
     line_count: int
+    normalized_hash: str
 
 
 def run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -226,11 +228,15 @@ def collect_functions(text: str) -> dict[str, FunctionSpan]:
                 occurrence = name_occurrences[name]
                 name_occurrences[name] += 1
                 key = f"{name}#{occurrence}"
+                normalized_hash = hashlib.sha256(
+                    "\n".join(sanitized_lines[start_idx : j + 1]).encode("utf-8")
+                ).hexdigest()
                 functions[key] = FunctionSpan(
                     key=key,
                     name=name,
                     start_line=start_idx + 1,
                     line_count=j - start_idx + 1,
+                    normalized_hash=normalized_hash,
                 )
                 i = j + 1
                 break
@@ -257,6 +263,34 @@ def describe_delta(current: int, previous: int | None) -> str:
         return f"unchanged at {current} lines"
     sign = "+" if delta > 0 else ""
     return f"{previous} -> {current} lines ({sign}{delta})"
+
+
+def base_production_rust_files(base: str) -> list[Path]:
+    proc = run_git("ls-tree", "-r", "--name-only", base, "--", *existing_roots())
+    return sorted(
+        Path(path)
+        for path in proc.stdout.splitlines()
+        if path and is_production_rust_path(path)
+    )
+
+
+def collect_base_function_index(
+    base: str,
+) -> tuple[dict[str, FunctionSpan], dict[str, list[FunctionSpan]]]:
+    by_hash: dict[str, FunctionSpan] = {}
+    by_name: dict[str, list[FunctionSpan]] = defaultdict(list)
+
+    for path in base_production_rust_files(base):
+        text = read_base_file(base, path)
+        if text is None:
+            continue
+        for function in collect_functions(text).values():
+            if function.line_count <= MAX_FUNCTION_LINES:
+                continue
+            by_hash.setdefault(function.normalized_hash, function)
+            by_name[function.name].append(function)
+
+    return by_hash, by_name
 
 
 def file_failures(paths: list[Path], base: str) -> tuple[list[str], list[str]]:
@@ -301,6 +335,7 @@ def file_failures(paths: list[Path], base: str) -> tuple[list[str], list[str]]:
 def function_failures(paths: list[Path], base: str) -> tuple[list[str], list[str]]:
     failures: list[str] = []
     notices: list[str] = []
+    base_by_hash, base_by_name = collect_base_function_index(base)
 
     for path in paths:
         current_text = path.read_text(encoding="utf-8")
@@ -313,7 +348,15 @@ def function_failures(paths: list[Path], base: str) -> tuple[list[str], list[str
                 continue
 
             previous = previous_functions.get(key)
-            previous_lines = None if previous is None else previous.line_count
+            relocated_previous = None
+            if previous is None:
+                relocated_previous = base_by_hash.get(function.normalized_hash)
+                if relocated_previous is None:
+                    same_name_candidates = base_by_name.get(function.name, [])
+                    if len(same_name_candidates) == 1:
+                        relocated_previous = same_name_candidates[0]
+            baseline = previous or relocated_previous
+            previous_lines = None if baseline is None else baseline.line_count
             location = f"{path.as_posix()}:{function.start_line} {function.name}"
 
             if previous_lines is None:
