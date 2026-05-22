@@ -1998,6 +1998,28 @@ role R { init s; phase s {}
 }
 
 #[test]
+fn parse_excessive_parenthesis_nesting_is_rejected_quickly() {
+    let src = format!(
+        r#"
+protocol P {{
+params n, t;
+resilience: n > 3*t;
+role R {{ init s; phase s {{}} }}
+property p: safety {{
+    {}true
+}}
+}}
+"#,
+        "(".repeat(MAX_PARSE_GROUP_NESTING + 1)
+    );
+
+    let err = parse(&src, "deep.trs").expect_err("deep nesting should be rejected");
+    assert!(err
+        .to_string()
+        .contains("Parenthesis nesting exceeds the maximum supported depth"));
+}
+
+#[test]
 fn parse_missing_role_is_still_valid() {
     // A protocol without a role should still parse (no mandatory role)
     let src = r#"

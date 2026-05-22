@@ -14,6 +14,8 @@ struct TarsierParser;
 
 type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 
+const MAX_PARSE_GROUP_NESTING: usize = 64;
+
 fn span_from(pair: &Pair<'_>) -> Span {
     let s = pair.as_span();
     Span::new(s.start(), s.end())
@@ -60,6 +62,8 @@ pub fn parse_with_diagnostics(
     source: &str,
     filename: &str,
 ) -> Result<(Program, Vec<ParseDiagnostic>), ParseError> {
+    validate_parse_complexity(source, filename)?;
+
     let pairs = TarsierParser::parse(Rule::program, source).map_err(|e| {
         let (start, end) = match e.location {
             pest::error::InputLocation::Pos(p) => (p, p + 1),
@@ -86,6 +90,58 @@ pub fn parse_with_diagnostics(
     let program = Program { protocol };
     let diagnostics = collect_parser_diagnostics(&program);
     Ok((program, diagnostics))
+}
+
+fn validate_parse_complexity(source: &str, filename: &str) -> Result<(), ParseError> {
+    let bytes = source.as_bytes();
+    let mut idx = 0;
+    let mut paren_depth = 0usize;
+
+    while idx < bytes.len() {
+        match bytes[idx] {
+            b'/' if bytes.get(idx + 1) == Some(&b'/') => {
+                idx += 2;
+                while idx < bytes.len() && bytes[idx] != b'\n' {
+                    idx += 1;
+                }
+            }
+            b'/' if bytes.get(idx + 1) == Some(&b'*') => {
+                idx += 2;
+                while idx + 1 < bytes.len() && !(bytes[idx] == b'*' && bytes[idx + 1] == b'/') {
+                    idx += 1;
+                }
+                idx = (idx + 2).min(bytes.len());
+            }
+            b'"' => {
+                idx += 1;
+                while idx < bytes.len() && bytes[idx] != b'"' {
+                    idx += 1;
+                }
+                idx += 1;
+            }
+            b'(' => {
+                paren_depth += 1;
+                if paren_depth > MAX_PARSE_GROUP_NESTING {
+                    return Err(ParseError::syntax(
+                        format!(
+                            "Parenthesis nesting exceeds the maximum supported depth of {MAX_PARSE_GROUP_NESTING}"
+                        ),
+                        Span::new(idx, idx + 1),
+                        source,
+                        filename,
+                    ));
+                }
+                idx += 1;
+            }
+            b')' => {
+                paren_depth = paren_depth.saturating_sub(1);
+                idx += 1;
+            }
+            _ => idx += 1,
+        }
+    }
+
+    Ok(())
 }
 
 fn collect_parser_diagnostics(program: &Program) -> Vec<ParseDiagnostic> {
