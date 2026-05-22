@@ -21,6 +21,7 @@ tarsier-engine = { path = "../tarsier-engine", version = "0.1.0" }
 tarsier-smt = { path = "../tarsier-smt", version = "0.1.0" }
 tarsier-codegen = { path = "../tarsier-codegen", version = "0.1.0" }
 tarsier-conformance = { path = "../tarsier-conformance", version = "0.1.0" }
+tarsier-sim = { path = "../tarsier-sim", version = "0.1.0" }
 tarsier-prob = { path = "../tarsier-prob", version = "0.1.0" }
 tarsier-proof-kernel = { path = "../tarsier-proof-kernel", version = "0.1.0" }
 clap = { version = "4", features = ["derive"] }

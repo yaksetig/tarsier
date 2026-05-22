@@ -1,7 +1,7 @@
 # Architecture
 
 This document describes the high-level architecture of the Tarsier workspace and
-how the 12 crates/components fit together in the verification pipeline.
+how the crates/components fit together in the verification pipeline.
 
 ## Workspace Components
 
@@ -15,12 +15,13 @@ how the 12 crates/components fit together in the verification pipeline.
 | `tarsier-certcheck` | Standalone certificate replay checker binary |
 | `tarsier-proof-kernel` | Minimal trusted certificate-integrity kernel |
 | `tarsier-prob` | Hypergeometric committee analysis |
+| `tarsier-sim` | Finite seeded simulation over lowered threshold automata, a reusable queue-based network runner, and sampled Snowball/Avalanche/Phoenixx/HotStuff experiments |
 | `tarsier-codegen` | Rust/Go code generation from verified models |
 | `tarsier-conformance` | Runtime trace conformance checking |
 | `tarsier-lsp` | Language Server Protocol backend for `.trs` authoring |
 | `tarsier-playground` | Local web UI over analysis/lint/visualization flows |
 
-## 12-Crate Pipeline Diagram
+## Crate Pipeline Diagram
 
 ```mermaid
 flowchart LR
@@ -37,6 +38,7 @@ flowchart LR
         ENGINE["tarsier-engine"]
         SMT["tarsier-smt"]
         PROB["tarsier-prob"]
+        SIM["tarsier-sim"]
     end
 
     subgraph Trust["Trust + Replay + Runtime Checks"]
@@ -54,9 +56,11 @@ flowchart LR
 
     DSL --> IR
     IR --> ENGINE
+    IR --> SIM
     ENGINE --> SMT
     ENGINE --> PROB
     ENGINE --> KERNEL
+    CLI --> SIM
 
     CERTCHECK --> KERNEL
     CONF --> DSL

@@ -9,6 +9,7 @@ members = [
     "crates/tarsier-engine",
     "crates/tarsier-codegen",
     "crates/tarsier-conformance",
+    "crates/tarsier-sim",
     "crates/tarsier-cli",
     "crates/tarsier-lsp",
     "playground",

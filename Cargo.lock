@@ -2409,6 +2409,7 @@ dependencies = [
  "tarsier-ir",
  "tarsier-prob",
  "tarsier-proof-kernel",
+ "tarsier-sim",
  "tarsier-smt",
  "tracing",
  "tracing-subscriber",
@@ -2535,6 +2536,17 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "tarsier-sim"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "serde",
+ "tarsier-ir",
+ "tarsier-prob",
  "thiserror",
 ]
 

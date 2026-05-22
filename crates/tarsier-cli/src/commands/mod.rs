@@ -13,6 +13,7 @@ pub(crate) mod lint;
 pub(crate) mod proof_export;
 pub(crate) mod prove;
 pub(crate) mod refinement;
+pub(crate) mod simulate;
 pub(crate) mod verify;
 pub(crate) mod visualize;
 pub(crate) mod watch;

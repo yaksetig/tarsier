@@ -1,0 +1,20 @@
+[package]
+name = "tarsier-sim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Finite simulation engine for Tarsier threshold automata"
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+tarsier-ir = { path = "../tarsier-ir", version = "0.1.0", features = ["serialize"] }
+tarsier-prob = { path = "../tarsier-prob", version = "0.1.0" }
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+indexmap.workspace = true

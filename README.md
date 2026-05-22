@@ -71,6 +71,10 @@ tarsier compose-check modules.trs                       # assume-guarantee
 
 **Conformance and implementation:**
 ```bash
+tarsier simulate my_protocol.trs --param n=4 --param t=1 --param f=1 --steps 50
+tarsier simulate-avalanche --n 1000 --byzantine 200 --k 20 --alpha 15 --beta 20 --initial-a 800 --runs 1000
+tarsier simulate-phoenixx --n 1000 --byzantine 333 --committee-size 200 --initial-a 667 --rounds 3 --network-delay 1 --runs 1000
+tarsier simulate-hotstuff --n 4 --byzantine 1 --views 3
 tarsier conformance-check my_protocol.trs --trace runtime.json
 tarsier conformance-replay my_protocol.trs --check verify --export-trace replay.json
 tarsier conformance-suite --manifest suite.json          # run full test suite
@@ -127,6 +131,7 @@ Recent DSL additions include:
 - **Multiple fault models** — Byzantine, omission, crash
 - **Cryptographic objects** — certificates, threshold signatures (`form`/`has`/`lock`/`justify`)
 - **Partial synchrony** — explicit GST modeling
+- **Finite simulation** — seeded/random execution with sender-aware distinct guards, reusable queue-based network simulation, and Monte Carlo Snowball/Avalanche/Phoenixx runs
 - **Proof certificates** — cross-solver validated, governance-grade bundles
 - **CEGAR refinement** — adaptive counterexample-guided abstraction
 - **Protocol library** — 25+ models (PBFT, HotStuff, Tendermint, Raft, Paxos, and more)
