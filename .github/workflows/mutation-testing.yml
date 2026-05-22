@@ -16,7 +16,15 @@ env:
 jobs:
   mutation-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - tarsier-smt
+          - tarsier-prob
+          - tarsier-engine
+          - tarsier-ir
 
     steps:
       - name: Checkout
@@ -39,20 +47,36 @@ jobs:
         # if some mutants survive, so we must not let a non-zero exit
         # code abort the job.
         run: |
-          cargo mutants --no-shuffle --timeout=300 -j 2 \
-            -p tarsier-smt \
-            -p tarsier-prob \
-            -p tarsier-engine \
-            -p tarsier-ir \
+          cargo mutants --no-shuffle --timeout=180 -j 2 \
+            --output "mutants.${{ matrix.package }}.out" \
+            -p "${{ matrix.package }}" \
           || true
-
-      - name: Mutation score quality gate
-        run: python .github/scripts/check_mutation_score.py
 
       - name: Upload mutation testing results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mutation-testing-results
-          path: mutants.out/
+          name: mutation-testing-results-${{ matrix.package }}
+          path: mutants.${{ matrix.package }}.out/
+          if-no-files-found: error
           retention-days: 30
+
+  mutation-score:
+    runs-on: ubuntu-latest
+    needs: mutation-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download mutation testing results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mutation-testing-results-*
+          path: mutation-results/
+
+      - name: Mutation score quality gate
+        run: |
+          MUTATION_OUTCOMES_GLOB="mutation-results/**/outcomes.json" \
+          MUTATION_EXPECTED_OUTCOME_FILES=4 \
+            python3 .github/scripts/check_mutation_score.py

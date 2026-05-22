@@ -18,49 +18,90 @@ from __future__ import annotations
 import json
 import os
 import sys
+from glob import glob
 from pathlib import Path
 
 
+def discover_outcome_paths() -> list[Path]:
+    outcomes_glob = os.environ.get("MUTATION_OUTCOMES_GLOB")
+    if outcomes_glob:
+        return sorted(Path(path) for path in glob(outcomes_glob, recursive=True))
+
+    outcomes_path = Path(
+        os.environ.get("MUTATION_OUTCOMES_PATH", "mutants.out/outcomes.json")
+    )
+    if outcomes_path.is_dir():
+        return sorted(outcomes_path.rglob("outcomes.json"))
+    return [outcomes_path]
+
+
+def extract_counts(data: dict) -> dict[str, int]:
+    counts = {
+        "caught": int(data.get("caught", 0)),
+        "missed": int(data.get("missed", 0)),
+        "timeout": int(data.get("timeout", 0)),
+        "unviable": int(data.get("unviable", 0)),
+        "total_mutants": int(data.get("total_mutants", 0)),
+    }
+
+    # Fallback: if top-level counts are missing (older cargo-mutants
+    # versions), count from the per-outcome array.
+    if counts["total_mutants"] == 0 and "outcomes" in data:
+        for outcome in data["outcomes"]:
+            summary = outcome.get("summary", "")
+            if summary == "CaughtMutant":
+                counts["caught"] += 1
+            elif summary == "MissedMutant":
+                counts["missed"] += 1
+            elif summary == "Timeout":
+                counts["timeout"] += 1
+            elif summary == "Unviable":
+                counts["unviable"] += 1
+        counts["total_mutants"] = (
+            counts["caught"]
+            + counts["missed"]
+            + counts["timeout"]
+            + counts["unviable"]
+        )
+
+    return counts
+
+
 def main() -> int:
-    outcomes_path = Path(os.environ.get(
-        "MUTATION_OUTCOMES_PATH", "mutants.out/outcomes.json"
-    ))
+    outcomes_paths = discover_outcome_paths()
 
     threshold = float(os.environ.get("MUTATION_SCORE_MIN", "70"))
+    expected_outcome_files = int(os.environ.get("MUTATION_EXPECTED_OUTCOME_FILES", "0"))
 
     # ------------------------------------------------------------------
     # Load outcomes
     # ------------------------------------------------------------------
-    if not outcomes_path.exists():
-        print(f"ERROR: outcomes file not found: {outcomes_path}", file=sys.stderr)
+    missing_paths = [path for path in outcomes_paths if not path.exists()]
+    if not outcomes_paths or missing_paths:
+        paths = ", ".join(str(path) for path in missing_paths or outcomes_paths)
+        print(f"ERROR: outcomes file not found: {paths}", file=sys.stderr)
+        return 1
+    if expected_outcome_files and len(outcomes_paths) != expected_outcome_files:
+        print(
+            f"ERROR: expected {expected_outcome_files} outcomes files, "
+            f"found {len(outcomes_paths)}",
+            file=sys.stderr,
+        )
         return 1
 
-    with open(outcomes_path) as fh:
-        data = json.load(fh)
-
-    # ------------------------------------------------------------------
-    # Extract counts - use top-level summary fields from LabOutcome
-    # ------------------------------------------------------------------
-    caught = data.get("caught", 0)
-    missed = data.get("missed", 0)
-    timeout = data.get("timeout", 0)
-    unviable = data.get("unviable", 0)
-    total_mutants = data.get("total_mutants", 0)
-
-    # Fallback: if top-level counts are missing (older cargo-mutants
-    # versions), count from the per-outcome array.
-    if total_mutants == 0 and "outcomes" in data:
-        for outcome in data["outcomes"]:
-            summary = outcome.get("summary", "")
-            if summary == "CaughtMutant":
-                caught += 1
-            elif summary == "MissedMutant":
-                missed += 1
-            elif summary == "Timeout":
-                timeout += 1
-            elif summary == "Unviable":
-                unviable += 1
-        total_mutants = caught + missed + timeout + unviable
+    caught = 0
+    missed = 0
+    timeout = 0
+    unviable = 0
+    total_mutants = 0
+    for outcomes_path in outcomes_paths:
+        with open(outcomes_path) as fh:
+            counts = extract_counts(json.load(fh))
+        caught += counts["caught"]
+        missed += counts["missed"]
+        timeout += counts["timeout"]
+        unviable += counts["unviable"]
+        total_mutants += counts["total_mutants"]
 
     # Timeouts count as detected (the mutant changed observable behaviour).
     detected = caught + timeout
@@ -80,6 +121,7 @@ def main() -> int:
     print("=" * 56)
     print("  MUTATION TESTING QUALITY GATE")
     print("=" * 56)
+    print(f"  Outcome files read     : {len(outcomes_paths):>6}")
     print(f"  Total mutants generated : {total_mutants:>6}")
     print(f"  Caught (tests failed)   : {caught:>6}")
     print(f"  Missed (tests passed)   : {missed:>6}")
