@@ -8,5 +8,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 echo "Building tarsier-bymc:latest Docker image..."
-docker build -t tarsier-bymc:latest "$SCRIPT_DIR"
+DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
+docker build --platform "$DOCKER_PLATFORM" -t tarsier-bymc:latest "$SCRIPT_DIR"
 echo "Done. Image: tarsier-bymc:latest"
