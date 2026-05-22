@@ -222,7 +222,7 @@ jobs:
         run: |
           output=$(cargo test -p tarsier-proof-kernel soundness_subset_ -- --nocapture 2>&1)
           echo "$output"
-          count=$(echo "$output" | grep -Ec 'test tests::soundness_subset_.*\\.\\.\\. ok')
+          count=$(echo "$output" | grep -Ec 'test tests::soundness_subset_.*\.\.\. ok')
           if [ "$count" -lt 2 ]; then
             echo "ERROR: expected at least 2 checker soundness subset tests to pass, got $count"
             exit 1
