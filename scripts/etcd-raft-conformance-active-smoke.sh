@@ -55,6 +55,11 @@ print("fixture contract ok")
 PY
 }
 
+prepare_output_paths() {
+  mkdir -p "$(dirname "$REPORT_FILE")" "$(dirname "$EVENTS_FILE")" "$(dirname "$SERVER_LOG")"
+  : >"$EVENTS_FILE"
+}
+
 assert_live_etcd_contract() {
   local endpoint="$1"
   "$HARNESS_SCRIPT" smoke-raft
@@ -141,13 +146,15 @@ wait_for_mock_endpoint() {
 }
 
 cleanup() {
+  local status="$?"
   if [[ -n "${SERVER_PID:-}" ]]; then
     kill "${SERVER_PID}" >/dev/null 2>&1 || true
     wait "${SERVER_PID}" >/dev/null 2>&1 || true
   fi
-  if [[ "$KEEP_HARNESS" != "1" ]]; then
+  if [[ "$KEEP_HARNESS" != "1" && "$status" == "0" ]]; then
     "$HARNESS_SCRIPT" stop >/dev/null 2>&1 || true
   fi
+  return "$status"
 }
 
 run_smoke() {
@@ -157,6 +164,7 @@ run_smoke() {
   require_cmd docker
 
   trap cleanup EXIT
+  prepare_output_paths
 
   assert_fixture_contract
   "$HARNESS_SCRIPT" start

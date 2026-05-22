@@ -2,6 +2,7 @@ services:
   cometbft-node0:
     image: cometbft/cometbft:v0.38.17
     container_name: tarsier-cometbft-node0
+    user: "0:0"
     environment:
       CMTHOME: /comet
     entrypoint: ["/bin/sh", "/harness/bootstrap.sh"]

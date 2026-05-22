@@ -8,7 +8,7 @@ DATA_DIR="$HOME_DIR/data"
 mkdir -p "$CONFIG_DIR" "$DATA_DIR"
 
 if [ ! -f "$CONFIG_DIR/config.toml" ]; then
-  cometbft init --home "$HOME_DIR" --chain-id tarsier-integ-01 --moniker tarsier-comet-node0 >/dev/null 2>&1
+  cometbft init --home "$HOME_DIR" >/dev/null 2>&1
 fi
 
 cp /harness/config/genesis.json "$CONFIG_DIR/genesis.json"

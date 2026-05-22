@@ -2,6 +2,8 @@ services:
   etcd-node0:
     image: quay.io/coreos/etcd:v3.5.14
     container_name: tarsier-etcd-node0
+    environment:
+      ETCDCTL_API: "3"
     command:
       - /usr/local/bin/etcd
       - --name=node0
@@ -22,7 +24,7 @@ services:
     volumes:
       - etcd-node0-data:/etcd-data
     healthcheck:
-      test: ["CMD-SHELL", "ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 endpoint health >/dev/null"]
+      test: ["CMD", "/usr/local/bin/etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
       interval: 3s
       timeout: 2s
       retries: 20
