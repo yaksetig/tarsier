@@ -1,6 +1,9 @@
 use super::*;
 use std::collections::{HashMap, VecDeque};
 use std::io;
+use tarsier_ir::threshold_automaton::{
+    ClockGuard, ClockId, CmpOp, Guard, LinearCombination, Location, ThresholdAutomaton,
+};
 use tarsier_smt::solver::{Model, ModelValue};
 
 // ========================================================================
@@ -32,6 +35,60 @@ fn int_model(values: &[(&str, i64)]) -> Model {
         out.insert((*name).to_string(), ModelValue::Int(*value));
     }
     Model { values: out }
+}
+
+fn make_rule(from: usize, to: usize, guard: Guard, clock_guards: Vec<ClockGuard>) -> Rule {
+    Rule {
+        from: from.into(),
+        to: to.into(),
+        guard,
+        updates: Vec::new(),
+        collection_updates: Vec::new(),
+        clock_guards,
+        clock_updates: Vec::new(),
+        param_updates: Vec::new(),
+    }
+}
+
+fn fair_rule_class_counter_system() -> ThresholdAutomaton {
+    let mut cs = ThresholdAutomaton::new();
+    let l0 = cs.add_location(Location {
+        name: "Init".to_string(),
+        role: "Replica".to_string(),
+        phase: "init".to_string(),
+        local_vars: Default::default(),
+    });
+    let l1 = cs.add_location(Location {
+        name: "Prepared".to_string(),
+        role: "Replica".to_string(),
+        phase: "prepared".to_string(),
+        local_vars: Default::default(),
+    });
+
+    cs.add_rule(make_rule(
+        l0.as_usize(),
+        l1.as_usize(),
+        Guard::trivial(),
+        Vec::new(),
+    ));
+    cs.add_rule(make_rule(
+        l1.as_usize(),
+        l0.as_usize(),
+        Guard::trivial(),
+        Vec::new(),
+    ));
+    cs.add_rule(make_rule(
+        l0.as_usize(),
+        l0.as_usize(),
+        Guard::trivial(),
+        vec![ClockGuard {
+            clock: ClockId::from(0),
+            op: CmpOp::Ge,
+            bound: LinearCombination::constant(1),
+        }],
+    ));
+
+    cs
 }
 
 // ========================================================================
@@ -1057,5 +1114,57 @@ fn generalization_fallback_uses_priority_guided_literal_dropping() {
     assert!(
         solver.check_sat_calls >= 2,
         "fallback path should exercise predecessor SAT checks"
+    );
+}
+
+#[test]
+fn fair_rule_enabled_signature_distinguishes_clock_guards() {
+    let plain = make_rule(0, 1, Guard::trivial(), Vec::new());
+    let same_plain = make_rule(1, 0, Guard::trivial(), Vec::new());
+    let timed = make_rule(
+        0,
+        0,
+        Guard::trivial(),
+        vec![ClockGuard {
+            clock: ClockId::from(0),
+            op: CmpOp::Ge,
+            bound: LinearCombination::constant(1),
+        }],
+    );
+
+    assert_eq!(
+        fair_rule_enabled_signature(&plain),
+        fair_rule_enabled_signature(&same_plain)
+    );
+    assert_ne!(
+        fair_rule_enabled_signature(&plain),
+        fair_rule_enabled_signature(&timed)
+    );
+}
+
+#[test]
+fn fair_rule_class_map_groups_rules_by_enabled_signature() {
+    let cs = fair_rule_class_counter_system();
+
+    let classes = build_fair_rule_class_map(&cs);
+
+    assert_eq!(classes.classes.len(), 2);
+    assert_eq!(classes.rule_to_class[0], classes.rule_to_class[1]);
+    assert_ne!(classes.rule_to_class[0], classes.rule_to_class[2]);
+    assert_eq!(classes.classes[classes.rule_to_class[0]], vec![0, 1]);
+    assert_eq!(classes.classes[classes.rule_to_class[2]], vec![2]);
+}
+
+#[test]
+fn fair_rule_enabled_condition_pre_applies_post_gst_gate() {
+    let rule = make_rule(0, 1, Guard::trivial(), Vec::new());
+
+    assert_eq!(
+        fair_rule_enabled_condition_pre(&rule, None),
+        SmtTerm::bool(true)
+    );
+    assert_eq!(
+        fair_rule_enabled_condition_pre(&rule, Some(SmtTerm::var("post_gst_now"))),
+        SmtTerm::and(vec![SmtTerm::bool(true), SmtTerm::var("post_gst_now")])
     );
 }

@@ -1,4 +1,62 @@
 use super::*;
+use indexmap::IndexMap;
+use tarsier_ir::threshold_automaton::{
+    Location, RoleIdentityConfig, SharedVar, ThresholdAutomaton,
+};
+
+fn process_scoped_counter_system() -> ThresholdAutomaton {
+    let mut cs = ThresholdAutomaton::new();
+    cs.security.role_identities.insert(
+        "Replica".to_string(),
+        RoleIdentityConfig {
+            scope: RoleIdentityScope::Process,
+            process_var: Some("pid".to_string()),
+            key_name: "replica_key".to_string(),
+        },
+    );
+
+    let mut locals_a = IndexMap::new();
+    locals_a.insert("round".to_string(), LocalValue::Int(7));
+    locals_a.insert("pid".to_string(), LocalValue::Int(1));
+    locals_a.insert("vote".to_string(), LocalValue::Bool(true));
+    cs.add_location(Location {
+        name: "PreparedA".to_string(),
+        role: "Replica".to_string(),
+        phase: "prepared".to_string(),
+        local_vars: locals_a,
+    });
+
+    let mut locals_b = IndexMap::new();
+    locals_b.insert("vote".to_string(), LocalValue::Bool(true));
+    locals_b.insert("pid".to_string(), LocalValue::Int(9));
+    locals_b.insert("round".to_string(), LocalValue::Int(7));
+    cs.add_location(Location {
+        name: "PreparedB".to_string(),
+        role: "Replica".to_string(),
+        phase: "prepared".to_string(),
+        local_vars: locals_b,
+    });
+
+    cs.add_shared_var(SharedVar {
+        name: "cnt_Vote@Replica#12<-Leader#3[view=7]".to_string(),
+        kind: SharedVarKind::MessageCounter,
+        distinct: false,
+        distinct_role: None,
+    });
+    cs.add_shared_var(SharedVar {
+        name: "cnt_Vote@Replica#98<-Leader#4[view=7]".to_string(),
+        kind: SharedVarKind::MessageCounter,
+        distinct: false,
+        distinct_role: None,
+    });
+    cs.add_shared_var(SharedVar {
+        name: "epoch".to_string(),
+        kind: SharedVarKind::Shared,
+        distinct: false,
+        distinct_role: None,
+    });
+    cs
+}
 
 #[test]
 fn pdr_bad_cube_budget_scales_beyond_legacy_floor() {
@@ -677,4 +735,49 @@ fn pdr_budgets_respect_upper_bounds() {
 fn pdr_pair_literal_query_budget_zero_and_one_return_zero() {
     assert_eq!(pdr_pair_literal_query_budget(0), 0);
     assert_eq!(pdr_pair_literal_query_budget(1), 0);
+}
+
+#[test]
+fn location_symmetry_key_ignores_process_identity_and_local_order() {
+    let cs = process_scoped_counter_system();
+
+    let first = location_symmetry_key(&cs, 0);
+    let second = location_symmetry_key(&cs, 1);
+
+    assert_eq!(first, second);
+    assert_eq!(first, "loc|Replica|prepared|round=i:7,vote=b:true");
+    assert!(!first.contains("pid="));
+}
+
+#[test]
+fn shared_var_symmetry_key_normalizes_process_scoped_message_counters() {
+    let cs = process_scoped_counter_system();
+
+    assert_eq!(
+        shared_var_symmetry_key(&cs, 0),
+        shared_var_symmetry_key(&cs, 1)
+    );
+    assert_eq!(
+        shared_var_symmetry_key(&cs, 0),
+        "msg|cnt_Vote@Replica#*<-Leader#*[view=7]"
+    );
+    assert_eq!(shared_var_symmetry_key(&cs, 2), "shared|epoch");
+}
+
+#[test]
+fn add_blocking_cube_up_to_updates_intermediate_frames_only() {
+    let cube = Cube {
+        lits: vec![CubeLiteral {
+            state_var_idx: 0,
+            value: 1,
+        }],
+    };
+    let mut frames = vec![PdrFrame::default(); 4];
+
+    add_blocking_cube_up_to(&mut frames, 2, cube.clone());
+
+    assert!(!frames[0].contains(&cube));
+    assert!(frames[1].contains(&cube));
+    assert!(frames[2].contains(&cube));
+    assert!(!frames[3].contains(&cube));
 }
