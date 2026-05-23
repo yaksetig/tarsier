@@ -1,5 +1,9 @@
 //! CLI argument definitions: top-level `Cli` struct and `Commands` enum.
 
+use crate::commands::simulate::{
+    SimulateAvalancheCommandArgs, SimulateCommandArgs, SimulateHotstuffCommandArgs,
+    SimulatePhoenixxCommandArgs,
+};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -587,214 +591,19 @@ pub(crate) enum Commands {
 
     /// Run a finite simulation over a protocol model
     #[command(display_order = 16)]
-    Simulate {
-        /// Path to the .trs protocol file
-        file: PathBuf,
-
-        /// Concrete parameter binding, e.g. --param n=4 --param t=1
-        #[arg(long = "param", value_delimiter = ',')]
-        params: Vec<String>,
-
-        /// Initial message/shared-counter seed, e.g. --seed-message Init=1
-        #[arg(long = "seed-message", value_delimiter = ',')]
-        seed_messages: Vec<String>,
-
-        /// Maximum number of rule firings
-        #[arg(long, default_value_t = 50)]
-        steps: usize,
-
-        /// Scheduler policy: random | first
-        #[arg(long, default_value = "random")]
-        scheduler: String,
-
-        /// Seed used by the random scheduler
-        #[arg(long, default_value_t = 0)]
-        seed: u64,
-
-        /// Output format: text | json
-        #[arg(long, default_value = "text")]
-        format: String,
-
-        /// Optional path to write the runtime trace JSON
-        #[arg(long)]
-        trace_out: Option<PathBuf>,
-
-        /// Optional path to write the counter trace JSON
-        #[arg(long)]
-        counter_trace_out: Option<PathBuf>,
-    },
+    Simulate(SimulateCommandArgs),
 
     /// Simulate Avalanche/Snowball sampled consensus behavior
     #[command(display_order = 17)]
-    SimulateAvalanche {
-        /// Total validators, including Byzantine validators
-        #[arg(long)]
-        n: usize,
-
-        /// Byzantine validators
-        #[arg(long, default_value_t = 0)]
-        byzantine: usize,
-
-        /// Sample size k
-        #[arg(long = "k")]
-        sample_size: usize,
-
-        /// Successful poll threshold alpha
-        #[arg(long)]
-        alpha: usize,
-
-        /// Decision threshold beta
-        #[arg(long)]
-        beta: usize,
-
-        /// Maximum polling rounds
-        #[arg(long, default_value_t = 100)]
-        rounds: usize,
-
-        /// Honest validators initially preferring A
-        #[arg(long = "initial-a")]
-        initial_a: usize,
-
-        /// Polling order policy: random | first
-        #[arg(long, default_value = "random")]
-        scheduler: String,
-
-        /// Byzantine response policy: oppose | random | a | b
-        #[arg(long, default_value = "oppose")]
-        byzantine_strategy: String,
-
-        /// Decision rule: confidence | consecutive
-        #[arg(long, default_value = "confidence")]
-        decision_rule: String,
-
-        /// Seed used for peer sampling and randomized scheduling
-        #[arg(long, default_value_t = 0)]
-        seed: u64,
-
-        /// Independent seeds to run for Monte Carlo statistics
-        #[arg(long, default_value_t = 1)]
-        runs: usize,
-
-        /// Output format: text | json
-        #[arg(long, default_value = "text")]
-        format: String,
-
-        /// Optional output path
-        #[arg(long)]
-        out: Option<PathBuf>,
-    },
+    SimulateAvalanche(SimulateAvalancheCommandArgs),
 
     /// Simulate Phoenixx endorser committee NQC/EQC behavior
     #[command(display_order = 18)]
-    SimulatePhoenixx {
-        /// Total validators
-        #[arg(long)]
-        n: usize,
-
-        /// Byzantine validators
-        #[arg(long, default_value_t = 0)]
-        byzantine: usize,
-
-        /// Random endorser committee size
-        #[arg(long = "committee-size")]
-        committee_size: usize,
-
-        /// Override committee Byzantine bound; default derives b_max from epsilon
-        #[arg(long = "committee-bound")]
-        committee_bound: Option<usize>,
-
-        /// Committee analysis failure probability
-        #[arg(long, default_value_t = 1e-14)]
-        epsilon: f64,
-
-        /// Override NQC threshold; default is 2*byzantine+1
-        #[arg(long = "nqc-threshold")]
-        nqc_threshold: Option<usize>,
-
-        /// Override EQC threshold; default is committee_bound+1
-        #[arg(long = "eqc-threshold")]
-        eqc_threshold: Option<usize>,
-
-        /// Honest validators initially confirming A
-        #[arg(long = "initial-a")]
-        initial_a: usize,
-
-        /// Byzantine policy: silent | a | b | equivocate
-        #[arg(long, default_value = "silent")]
-        byzantine_strategy: String,
-
-        /// Seed used for committee sampling
-        #[arg(long, default_value_t = 0)]
-        seed: u64,
-
-        /// Maximum protocol rounds to simulate
-        #[arg(long, default_value_t = 1)]
-        rounds: usize,
-
-        /// Whole-round certificate delivery delay for view-change parent selection
-        #[arg(long = "network-delay", default_value_t = 0)]
-        network_delay: usize,
-
-        /// Proposal schedule: view-change | a | b | alternate | random
-        #[arg(long = "proposal-pattern", default_value = "view-change")]
-        proposal_pattern: String,
-
-        /// Independent committee draws to run
-        #[arg(long, default_value_t = 1)]
-        runs: usize,
-
-        /// Output format: text | json
-        #[arg(long, default_value = "text")]
-        format: String,
-
-        /// Optional output path
-        #[arg(long)]
-        out: Option<PathBuf>,
-    },
+    SimulatePhoenixx(SimulatePhoenixxCommandArgs),
 
     /// Simulate a HotStuff-style chained-BFT core over the generic network queue
     #[command(display_order = 19)]
-    SimulateHotstuff {
-        /// Total validators
-        #[arg(long)]
-        n: usize,
-
-        /// Byzantine validators
-        #[arg(long, default_value_t = 0)]
-        byzantine: usize,
-
-        /// Maximum views to simulate
-        #[arg(long, default_value_t = 3)]
-        views: usize,
-
-        /// Override quorum threshold; default is 2*byzantine+1
-        #[arg(long = "quorum-threshold")]
-        quorum_threshold: Option<usize>,
-
-        /// Whole-view QC delivery delay
-        #[arg(long = "network-delay", default_value_t = 0)]
-        network_delay: usize,
-
-        /// Proposal schedule: chained | fork-at-two | alternate
-        #[arg(long = "proposal-pattern", default_value = "chained")]
-        proposal_pattern: String,
-
-        /// Byzantine policy: silent | vote
-        #[arg(long, default_value = "silent")]
-        byzantine_strategy: String,
-
-        /// Seed used by the network scheduler
-        #[arg(long, default_value_t = 0)]
-        seed: u64,
-
-        /// Output format: text | json
-        #[arg(long, default_value = "text")]
-        format: String,
-
-        /// Optional output path
-        #[arg(long)]
-        out: Option<PathBuf>,
-    },
+    SimulateHotstuff(SimulateHotstuffCommandArgs),
 
     /// Analyze a protocol: the primary entry point for verification.
     ///

@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use clap::Args;
 use miette::IntoDiagnostic;
 use serde_json::json;
 use tarsier_sim::avalanche::{
@@ -19,64 +20,210 @@ use tarsier_sim::phoenixx::{
 };
 use tarsier_sim::{Scheduler, SimulationOptions};
 
+#[derive(Args)]
 pub(crate) struct SimulateCommandArgs {
+    /// Path to the .trs protocol file
     pub(crate) file: PathBuf,
+
+    /// Concrete parameter binding, e.g. --param n=4 --param t=1
+    #[arg(long = "param", value_delimiter = ',')]
     pub(crate) params: Vec<String>,
+
+    /// Initial message/shared-counter seed, e.g. --seed-message Init=1
+    #[arg(long = "seed-message", value_delimiter = ',')]
     pub(crate) seed_messages: Vec<String>,
+
+    /// Maximum number of rule firings
+    #[arg(long, default_value_t = 50)]
     pub(crate) steps: usize,
+
+    /// Scheduler policy: random | first
+    #[arg(long, default_value = "random")]
     pub(crate) scheduler: String,
+
+    /// Seed used by the random scheduler
+    #[arg(long, default_value_t = 0)]
     pub(crate) seed: u64,
+
+    /// Output format: text | json
+    #[arg(long, default_value = "text")]
     pub(crate) format: String,
+
+    /// Optional path to write the runtime trace JSON
+    #[arg(long)]
     pub(crate) trace_out: Option<PathBuf>,
+
+    /// Optional path to write the counter trace JSON
+    #[arg(long)]
     pub(crate) counter_trace_out: Option<PathBuf>,
 }
 
+#[derive(Args)]
 pub(crate) struct SimulateAvalancheCommandArgs {
+    /// Total validators, including Byzantine validators
+    #[arg(long)]
     pub(crate) n: usize,
+
+    /// Byzantine validators
+    #[arg(long, default_value_t = 0)]
     pub(crate) byzantine: usize,
+
+    /// Sample size k
+    #[arg(long = "k")]
     pub(crate) sample_size: usize,
+
+    /// Successful poll threshold alpha
+    #[arg(long)]
     pub(crate) alpha: usize,
+
+    /// Decision threshold beta
+    #[arg(long)]
     pub(crate) beta: usize,
+
+    /// Maximum polling rounds
+    #[arg(long, default_value_t = 100)]
     pub(crate) rounds: usize,
+
+    /// Honest validators initially preferring A
+    #[arg(long = "initial-a")]
     pub(crate) initial_a: usize,
+
+    /// Polling order policy: random | first
+    #[arg(long, default_value = "random")]
     pub(crate) scheduler: String,
+
+    /// Byzantine response policy: oppose | random | a | b
+    #[arg(long, default_value = "oppose")]
     pub(crate) byzantine_strategy: String,
+
+    /// Decision rule: confidence | consecutive
+    #[arg(long, default_value = "confidence")]
     pub(crate) decision_rule: String,
+
+    /// Seed used for peer sampling and randomized scheduling
+    #[arg(long, default_value_t = 0)]
     pub(crate) seed: u64,
+
+    /// Independent seeds to run for Monte Carlo statistics
+    #[arg(long, default_value_t = 1)]
     pub(crate) runs: usize,
+
+    /// Output format: text | json
+    #[arg(long, default_value = "text")]
     pub(crate) format: String,
+
+    /// Optional output path
+    #[arg(long)]
     pub(crate) out: Option<PathBuf>,
 }
 
+#[derive(Args)]
 pub(crate) struct SimulatePhoenixxCommandArgs {
+    /// Total validators
+    #[arg(long)]
     pub(crate) n: usize,
+
+    /// Byzantine validators
+    #[arg(long, default_value_t = 0)]
     pub(crate) byzantine: usize,
+
+    /// Random endorser committee size
+    #[arg(long = "committee-size")]
     pub(crate) committee_size: usize,
+
+    /// Override committee Byzantine bound; default derives b_max from epsilon
+    #[arg(long = "committee-bound")]
     pub(crate) committee_bound: Option<usize>,
+
+    /// Committee analysis failure probability
+    #[arg(long, default_value_t = 1e-14)]
     pub(crate) epsilon: f64,
+
+    /// Override NQC threshold; default is 2*byzantine+1
+    #[arg(long = "nqc-threshold")]
     pub(crate) nqc_threshold: Option<usize>,
+
+    /// Override EQC threshold; default is committee_bound+1
+    #[arg(long = "eqc-threshold")]
     pub(crate) eqc_threshold: Option<usize>,
+
+    /// Honest validators initially confirming A
+    #[arg(long = "initial-a")]
     pub(crate) initial_a: usize,
+
+    /// Byzantine policy: silent | a | b | equivocate
+    #[arg(long, default_value = "silent")]
     pub(crate) byzantine_strategy: String,
+
+    /// Seed used for committee sampling
+    #[arg(long, default_value_t = 0)]
     pub(crate) seed: u64,
+
+    /// Maximum protocol rounds to simulate
+    #[arg(long, default_value_t = 1)]
     pub(crate) rounds: usize,
+
+    /// Whole-round certificate delivery delay for view-change parent selection
+    #[arg(long = "network-delay", default_value_t = 0)]
     pub(crate) network_delay: usize,
+
+    /// Proposal schedule: view-change | a | b | alternate | random
+    #[arg(long = "proposal-pattern", default_value = "view-change")]
     pub(crate) proposal_pattern: String,
+
+    /// Independent committee draws to run
+    #[arg(long, default_value_t = 1)]
     pub(crate) runs: usize,
+
+    /// Output format: text | json
+    #[arg(long, default_value = "text")]
     pub(crate) format: String,
+
+    /// Optional output path
+    #[arg(long)]
     pub(crate) out: Option<PathBuf>,
 }
 
+#[derive(Args)]
 pub(crate) struct SimulateHotstuffCommandArgs {
+    /// Total validators
+    #[arg(long)]
     pub(crate) n: usize,
+
+    /// Byzantine validators
+    #[arg(long, default_value_t = 0)]
     pub(crate) byzantine: usize,
+
+    /// Maximum views to simulate
+    #[arg(long, default_value_t = 3)]
     pub(crate) views: usize,
+
+    /// Override quorum threshold; default is 2*byzantine+1
+    #[arg(long = "quorum-threshold")]
     pub(crate) quorum_threshold: Option<usize>,
+
+    /// Whole-view QC delivery delay
+    #[arg(long = "network-delay", default_value_t = 0)]
     pub(crate) network_delay: usize,
+
+    /// Proposal schedule: chained | fork-at-two | alternate
+    #[arg(long = "proposal-pattern", default_value = "chained")]
     pub(crate) proposal_pattern: String,
+
+    /// Byzantine policy: silent | vote
+    #[arg(long, default_value = "silent")]
     pub(crate) byzantine_strategy: String,
+
+    /// Seed used by the network scheduler
+    #[arg(long, default_value_t = 0)]
     pub(crate) seed: u64,
+
+    /// Output format: text | json
+    #[arg(long, default_value = "text")]
     pub(crate) format: String,
+
+    /// Optional output path
+    #[arg(long)]
     pub(crate) out: Option<PathBuf>,
 }
 

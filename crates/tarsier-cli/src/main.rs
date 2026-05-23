@@ -431,129 +431,15 @@ fn run() -> miette::Result<()> {
         } => {
             commands::verify::run_comm_command(file, depth, format, out, cli_network_mode)?;
         }
-        Commands::Simulate {
-            file,
-            params,
-            seed_messages,
-            steps,
-            scheduler,
-            seed,
-            format,
-            trace_out,
-            counter_trace_out,
-        } => {
-            commands::simulate::run_simulate_command(commands::simulate::SimulateCommandArgs {
-                file,
-                params,
-                seed_messages,
-                steps,
-                scheduler,
-                seed,
-                format,
-                trace_out,
-                counter_trace_out,
-            })?;
+        Commands::Simulate(args) => commands::simulate::run_simulate_command(args)?,
+        Commands::SimulateAvalanche(args) => {
+            commands::simulate::run_simulate_avalanche_command(args)?;
         }
-        Commands::SimulateAvalanche {
-            n,
-            byzantine,
-            sample_size,
-            alpha,
-            beta,
-            rounds,
-            initial_a,
-            scheduler,
-            byzantine_strategy,
-            decision_rule,
-            seed,
-            runs,
-            format,
-            out,
-        } => {
-            commands::simulate::run_simulate_avalanche_command(
-                commands::simulate::SimulateAvalancheCommandArgs {
-                    n,
-                    byzantine,
-                    sample_size,
-                    alpha,
-                    beta,
-                    rounds,
-                    initial_a,
-                    scheduler,
-                    byzantine_strategy,
-                    decision_rule,
-                    seed,
-                    runs,
-                    format,
-                    out,
-                },
-            )?;
+        Commands::SimulatePhoenixx(args) => {
+            commands::simulate::run_simulate_phoenixx_command(args)?;
         }
-        Commands::SimulatePhoenixx {
-            n,
-            byzantine,
-            committee_size,
-            committee_bound,
-            epsilon,
-            nqc_threshold,
-            eqc_threshold,
-            initial_a,
-            byzantine_strategy,
-            seed,
-            rounds,
-            network_delay,
-            proposal_pattern,
-            runs,
-            format,
-            out,
-        } => {
-            commands::simulate::run_simulate_phoenixx_command(
-                commands::simulate::SimulatePhoenixxCommandArgs {
-                    n,
-                    byzantine,
-                    committee_size,
-                    committee_bound,
-                    epsilon,
-                    nqc_threshold,
-                    eqc_threshold,
-                    initial_a,
-                    byzantine_strategy,
-                    seed,
-                    rounds,
-                    network_delay,
-                    proposal_pattern,
-                    runs,
-                    format,
-                    out,
-                },
-            )?;
-        }
-        Commands::SimulateHotstuff {
-            n,
-            byzantine,
-            views,
-            quorum_threshold,
-            network_delay,
-            proposal_pattern,
-            byzantine_strategy,
-            seed,
-            format,
-            out,
-        } => {
-            commands::simulate::run_simulate_hotstuff_command(
-                commands::simulate::SimulateHotstuffCommandArgs {
-                    n,
-                    byzantine,
-                    views,
-                    quorum_threshold,
-                    network_delay,
-                    proposal_pattern,
-                    byzantine_strategy,
-                    seed,
-                    format,
-                    out,
-                },
-            )?;
+        Commands::SimulateHotstuff(args) => {
+            commands::simulate::run_simulate_hotstuff_command(args)?;
         }
         Commands::RefinementCheck {
             file,
