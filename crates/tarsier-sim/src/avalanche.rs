@@ -35,7 +35,7 @@ impl std::fmt::Display for SnowValue {
 }
 
 /// Byzantine response strategy for sampled peers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ByzantineStrategy {
     /// Byzantine validators always answer A.
@@ -44,32 +44,22 @@ pub enum ByzantineStrategy {
     StaticB,
     /// Byzantine validators answer the opposite of the polling validator's
     /// current preference.
+    #[default]
     OpposeRequester,
     /// Byzantine validators choose a fresh random binary answer per response.
     Random,
 }
 
-impl Default for ByzantineStrategy {
-    fn default() -> Self {
-        Self::OpposeRequester
-    }
-}
-
 /// Rule used to decide after successful polls.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DecisionRule {
     /// Snowball-style: decide when the current preference confidence reaches beta.
+    #[default]
     Confidence,
     /// Snowflake-style: decide after beta consecutive successful polls for the
     /// current preference.
     Consecutive,
-}
-
-impl Default for DecisionRule {
-    fn default() -> Self {
-        Self::Confidence
-    }
 }
 
 /// Configuration for one Avalanche/Snowball simulation run.

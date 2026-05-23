@@ -24,19 +24,14 @@ use tarsier_ir::threshold_automaton::{
 };
 
 /// Rule selection policy for simulation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Scheduler {
     /// Pick the first enabled rule and first eligible process.
     First,
     /// Pick enabled rules and eligible processes using the configured seed.
+    #[default]
     Random,
-}
-
-impl Default for Scheduler {
-    fn default() -> Self {
-        Self::Random
-    }
 }
 
 /// Simulation configuration.
@@ -783,9 +778,7 @@ fn simulation_warnings(automaton: &ThresholdAutomaton) -> Vec<String> {
 
 fn message_family_name(shared_var_name: &str) -> Option<&str> {
     let rest = shared_var_name.strip_prefix("cnt_")?;
-    let end = rest
-        .find(|ch| matches!(ch, '@' | '#' | '[' | '<' | '-'))
-        .unwrap_or(rest.len());
+    let end = rest.find(['@', '#', '[', '<', '-']).unwrap_or(rest.len());
     Some(&rest[..end])
 }
 

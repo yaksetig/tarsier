@@ -33,10 +33,11 @@ impl std::fmt::Display for PhoenixxValue {
 }
 
 /// Byzantine confirm/endorsement behavior.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PhoenixxByzantineStrategy {
     /// Byzantine validators do not confirm or endorse.
+    #[default]
     Silent,
     /// Byzantine validators confirm and endorse A.
     StaticA,
@@ -46,14 +47,8 @@ pub enum PhoenixxByzantineStrategy {
     Equivocate,
 }
 
-impl Default for PhoenixxByzantineStrategy {
-    fn default() -> Self {
-        Self::Silent
-    }
-}
-
 /// Proposal schedule for multi-round Phoenixx experiments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PhoenixxProposalPattern {
     /// Propose A every round.
@@ -66,13 +61,8 @@ pub enum PhoenixxProposalPattern {
     Random,
     /// Carry forward the highest delivered certificate value when one exists;
     /// otherwise propose A.
+    #[default]
     ViewChange,
-}
-
-impl Default for PhoenixxProposalPattern {
-    fn default() -> Self {
-        Self::ViewChange
-    }
 }
 
 /// Concrete options for one Phoenixx committee simulation.

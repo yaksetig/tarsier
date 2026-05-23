@@ -12,34 +12,27 @@ use crate::DeterministicRng;
 pub type NodeId = u64;
 
 /// Message delivery order among messages that are already deliverable.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NetworkScheduler {
     /// Deliver earliest-time messages by priority, then enqueue order.
+    #[default]
     Fifo,
     /// Deliver a random message among earliest-time, highest-priority messages.
     RandomReady,
 }
 
-impl Default for NetworkScheduler {
-    fn default() -> Self {
-        Self::Fifo
-    }
-}
-
 /// Delay policy used for messages sent without an explicit delay.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NetworkDelay {
+    #[default]
     Zero,
     Fixed(usize),
-    Uniform { min: usize, max: usize },
-}
-
-impl Default for NetworkDelay {
-    fn default() -> Self {
-        Self::Zero
-    }
+    Uniform {
+        min: usize,
+        max: usize,
+    },
 }
 
 /// Generic network-run options.
@@ -269,10 +262,10 @@ where
     let mut next_message_id = 1u64;
     let mut next_sequence = 0u64;
 
-    for idx in 0..nodes.len() {
-        let node_id = nodes[idx].id();
+    for node in &mut nodes {
+        let node_id = node.id();
         let mut ctx = NetworkContext::new(0, node_id, &node_ids, &mut rng);
-        nodes[idx].on_start(&mut ctx);
+        node.on_start(&mut ctx);
         drain_context(
             ctx,
             &options,

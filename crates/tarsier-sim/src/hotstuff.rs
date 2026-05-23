@@ -32,10 +32,11 @@ impl std::fmt::Display for HotStuffValue {
 }
 
 /// Proposal schedule for leader blocks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HotStuffProposalPattern {
     /// Extend the highest delivered QC every view.
+    #[default]
     Chained,
     /// Propose a conflicting B branch at view 2, then continue from highest QC.
     ForkAtTwo,
@@ -43,24 +44,13 @@ pub enum HotStuffProposalPattern {
     AlternateValues,
 }
 
-impl Default for HotStuffProposalPattern {
-    fn default() -> Self {
-        Self::Chained
-    }
-}
-
 /// Byzantine validator behavior.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HotStuffByzantineStrategy {
+    #[default]
     Silent,
     Vote,
-}
-
-impl Default for HotStuffByzantineStrategy {
-    fn default() -> Self {
-        Self::Silent
-    }
 }
 
 /// Concrete options for one HotStuff-style run.
