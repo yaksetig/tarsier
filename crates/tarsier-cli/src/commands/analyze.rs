@@ -31,7 +31,7 @@ pub(crate) use self::interpretation::{
 };
 #[cfg(test)]
 pub(crate) use self::layers::layer;
-#[cfg(any(test, feature = "governance"))]
+#[cfg(test)]
 pub(crate) use self::layers::run_portfolio_workers;
 pub(crate) use self::layers::{
     run_certify_fair_liveness_layer, run_certify_safety_layer, run_comm_layer,
