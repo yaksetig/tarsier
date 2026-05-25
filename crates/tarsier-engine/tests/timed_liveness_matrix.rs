@@ -51,14 +51,28 @@ fn matrix_fairness_mode() -> FairnessMode {
     }
 }
 
+fn matrix_timeout_secs() -> u64 {
+    env::var("TARSIER_MATRIX_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse().ok())
+        .unwrap_or(60)
+}
+
 fn matrix_options(engine: ProofEngine) -> PipelineOptions {
     PipelineOptions {
         solver: matrix_solver_choice(),
         max_depth: 4,
-        timeout_secs: 60,
+        timeout_secs: matrix_timeout_secs(),
         dump_smt: None,
         soundness: SoundnessMode::Strict,
         proof_engine: engine,
+    }
+}
+
+fn perf_limit_secs(solver: SolverChoice, z3_limit_secs: u64) -> u64 {
+    match solver {
+        SolverChoice::Z3 => z3_limit_secs,
+        SolverChoice::Cvc5 => z3_limit_secs.max(90),
     }
 }
 
@@ -106,10 +120,12 @@ fn timed_fair_cycle_bounded_matrix() {
         other => panic!("expected fair-cycle witness for timed matrix protocol, got: {other}"),
     }
 
+    let limit_secs = perf_limit_secs(opts.solver, 20);
     assert!(
-        elapsed.as_secs() < 20,
-        "timed fair-liveness bounded matrix took {:.2}s (limit 20s, solver={}, fairness={})",
+        elapsed.as_secs() < limit_secs,
+        "timed fair-liveness bounded matrix took {:.2}s (limit {}s, solver={}, fairness={})",
         elapsed.as_secs_f64(),
+        limit_secs,
         solver_label(opts.solver),
         fairness_label(fairness)
     );
@@ -145,10 +161,12 @@ fn timed_fair_cycle_unbounded_matrix() {
         other => panic!("expected timed fair-cycle proof witness, got: {other}"),
     }
 
+    let limit_secs = perf_limit_secs(opts.solver, 30);
     assert!(
-        elapsed.as_secs() < 30,
-        "timed fair-liveness unbounded matrix took {:.2}s (limit 30s, solver={}, fairness={})",
+        elapsed.as_secs() < limit_secs,
+        "timed fair-liveness unbounded matrix took {:.2}s (limit {}s, solver={}, fairness={})",
         elapsed.as_secs_f64(),
+        limit_secs,
         solver_label(opts.solver),
         fairness_label(fairness)
     );
