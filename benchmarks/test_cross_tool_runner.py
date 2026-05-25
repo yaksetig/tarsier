@@ -77,6 +77,47 @@ class TestTarsierVerdictNormalization(unittest.TestCase):
             "unknown",
         )
 
+    def test_safety_property_prefers_safety_interpretation(self):
+        report = {
+            "overall_verdict": "UNKNOWN",
+            "interpretation": {"safety": "SAFE", "liveness": "UNKNOWN"},
+        }
+        self.assertEqual(_normalize_tarsier_verdict(report, "agreement"), "safe")
+
+    def test_non_safety_property_uses_overall_verdict(self):
+        report = {
+            "overall_verdict": "UNKNOWN",
+            "interpretation": {"safety": "SAFE", "liveness": "UNKNOWN"},
+        }
+        self.assertEqual(_normalize_tarsier_verdict(report, "liveness"), "unknown")
+
+    def test_safety_property_uses_bounded_unsafe_layer(self):
+        report = {
+            "overall_verdict": "UNKNOWN",
+            "interpretation": {"safety": "UNKNOWN", "liveness": "UNKNOWN"},
+            "layers": [
+                {
+                    "layer": "verify",
+                    "status": "fail",
+                    "verdict": "UNKNOWN",
+                    "details": {"cegar": {"final_result": "unsafe"}},
+                },
+                {"layer": "prove[pdr]", "status": "unknown", "verdict": "UNKNOWN"},
+            ],
+        }
+        self.assertEqual(_normalize_tarsier_verdict(report, "agreement"), "unsafe")
+
+    def test_safety_property_uses_bounded_safe_layer(self):
+        report = {
+            "overall_verdict": "UNKNOWN",
+            "interpretation": {"safety": "UNKNOWN", "liveness": "UNKNOWN"},
+            "layers": [
+                {"layer": "verify", "status": "pass", "verdict": "SAFE"},
+                {"layer": "liveness[bounded]", "status": "fail", "verdict": "UNKNOWN"},
+            ],
+        }
+        self.assertEqual(_normalize_tarsier_verdict(report, "agreement"), "safe")
+
 
 class TestBymcOutputParsing(unittest.TestCase):
     def test_safe(self):

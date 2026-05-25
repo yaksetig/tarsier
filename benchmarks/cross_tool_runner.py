@@ -111,7 +111,7 @@ class TarsierAdapter(ToolAdapter):
                         reason="invalid JSON output",
                         elapsed_ms=elapsed_ms,
                     )
-                verdict = _normalize_tarsier_verdict(report)
+                verdict = _normalize_tarsier_verdict(report, scenario.get("property"))
                 return _make_result(
                     tool="tarsier",
                     scenario_id=scenario["id"],
@@ -338,13 +338,79 @@ class SpinAdapter(ToolAdapter):
 NORMALIZED_VERDICTS = {"safe", "unsafe", "timeout", "unknown", "error"}
 
 
-def _normalize_tarsier_verdict(report: dict[str, Any]) -> str:
+def _normalize_tarsier_verdict(
+    report: dict[str, Any],
+    property_name: Optional[str] = None,
+) -> str:
+    if _is_safety_property(property_name):
+        safety_layer_verdict = _normalize_tarsier_safety_layers(report)
+        if safety_layer_verdict in ("safe", "unsafe"):
+            return safety_layer_verdict
+
+        safety_verdict = _normalize_verdict_value(
+            report.get("interpretation", {}).get("safety", "")
+        )
+        if safety_verdict in ("safe", "unsafe"):
+            return safety_verdict
+
     ov = report.get("overall_verdict", "").lower()
     if ov in ("safe", "proved", "live_proved"):
         return "safe"
     if ov in ("unsafe", "counterexample"):
         return "unsafe"
     if ov in ("timeout",):
+        return "timeout"
+    return "unknown"
+
+
+def _normalize_tarsier_safety_layers(report: dict[str, Any]) -> str:
+    saw_safe = False
+    for layer in report.get("layers", []):
+        if not _is_tarsier_safety_layer(layer):
+            continue
+
+        details = layer.get("details", {})
+        cegar = details.get("cegar", {}) if isinstance(details, dict) else {}
+        candidates = [
+            layer.get("verdict", ""),
+            details.get("result", "") if isinstance(details, dict) else "",
+            cegar.get("final_result", "") if isinstance(cegar, dict) else "",
+            cegar.get("classification", "") if isinstance(cegar, dict) else "",
+        ]
+        for candidate in candidates:
+            verdict = _normalize_verdict_value(candidate)
+            if verdict == "unsafe":
+                return "unsafe"
+            if verdict == "safe":
+                saw_safe = True
+
+    return "safe" if saw_safe else "unknown"
+
+
+def _is_tarsier_safety_layer(layer: dict[str, Any]) -> bool:
+    name = str(layer.get("layer", "")).lower()
+    return name == "verify" or name in {"prove[kinduction]", "prove[pdr]"}
+
+
+def _is_safety_property(property_name: Optional[str]) -> bool:
+    if property_name is None:
+        return False
+    return property_name.lower() in {
+        "agreement",
+        "consistency",
+        "integrity",
+        "safety",
+        "validity",
+    }
+
+
+def _normalize_verdict_value(value: object) -> str:
+    verdict = str(value).lower()
+    if verdict in ("safe", "proved"):
+        return "safe"
+    if verdict in ("unsafe", "counterexample", "unsafe_confirmed"):
+        return "unsafe"
+    if verdict == "timeout":
         return "timeout"
     return "unknown"
 
