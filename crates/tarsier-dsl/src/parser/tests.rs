@@ -38,6 +38,35 @@ property agreement: agreement {
 }
 
 #[test]
+fn parse_rejects_nul_byte_before_pest() {
+    let err = parse("protocol Bad\0 { }", "nul.trs").expect_err("NUL must be rejected");
+    assert!(err.to_string().contains("NUL byte"));
+}
+
+#[test]
+fn parse_rejects_pathological_delimiter_nesting_before_pest() {
+    let nested = "(".repeat(40);
+    let src = format!(
+        r#"
+protocol Deep {{
+params n, t, f;
+resilience: n > 3*t;
+role R {{
+  var done: bool = true;
+  init s;
+  phase s {{}}
+}}
+property progress: liveness {{
+  {nested} R.done == true
+}}
+}}
+"#
+    );
+    let err = parse(&src, "deep.trs").expect_err("deep nesting must be rejected");
+    assert!(err.to_string().contains("delimiter nesting"));
+}
+
+#[test]
 fn parse_threshold_guard() {
     let src = r#"
 protocol T {

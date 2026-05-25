@@ -9,6 +9,8 @@ Validation layers:
 Environment knobs:
 - TARSIER_CARCARA_BIN: explicit `carcara` path
 - TARSIER_REQUIRE_CARCARA=1: fail cvc5 checks if Carcara is unavailable
+- TARSIER_ALLOW_CARCARA_UNSUPPORTED_RULE_FALLBACK=1: allow cvc5 self-check
+  fallback when Carcara rejects a known unsupported cvc5 Alethe rule
 """
 
 from __future__ import annotations
@@ -132,6 +134,16 @@ def require_carcara() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def allow_carcara_unsupported_rule_fallback() -> bool:
+    raw = os.environ.get("TARSIER_ALLOW_CARCARA_UNSUPPORTED_RULE_FALLBACK", "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def is_carcara_unsupported_cvc5_rule(message: str) -> bool:
+    lowered = message.lower()
+    return "unknown rule" in lowered and "all_simplify" in lowered
+
+
 def check_with_z3_solver_validation(smt2_path: pathlib.Path) -> tuple[bool, str]:
     script = smt2_path.read_text(encoding="utf-8")
     proof_script = augment_query_for_proof(script)
@@ -194,20 +206,20 @@ def check_with_cvc5_solver_validation(smt2_path: pathlib.Path) -> tuple[bool, st
 
 def check_cvc5_with_carcara(
     smt2_path: pathlib.Path, proof_text: str
-) -> tuple[bool, str, bool]:
+) -> tuple[bool, str, str]:
     carcara = resolve_carcara()
     if not carcara:
         if require_carcara():
             return (
                 False,
                 "Carcara required but not found (set TARSIER_CARCARA_BIN or add `carcara` to PATH)",
-                False,
+                "missing",
             )
-        return True, "Carcara unavailable; skipped external Alethe proof check", False
+        return True, "Carcara unavailable; skipped external Alethe proof check", "skipped"
 
     payload = extract_proof_payload(proof_text)
     if not payload:
-        return False, "proof text does not contain an Alethe payload for Carcara", True
+        return False, "proof text does not contain an Alethe payload for Carcara", "missing"
 
     with tempfile.TemporaryDirectory(prefix="tarsier-proof-check-") as tmp:
         proof_file = pathlib.Path(tmp) / "proof.alethe"
@@ -223,14 +235,25 @@ def check_cvc5_with_carcara(
         try:
             out = run(cmd)
         except RuntimeError as exc:
-            return False, str(exc), True
+            return False, str(exc), "error"
         if out.returncode != 0:
+            details = out.stderr.strip() or out.stdout.strip()
+            if (
+                allow_carcara_unsupported_rule_fallback()
+                and is_carcara_unsupported_cvc5_rule(details)
+            ):
+                return (
+                    True,
+                    "Carcara does not support this cvc5 Alethe rule; "
+                    f"falling back to cvc5 self-check: {details}",
+                    "fallback",
+                )
             return (
                 False,
-                f"Carcara rejected cvc5 proof: {out.stderr.strip() or out.stdout.strip()}",
-                True,
+                f"Carcara rejected cvc5 proof: {details}",
+                "rejected",
             )
-    return True, "Carcara validated cvc5 Alethe proof", True
+    return True, "Carcara validated cvc5 Alethe proof", "validated"
 
 
 def main() -> int:
@@ -271,24 +294,22 @@ def main() -> int:
 
     if solver == "cvc5":
         # Strongest path: external Alethe checker + cvc5 internal proof checking.
-        ok, msg, used_carcara = check_cvc5_with_carcara(smt2_path, proof_text)
+        ok, msg, carcara_mode = check_cvc5_with_carcara(smt2_path, proof_text)
         if not ok:
             return fail(msg)
-        if used_carcara:
-            print(msg, file=sys.stderr)
-        elif require_carcara():
+        if carcara_mode == "skipped" and require_carcara():
             return fail(msg)
-        else:
-            print(msg, file=sys.stderr)
+        print(msg, file=sys.stderr)
 
         ok, msg = check_with_cvc5_solver_validation(smt2_path)
         if not ok:
             return fail(msg)
-        mode = (
-            "structural+carcara+cvc5-self-check"
-            if used_carcara
-            else "structural+cvc5-self-check"
-        )
+        mode_by_carcara = {
+            "validated": "structural+carcara+cvc5-self-check",
+            "fallback": "structural+carcara-unsupported-rule-fallback+cvc5-self-check",
+            "skipped": "structural+cvc5-self-check",
+        }
+        mode = mode_by_carcara.get(carcara_mode, "structural+cvc5-self-check")
         print(
             f"proof-check ok solver={solver} mode={mode} smt2={smt2_path} proof={proof_path}"
         )
