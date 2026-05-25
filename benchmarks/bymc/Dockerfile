@@ -29,7 +29,7 @@ RUN curl -fsSL -o /usr/local/bin/opam \
 
 # Initialize opam with OCaml 4.06.1 (last version well-supported by ByMC)
 RUN opam init --disable-sandboxing --bare -y && \
-    opam switch create 4.06.1 && \
+    opam switch create 4.06.1 ocaml-base-compiler.4.06.1 && \
     eval $(opam env)
 
 # Install Z3 4.8.7 from GitHub release
