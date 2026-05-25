@@ -11,11 +11,28 @@ fn should_skip_for_bmc_encoder(program: &Program) -> bool {
         .properties
         .iter()
         .any(|property| property.node.kind == PropertyKind::Liveness);
+    let has_faithful_network_surface = !protocol.identities.is_empty()
+        || !protocol.channels.is_empty()
+        || protocol.adversary.iter().any(|item| {
+            matches!(
+                item.key.as_str(),
+                "auth"
+                    | "authentication"
+                    | "network"
+                    | "delivery"
+                    | "delivery_scope"
+                    | "faults"
+                    | "fault_scope"
+                    | "fault_budget"
+                    | "equivocation"
+            )
+        });
 
     // This target exercises safety BMC encoding. Liveness and crypto-object
-    // lowering are covered by dedicated paths and can allocate heavily from
-    // arbitrary corpus mutations before the encoder is reached.
-    has_liveness_property || !protocol.crypto_objects.is_empty()
+    // lowering, plus faithful network semantics, are covered by dedicated paths
+    // and can allocate heavily from arbitrary corpus mutations before the
+    // encoder is reached.
+    has_liveness_property || !protocol.crypto_objects.is_empty() || has_faithful_network_surface
 }
 
 fuzz_target!(|data: &[u8]| {
