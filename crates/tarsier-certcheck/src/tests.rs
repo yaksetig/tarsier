@@ -2,7 +2,7 @@ use super::{
     augment_query_for_proof, enforce_foundational_profile_requirements, is_truthy_flag,
     parse_solver_list, parse_solver_result_prefix, parse_solver_result_token,
     proof_object_looks_nontrivial, record_solver_outcome, run_external_solver_on_file,
-    SolverSummary,
+    solver_requires_proof_objects, SolverSummary,
 };
 use miette::miette;
 use std::collections::BTreeMap;
@@ -35,6 +35,19 @@ fn foundational_profile_requires_cvc5_solver_and_carcara_gate() {
     let err = enforce_foundational_profile_requirements(&missing_cvc5, false)
         .expect_err("missing cvc5 should fail foundational profile checks");
     assert!(err.to_string().contains("requires cvc5"));
+}
+
+#[test]
+fn foundational_proof_path_uses_cvc5_only_for_proof_objects() {
+    assert!(solver_requires_proof_objects("cvc5", true, true));
+    assert!(!solver_requires_proof_objects("z3", true, true));
+}
+
+#[test]
+fn non_foundational_proof_path_uses_all_solvers_when_requested() {
+    assert!(solver_requires_proof_objects("z3", true, false));
+    assert!(solver_requires_proof_objects("cvc5", true, false));
+    assert!(!solver_requires_proof_objects("z3", false, false));
 }
 
 #[test]

@@ -1252,23 +1252,23 @@ jobs:
             --max-unsat-recheck-sat-rate 0.20 \
             --min-unsat-rechecks 1
 
-      - name: Generate Proof Bundles With Captured Proofs
+      - name: Generate Proof Bundles From Prove Commands
         run: |
-          cargo run -p tarsier-cli --features governance -- certify-safety examples/reliable_broadcast.trs \
+          cargo run -p tarsier-cli -- prove examples/reliable_broadcast.trs \
+            --solver z3 \
             --k 12 \
             --timeout 120 \
-            --engine kinduction \
             --soundness strict \
-            --capture-proofs \
-            --out certs/proof-gate/safety
+            --engine kinduction \
+            --cert-out certs/proof-gate/safety
 
-          cargo run -p tarsier-cli --features governance -- certify-fair-liveness examples/library/pbft_liveness_safe_ci.trs \
+          cargo run -p tarsier-cli -- prove-fair examples/library/pbft_liveness_safe_ci.trs \
+            --solver z3 \
             --k 8 \
             --timeout 120 \
-            --fairness weak \
             --soundness strict \
-            --capture-proofs \
-            --out certs/proof-gate/live
+            --fairness weak \
+            --cert-out certs/proof-gate/live
 
       - name: Validate Buggy Liveness Sentinel (Nontrivial)
         run: |
