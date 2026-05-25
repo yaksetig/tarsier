@@ -8,14 +8,14 @@ use pest_derive::Parser;
 use crate::ast::*;
 use crate::errors::{ParseDiagnostic, ParseDiagnosticSeverity, ParseError};
 
+mod source_shape;
+use source_shape::validate_source_shape;
+
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 struct TarsierParser;
 
 type Pair<'a> = pest::iterators::Pair<'a, Rule>;
-
-const MAX_PARSE_BYTES: usize = 256 * 1024;
-const MAX_DELIMITER_NESTING: usize = 32;
 
 fn span_from(pair: &Pair<'_>) -> Span {
     let s = pair.as_span();
@@ -91,50 +91,6 @@ pub fn parse_with_diagnostics(
     let program = Program { protocol };
     let diagnostics = collect_parser_diagnostics(&program);
     Ok((program, diagnostics))
-}
-
-fn validate_source_shape(source: &str, filename: &str) -> Result<(), ParseError> {
-    if source.len() > MAX_PARSE_BYTES {
-        return Err(ParseError::syntax(
-            format!("source exceeds parser size limit of {MAX_PARSE_BYTES} bytes"),
-            Span::new(0, source.len()),
-            source,
-            filename,
-        ));
-    }
-
-    let mut nesting = 0usize;
-    for (idx, ch) in source.char_indices() {
-        if ch == '\0' {
-            return Err(ParseError::syntax(
-                "source contains a NUL byte",
-                Span::new(idx, idx + ch.len_utf8()),
-                source,
-                filename,
-            ));
-        }
-        match ch {
-            '(' | '[' | '{' => {
-                nesting += 1;
-                if nesting > MAX_DELIMITER_NESTING {
-                    return Err(ParseError::syntax(
-                        format!(
-                            "delimiter nesting exceeds parser limit of {MAX_DELIMITER_NESTING}"
-                        ),
-                        Span::new(idx, idx + ch.len_utf8()),
-                        source,
-                        filename,
-                    ));
-                }
-            }
-            ')' | ']' | '}' => {
-                nesting = nesting.saturating_sub(1);
-            }
-            _ => {}
-        }
-    }
-
-    Ok(())
 }
 
 fn collect_parser_diagnostics(program: &Program) -> Vec<ParseDiagnostic> {
