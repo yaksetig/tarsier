@@ -182,7 +182,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python3 - <<'PY' "${BASE_URL}" "${ROOT_DIR}"
+python3 - <<'PY' "${BASE_URL}" "${ROOT_DIR}" "${playground_log}"
 import json
 import os
 import sys
@@ -192,6 +192,7 @@ import urllib.request
 
 base = sys.argv[1]
 root = sys.argv[2]
+playground_log = sys.argv[3]
 
 def fetch_json(url, method="GET", payload=None, timeout=30):
     body = None
@@ -208,7 +209,7 @@ def fetch_text(url, timeout=30):
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.getcode(), resp.read().decode("utf-8")
 
-for _ in range(80):
+for _ in range(300):
     try:
         status, health = fetch_json(base + "/api/health")
         if status == 200 and health.get("ok") is True:
@@ -216,7 +217,13 @@ for _ in range(80):
     except Exception:
         time.sleep(0.25)
 else:
-    raise SystemExit("playground health check did not become ready")
+    details = ""
+    try:
+        with open(playground_log, "r", encoding="utf-8", errors="replace") as fh:
+            details = fh.read()[-4000:]
+    except Exception:
+        pass
+    raise SystemExit("playground health check did not become ready\n" + details)
 
 status, app_js = fetch_text(base + "/app.js")
 if status != 200:

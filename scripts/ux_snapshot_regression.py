@@ -86,14 +86,14 @@ class PlaygroundProc:
 
     def _wait_ready(self) -> None:
         base = f"http://{self.host}:{self.port}"
-        for _ in range(100):
+        for _ in range(300):
             try:
                 status, payload = fetch_json(f"{base}/api/health")
                 if status == 200 and payload.get("ok") is True:
                     return
             except Exception:
                 pass
-            time.sleep(0.2)
+            time.sleep(0.25)
         extra = ""
         if self.proc is not None and self.proc.stdout is not None:
             try:
