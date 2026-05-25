@@ -27,10 +27,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 # Install opam 2.x without invoking the interactive installer prompt.
-RUN curl -fsSL \
-    https://github.com/ocaml/opam/releases/download/2.1.5/opam-2.1.5-x86_64-linux \
-    -o /usr/local/bin/opam && \
-    chmod +x /usr/local/bin/opam
+RUN curl -fsSL -o /usr/local/bin/opam \
+      https://github.com/ocaml/opam/releases/download/2.1.5/opam-2.1.5-x86_64-linux && \
+    chmod +x /usr/local/bin/opam && \
+    opam --version
 
 # Initialize opam with OCaml 4.06.1 (last version well-supported by ByMC)
 RUN opam init --disable-sandboxing --bare -y && \
