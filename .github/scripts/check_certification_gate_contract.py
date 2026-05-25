@@ -151,6 +151,12 @@ def main() -> int:
             "--proof-checker ./.github/scripts/check_proof_object.py",
             "ci.yml proof-mode-independent-gate",
         )
+        ensure_contains(
+            errors,
+            ci_proof_gate,
+            "--capture-proofs",
+            "ci.yml proof-mode-independent-gate",
+        )
 
     # Release gate contract
     release_gate = job_block(release, "release-corpus-certification-gate")
