@@ -77,7 +77,7 @@
       },
       "tool_inputs": {
         "tarsier": {
-          "file": "examples/library/tendermint_locking.trs",
+          "file": "benchmarks/cross_tool_scenarios/external_models/tendermint_agreement_smoke.trs",
           "mode": "proof",
           "depth": 8,
           "k": 10,

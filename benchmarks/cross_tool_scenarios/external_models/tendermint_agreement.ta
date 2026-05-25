@@ -2,7 +2,8 @@
  *
  * Threshold automaton for a simplified Tendermint consensus protocol
  * with a locking mechanism.
- * Matches Tarsier model: examples/library/tendermint_locking.trs
+ * Matches Tarsier model:
+ * benchmarks/cross_tool_scenarios/external_models/tendermint_agreement_smoke.trs
  *
  * Locations:
  *   loc0 = pre       (initial — waiting for Precommit messages)
