@@ -3690,18 +3690,32 @@ fn governance_pipeline_perf_gate_validates_benchmark_report() {
 #[cfg(feature = "governance")]
 #[test]
 fn governance_pipeline_command_parses() {
-    let args = Cli::try_parse_from([
-        "tarsier",
-        "governance-pipeline",
-        "proto.trs",
-        "--solver",
-        "z3",
-        "--depth",
-        "8",
-        "--format",
-        "json",
-    ]);
-    assert!(args.is_ok(), "governance-pipeline command should parse");
+    let parsed = std::thread::Builder::new()
+        .name("governance-pipeline-parser-contract".into())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(|| {
+            Cli::try_parse_from([
+                "tarsier",
+                "governance-pipeline",
+                "proto.trs",
+                "--solver",
+                "z3",
+                "--depth",
+                "8",
+                "--format",
+                "json",
+            ])
+            .map(|_| ())
+            .map_err(|err| err.to_string())
+        })
+        .expect("parser contract thread should start")
+        .join()
+        .expect("parser contract thread should not panic");
+    assert!(
+        parsed.is_ok(),
+        "governance-pipeline command should parse: {:?}",
+        parsed.err()
+    );
 }
 
 #[cfg(feature = "governance")]
