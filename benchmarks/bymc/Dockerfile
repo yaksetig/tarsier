@@ -1,5 +1,5 @@
 # ByMC (Byzantine Model Checker) Docker image
-# Pinned to v2.4.4 for reproducible verification runs.
+# Pinned to bymc-2.4.2 for reproducible verification runs.
 #
 # Build:   docker build -t tarsier-bymc:latest benchmarks/bymc/
 # Run:     docker run --rm -v "$PWD":/work tarsier-bymc:latest /work/model.ta all
@@ -55,7 +55,7 @@ RUN eval $(opam env) && \
 
 # Clone and build ByMC at pinned tag
 RUN eval $(opam env) && \
-    git clone --depth 1 --branch v2.4.4 https://github.com/konnov/bymc.git /opt/bymc && \
+    git clone --depth 1 --branch bymc-2.4.2 https://github.com/konnov/bymc.git /opt/bymc && \
     cd /opt/bymc/bymc && \
     make
 
