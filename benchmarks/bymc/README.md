@@ -27,7 +27,7 @@ python3 .github/scripts/check_cross_tool_verdict_parity.py /tmp/cross-tool-real.
 | Ubuntu | 18.04 | Last era with good OCaml 4.06 support |
 | OCaml | 4.06.1 | Required by ByMC |
 | Z3 | 4.8.7 | Compatible with ByMC's Z3 bindings |
-| ByMC | v2.4.4 | Pinned tag for reproducibility |
+| ByMC | bymc-2.4.2 | Latest published 2.4.x tag, pinned for reproducibility |
 | opam | 2.1.5 | OCaml package manager |
 
 ## How It Works
@@ -57,7 +57,7 @@ Output patterns:
 The Dockerfile uses Ubuntu 18.04 for compatibility. If opam mirror issues occur, retry the build (transient network errors).
 
 **Z3 version mismatch:**
-ByMC v2.4.4 requires Z3 4.8.x. Newer Z3 versions may have incompatible API changes.
+ByMC bymc-2.4.2 requires Z3 4.8.x. Newer Z3 versions may have incompatible API changes.
 
 **Model file not found inside Docker:**
 The wrapper mounts the repo root at `/work`. Model file paths must be relative to the repo root.
