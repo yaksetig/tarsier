@@ -21,9 +21,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
   && rm -rf /var/lib/apt/lists/*
 
-# Install opam 2.x
-RUN curl -fsSL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh | \
-    sh -s -- --version 2.1.5
+# Install a pinned opam binary without invoking the interactive installer.
+RUN curl -fsSL -o /usr/local/bin/opam \
+      https://github.com/ocaml/opam/releases/download/2.1.5/opam-2.1.5-x86_64-linux && \
+    chmod +x /usr/local/bin/opam && \
+    opam --version
 
 # Initialize opam with OCaml 4.06.1 (last version well-supported by ByMC)
 RUN opam init --disable-sandboxing --bare -y && \
@@ -38,7 +40,7 @@ RUN wget -q https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x
     rm /tmp/z3.zip
 
 ENV PATH="/opt/z3/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/z3/bin:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/opt/z3/bin"
 
 # Install OCaml dependencies via opam
 RUN eval $(opam env) && \
