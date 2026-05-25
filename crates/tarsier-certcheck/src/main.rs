@@ -5,8 +5,11 @@ use miette::{Context, IntoDiagnostic};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
+use std::thread;
+use std::time::Duration;
 use tarsier_proof_kernel::{check_bundle_integrity, GovernanceProfile, CERTIFICATE_SCHEMA_VERSION};
 
 #[derive(Debug, Parser)]
@@ -213,6 +216,23 @@ fn parse_solver_result_prefix(stdout: &str) -> miette::Result<String> {
     );
 }
 
+fn run_solver_command_with_retry(cmd: &mut Command) -> io::Result<Output> {
+    const ATTEMPTS: usize = 3;
+    const ETXTBSY: i32 = 26;
+
+    for attempt in 0..ATTEMPTS {
+        match cmd.output() {
+            Ok(output) => return Ok(output),
+            Err(err) if err.raw_os_error() == Some(ETXTBSY) && attempt + 1 < ATTEMPTS => {
+                thread::sleep(Duration::from_millis(25));
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    cmd.output()
+}
+
 fn run_external_solver_on_file(solver_cmd: &str, smt_file: &Path) -> miette::Result<String> {
     let mut cmd = Command::new(solver_cmd);
     match solver_cmd {
@@ -227,13 +247,15 @@ fn run_external_solver_on_file(solver_cmd: &str, smt_file: &Path) -> miette::Res
         }
     }
 
-    let output = cmd.output().into_diagnostic().wrap_err_with(|| {
-        format!(
-            "failed to execute solver '{}' on {}",
-            solver_cmd,
-            smt_file.display()
-        )
-    })?;
+    let output = run_solver_command_with_retry(&mut cmd)
+        .into_diagnostic()
+        .wrap_err_with(|| {
+            format!(
+                "failed to execute solver '{}' on {}",
+                solver_cmd,
+                smt_file.display()
+            )
+        })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         miette::bail!(
