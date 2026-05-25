@@ -29,6 +29,7 @@ RUN curl -fsSL -o /usr/local/bin/opam \
 
 # Initialize opam with OCaml 4.06.1 (last version well-supported by ByMC)
 RUN opam init --disable-sandboxing --bare -y && \
+    opam repository add archive git+https://github.com/ocaml/opam-repository-archive -y && \
     opam switch create 4.06.1 ocaml-base-compiler.4.06.1 && \
     eval $(opam env)
 

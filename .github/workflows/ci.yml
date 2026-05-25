@@ -1025,8 +1025,10 @@ jobs:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
           TARSIER_MATRIX_SOLVER: ${{ matrix.solver }}
           TARSIER_MATRIX_FAIRNESS: ${{ matrix.fairness }}
+          TARSIER_MATRIX_TIMEOUT_SECS: ${{ matrix.solver == 'cvc5' && '180' || '60' }}
+          RUST_TEST_THREADS: "1"
         run: |
-          cargo test -p tarsier-engine --test multi_quant_temporal_matrix -- --nocapture
+          cargo test -p tarsier-engine --test multi_quant_temporal_matrix -- --nocapture --test-threads=1
 
   timed-fair-liveness-matrix:
     runs-on: ubuntu-latest
@@ -1056,8 +1058,10 @@ jobs:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
           TARSIER_MATRIX_SOLVER: ${{ matrix.solver }}
           TARSIER_MATRIX_FAIRNESS: ${{ matrix.fairness }}
+          TARSIER_MATRIX_TIMEOUT_SECS: ${{ matrix.solver == 'cvc5' && '180' || '60' }}
+          RUST_TEST_THREADS: "1"
         run: |
-          cargo test -p tarsier-engine --test timed_liveness_matrix -- --nocapture
+          cargo test -p tarsier-engine --test timed_liveness_matrix -- --nocapture --test-threads=1
 
   proof-checking-gate:
     runs-on: ubuntu-latest
@@ -1230,6 +1234,7 @@ jobs:
         run: |
           mkdir -p artifacts
           cargo run -p tarsier-cli -- analyze examples/library/pbft_liveness_safe_ci.trs \
+            --profile high-assurance \
             --mode proof \
             --solver z3 \
             --depth 6 \
