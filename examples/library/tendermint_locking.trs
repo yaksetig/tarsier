@@ -9,17 +9,19 @@ protocol TendermintLocking {
         values: sign;
     }
 
-    message Proposal(round: nat, value: int);
-    message Prevote(round: nat, value: int);
-    message Precommit(round: nat, value: int);
+    message Proposal(round: nat in 0..0, value: nat in 0..0);
+    message Prevote(round: nat in 0..0, value: nat in 0..0);
+    message Precommit(round: nat in 0..0, value: nat in 0..0);
 
     role Replica {
         var decided: bool = false;
+        var decision: nat in 0..0 = 0;
         init pre;
 
         phase pre {
             when received >= 2*t+1 Precommit(round=0, value=0) => {
                 decided = true;
+                decision = 0;
                 goto phase decided;
             }
         }
@@ -28,6 +30,7 @@ protocol TendermintLocking {
     }
 
     property agreement: agreement {
-        forall p: Replica. forall q: Replica. p.decided == q.decided
+        forall p: Replica. forall q: Replica.
+            (p.decided == true && q.decided == true) ==> (p.decision == q.decision)
     }
 }
