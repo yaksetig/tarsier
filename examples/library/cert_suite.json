@@ -363,7 +363,7 @@
       "proof_engine": "kinduction",
       "cegar_iters": 0,
       "notes": "Bug seed: Tendermint locking/precommit conditions intentionally relaxed; the lock-change rule does not properly enforce that a process must see a polka for a different value before unlocking, admitting conflicting precommits.",
-      "model_sha256": "53da81fb0a85d3d9da40a798462c12d26f66af86be504f05e95d17d0c42ed49f"
+      "model_sha256": "e9c5b4b774df31ca39f0c5447063ff8294112b7576397d4245d2805676b570a3"
     },
     {
       "file": "tendermint_crypto_qc_bug_faithful.trs",
