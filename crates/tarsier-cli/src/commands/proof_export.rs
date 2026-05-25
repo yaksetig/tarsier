@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tarsier_engine::pipeline::{
     attach_certificate_evidence_by_name, export_ir_from_fair_liveness_certificate,
@@ -43,6 +44,8 @@ pub(crate) struct ProofExportObligationArtifact {
 struct CertcheckJsonReport {
     overall: String,
 }
+
+static CERTCHECK_REPORT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn run_proof_export_command(
     bundle: PathBuf,
@@ -200,15 +203,29 @@ fn run_certcheck(
         .duration_since(UNIX_EPOCH)
         .into_diagnostic()?
         .as_nanos();
-    let report_path =
-        std::env::temp_dir().join(format!("tarsier-proof-export-certcheck-{ts_nanos}.json"));
-    let output = Command::new(certcheck_bin)
-        .arg(bundle)
-        .arg("--json-report")
-        .arg(&report_path)
-        .arg("--fail-fast")
-        .output()
-        .into_diagnostic()?;
+    let seq = CERTCHECK_REPORT_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    let report_path = std::env::temp_dir().join(format!(
+        "tarsier-proof-export-certcheck-{pid}-{ts_nanos}-{seq}.json"
+    ));
+    let run = || {
+        Command::new(certcheck_bin)
+            .arg(bundle)
+            .arg("--json-report")
+            .arg(&report_path)
+            .arg("--fail-fast")
+            .output()
+    };
+    let mut output_result = run();
+    #[cfg(unix)]
+    for _ in 0..3 {
+        if !matches!(output_result, Err(ref err) if err.raw_os_error() == Some(26)) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        output_result = run();
+    }
+    let output = output_result.into_diagnostic()?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
