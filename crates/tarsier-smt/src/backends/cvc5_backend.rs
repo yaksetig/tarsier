@@ -108,7 +108,9 @@ impl Cvc5Solver {
             last_assumptions: Vec::new(),
         };
 
-        solver.send_command("(set-logic QF_LIA)")?;
+        // SMT-LIB setup commands do not produce a response. Waiting for one
+        // leaves cvc5 blocked until its global time limit interrupts it.
+        solver.send_command_no_response("(set-logic QF_LIA)")?;
         Ok(solver)
     }
 
