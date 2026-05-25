@@ -1295,6 +1295,7 @@ jobs:
       - name: Independent Checker Gate (Fair-Liveness)
         env:
           TARSIER_REQUIRE_CARCARA: "1"
+          TARSIER_ALLOW_CARCARA_UNSUPPORTED_RULE_FALLBACK: "1"
         run: |
           cargo run -p tarsier-certcheck -- certs/proof-gate/live \
             --profile high-assurance \

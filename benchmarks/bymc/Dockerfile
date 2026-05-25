@@ -48,6 +48,7 @@ ENV LD_LIBRARY_PATH="/opt/z3/bin"
 RUN eval $(opam env) && \
     opam install -y \
       batteries \
+      ocamlbuild \
       ocamlgraph \
       sexplib \
       ctypes \
