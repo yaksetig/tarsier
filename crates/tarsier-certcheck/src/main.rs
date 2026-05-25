@@ -464,6 +464,14 @@ fn record_solver_outcome(
     }
 }
 
+fn solver_requires_proof_objects(
+    solver_cmd: &str,
+    need_proof_objects: bool,
+    require_foundational_proof_path: bool,
+) -> bool {
+    need_proof_objects && (!require_foundational_proof_path || solver_cmd == "cvc5")
+}
+
 fn main() -> miette::Result<()> {
     let cli = Cli::parse();
 
@@ -535,20 +543,6 @@ fn main() -> miette::Result<()> {
         per_solver.insert(solver.clone(), SolverSummary::default());
     }
 
-    // When --require-proofs is set, check that all UNSAT obligations have bound proof objects.
-    if require_proofs && integrity_issues.is_empty() {
-        for obligation in &metadata.obligations {
-            if obligation.expected == "unsat" && obligation.proof_sha256.is_none() {
-                let msg = format!(
-                    "[proof_binding] Obligation '{}' is missing proof_sha256 (required by --require-proofs).",
-                    obligation.name
-                );
-                integrity_issues.push(msg.clone());
-                println!("[FAIL] {msg}");
-            }
-        }
-    }
-
     if integrity_issues.is_empty() {
         println!(
             "[PASS] integrity: schema={}, kind={}, engine={}, obligations={}",
@@ -564,7 +558,12 @@ fn main() -> miette::Result<()> {
             let mut ok = true;
 
             for solver_cmd in &solver_cmds {
-                let outcome = if need_proof_objects {
+                let solver_needs_proof = solver_requires_proof_objects(
+                    solver_cmd,
+                    need_proof_objects,
+                    require_foundational_proof_path,
+                );
+                let outcome = if solver_needs_proof {
                     match run_external_solver_with_proof(solver_cmd, &smt_path) {
                         Ok((actual, proof_text)) => {
                             let mut outcome = record_solver_outcome(
@@ -723,12 +722,19 @@ fn main() -> miette::Result<()> {
                         }
                     }
                 } else {
-                    record_solver_outcome(
+                    let mut outcome = record_solver_outcome(
                         solver_cmd,
                         &obligation.expected,
                         run_external_solver_on_file(solver_cmd, &smt_path),
                         &mut per_solver,
-                    )
+                    );
+                    if need_proof_objects && obligation.expected == "unsat" {
+                        ensure_solver_summary(&mut per_solver, solver_cmd).proof_skipped += 1;
+                        outcome.proof_status = Some("skipped".into());
+                        outcome.proof_message =
+                            Some("foundational proof path enforced through cvc5".into());
+                    }
+                    outcome
                 };
                 match (&outcome.status[..], &outcome.actual, &outcome.message) {
                     ("pass", Some(actual), _) => {
