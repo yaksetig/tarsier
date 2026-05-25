@@ -38,6 +38,12 @@ property agreement: agreement {
 }
 
 #[test]
+fn parse_rejects_nul_byte_before_pest() {
+    let err = parse("protocol Bad\0 { }", "nul.trs").expect_err("NUL must be rejected");
+    assert!(err.to_string().contains("NUL byte"));
+}
+
+#[test]
 fn parse_threshold_guard() {
     let src = r#"
 protocol T {
