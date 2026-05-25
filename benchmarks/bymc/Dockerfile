@@ -34,12 +34,9 @@ RUN curl -fsSL -o /usr/local/bin/opam \
 
 # Initialize opam with OCaml 4.06.1 (last version well-supported by ByMC)
 RUN opam init --disable-sandboxing --bare -y && \
+    opam repository add archive git+https://github.com/ocaml/opam-repository-archive -y && \
     opam switch create 4.06.1 ocaml-base-compiler.4.06.1 && \
     eval $(opam env)
-
-# Older OCaml packages for 4.06 live in opam's archive repository.
-RUN eval $(opam env) && \
-    opam repository add archive git+https://github.com/ocaml/opam-repository-archive -y
 
 # Install Z3 4.8.7 from GitHub release
 RUN wget -q https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-ubuntu-16.04.zip \

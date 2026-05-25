@@ -63,11 +63,18 @@ fn matrix_fairness_mode() -> FairnessMode {
     }
 }
 
+fn matrix_timeout_secs() -> u64 {
+    env::var("TARSIER_MATRIX_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse().ok())
+        .unwrap_or(60)
+}
+
 fn matrix_pipeline_options() -> PipelineOptions {
     PipelineOptions {
         solver: matrix_solver_choice(),
         max_depth: 4,
-        timeout_secs: 60,
+        timeout_secs: matrix_timeout_secs(),
         dump_smt: None,
         soundness: SoundnessMode::Strict,
         proof_engine: ProofEngine::KInduction,
