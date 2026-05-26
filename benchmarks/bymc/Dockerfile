@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     libffi-dev \
+    libopenmpi-dev \
     m4 \
     pkg-config \
     python3 \
@@ -48,11 +49,14 @@ ENV LD_LIBRARY_PATH="/opt/z3/bin"
 RUN eval $(opam env) && \
     opam install -y \
       batteries \
+      lazy-trie \
+      mpi \
       ocamlbuild \
       ocamlgraph \
       sexplib \
       ctypes \
-      ctypes-foreign
+      ctypes-foreign \
+      z3.4.8.7
 
 # Clone and build ByMC at pinned tag
 RUN eval $(opam env) && \
