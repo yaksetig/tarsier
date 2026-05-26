@@ -27,6 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.92.0
+          components: rustfmt, clippy
 
       - name: Setup Python (Pinned Minor)
         uses: actions/setup-python@v5
@@ -71,6 +72,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.92.0
+          components: rustfmt, clippy
 
       - name: Setup Python (Pinned Minor)
         uses: actions/setup-python@v5
@@ -114,6 +116,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.92.0
+          components: rustfmt, clippy
 
       - name: Setup Python (Pinned Minor)
         uses: actions/setup-python@v5
@@ -225,6 +228,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.92.0
+          components: rustfmt, clippy
 
       - name: Setup Python (Pinned Minor)
         uses: actions/setup-python@v5
