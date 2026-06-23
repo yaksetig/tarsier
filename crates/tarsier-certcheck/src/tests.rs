@@ -8,7 +8,9 @@ use miette::miette;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[test]
 fn parse_solver_list_dedups_and_sorts() {
@@ -115,11 +117,8 @@ fn record_solver_outcome_tracks_per_solver_totals() {
 
 fn tmp_dir(prefix: &str) -> PathBuf {
     let mut path = std::env::temp_dir();
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock should be monotonic enough for tests")
-        .as_nanos();
-    path.push(format!("{}_{}_{}", prefix, std::process::id(), nanos));
+    let seq = TMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+    path.push(format!("{}_{}_{}", prefix, std::process::id(), seq));
     path
 }
 
@@ -185,7 +184,11 @@ fn external_solver_runner_rejects_malformed_output() {
         &smt,
     )
     .expect_err("malformed solver output should be rejected");
-    assert!(err.to_string().contains("malformed solver output"));
+    let msg = err.to_string();
+    assert!(
+        msg.contains("malformed solver output"),
+        "unexpected solver error: {msg}"
+    );
 
     fs::remove_dir_all(&dir).ok();
 }

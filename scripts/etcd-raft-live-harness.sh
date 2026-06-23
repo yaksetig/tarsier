@@ -55,13 +55,13 @@ assert_raft_write_read() {
   local key="tarsier/smoke/${SMOKE_KEY_SUFFIX:-$(date +%s)}"
   local value="ok-${SMOKE_VALUE_SUFFIX:-$(date +%s)}"
 
-  compose exec -T etcd-node0 sh -lc \
-    "ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 put '$key' '$value' >/dev/null"
+  compose exec -T -e ETCDCTL_API=3 etcd-node0 \
+    etcdctl --endpoints=http://127.0.0.1:2379 put "$key" "$value" >/dev/null
 
   local got
   got="$(
-    compose exec -T etcd-node0 sh -lc \
-      "ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 get '$key' --print-value-only"
+    compose exec -T -e ETCDCTL_API=3 etcd-node0 \
+      etcdctl --endpoints=http://127.0.0.1:2379 get "$key" --print-value-only
   )"
   got="${got//$'\r'/}"
   got="${got%$'\n'}"
@@ -73,8 +73,8 @@ assert_raft_write_read() {
 
   local status
   status="$(
-    compose exec -T etcd-node0 sh -lc \
-      'ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 endpoint status --write-out=json'
+    compose exec -T -e ETCDCTL_API=3 etcd-node0 \
+      etcdctl --endpoints=http://127.0.0.1:2379 endpoint status --write-out=json
   )"
   if [[ "$status" != *'"leader"'* ]]; then
     echo "endpoint status JSON missing leader metadata" >&2

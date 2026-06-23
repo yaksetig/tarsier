@@ -327,16 +327,32 @@ def lookup_allowlist(
 
 
 def ensure_binaries() -> tuple[Path, Path]:
-    build_cmd = ["cargo", "build", "-p", "tarsier-cli", "-p", "tarsier-certcheck"]
+    build_cmd = [
+        "cargo",
+        "build",
+        "-p",
+        "tarsier-cli",
+        "-p",
+        "tarsier-certcheck",
+        "--features",
+        "tarsier-cli/governance",
+    ]
     print("[info] building checker binaries:", " ".join(build_cmd))
     rc, out, err = run_command(build_cmd, ROOT)
     if rc != 0:
         sys.stderr.write(out)
         sys.stderr.write(err)
         raise RuntimeError("failed to build checker binaries")
+    metadata_cmd = ["cargo", "metadata", "--no-deps", "--format-version", "1"]
+    rc, out, err = run_command(metadata_cmd, ROOT)
+    if rc != 0:
+        sys.stderr.write(out)
+        sys.stderr.write(err)
+        raise RuntimeError("failed to resolve cargo target directory")
+    target_dir = Path(json.loads(out)["target_directory"])
     suffix = ".exe" if sys.platform.startswith("win") else ""
-    legacy = ROOT / "target" / "debug" / f"tarsier{suffix}"
-    tiny = ROOT / "target" / "debug" / f"tarsier-certcheck{suffix}"
+    legacy = target_dir / "debug" / f"tarsier{suffix}"
+    tiny = target_dir / "debug" / f"tarsier-certcheck{suffix}"
     if not legacy.exists():
         raise RuntimeError(f"missing legacy checker binary: {legacy}")
     if not tiny.exists():

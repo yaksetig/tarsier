@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HARNESS_DIR="$ROOT_DIR/integration/cometbft-live"
 COMPOSE_FILE="$HARNESS_DIR/docker-compose.yml"
 RPC_URL="${COMETBFT_RPC_URL:-http://127.0.0.1:26657}"
-WAIT_SECS="${WAIT_SECS:-60}"
+WAIT_SECS="${WAIT_SECS:-120}"
 
 usage() {
   cat <<USAGE
@@ -37,16 +37,23 @@ compose() {
   docker compose -f "$COMPOSE_FILE" "$@"
 }
 
+rpc_ready() {
+  curl -fsS "$RPC_URL/health" >/dev/null 2>&1 || \
+    curl -fsS "$RPC_URL/status" >/dev/null 2>&1
+}
+
 wait_for_health() {
   local deadline=$((SECONDS + WAIT_SECS))
   while ((SECONDS < deadline)); do
-    if curl -fsS "$RPC_URL/health" >/dev/null 2>&1; then
+    if rpc_ready; then
       echo "CometBFT RPC is healthy at $RPC_URL"
       return 0
     fi
     sleep 1
   done
   echo "timed out waiting for CometBFT RPC health at $RPC_URL" >&2
+  compose ps >&2 || true
+  compose logs --tail "${TAIL_LINES:-200}" >&2 || true
   return 1
 }
 

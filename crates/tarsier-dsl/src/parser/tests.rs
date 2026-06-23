@@ -1985,6 +1985,43 @@ fn parse_missing_protocol_keyword_is_error() {
 }
 
 #[test]
+fn parse_rejects_nested_malformed_temporal_formula_without_timeout() {
+    let src = r#"
+protocol MultiPhaseLivenessSafe {
+    params n, t, f;
+    resilience: n > 2*t;
+
+    adversary {
+        model: byzantine;
+        bound: f;
+    }
+
+    role Replica {
+        var phase1_done: bool = true;
+        var phase2_done: bool = true;
+        var phase3_done: bool = true;
+
+        init committed;
+        phase committed {}
+    }
+
+    property progress: liveness {
+        forall p: Replica.
+            [] ((((((((((((((((((((((((((((((((((((p.phase1_done == true ~> <> (p.phase2_done == true &&nextss {
+        forall p: R$ep)))
+    }
+}
+"#;
+    let started = std::time::Instant::now();
+    let result = parse(src, "fuzz-timeout.trs");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(1),
+        "malformed temporal formula should fail quickly"
+    );
+    assert!(result.is_err());
+}
+
+#[test]
 fn parse_unclosed_brace_is_error() {
     let src = r#"
 protocol P {

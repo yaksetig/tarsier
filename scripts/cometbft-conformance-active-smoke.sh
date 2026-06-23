@@ -154,6 +154,14 @@ wait_for_mock_endpoint() {
   return 1
 }
 
+assert_cometbft_rpc_ready() {
+  local endpoint="$1"
+  if curl -fsS "${endpoint}/health" >/dev/null 2>&1; then
+    return 0
+  fi
+  curl -fsS "${endpoint}/status" >/dev/null
+}
+
 cleanup() {
   if [[ -n "${SERVER_PID:-}" ]]; then
     kill "${SERVER_PID}" >/dev/null 2>&1 || true
@@ -175,7 +183,7 @@ run_smoke() {
   assert_fixture_contract
   "$HARNESS_SCRIPT" start
   COMET_ENDPOINT="$("$HARNESS_SCRIPT" endpoint)"
-  curl -fsS "${COMET_ENDPOINT}/health" >/dev/null
+  assert_cometbft_rpc_ready "$COMET_ENDPOINT"
   assert_live_cometbft_contract "$COMET_ENDPOINT"
 
   start_mock_live_endpoint
@@ -227,7 +235,7 @@ assert any(ev.get("op") == "fault" for ev in events), "no fault events observed"
 print("live contract assertions ok")
 PY
 
-  curl -fsS "${COMET_ENDPOINT}/health" >/dev/null
+  assert_cometbft_rpc_ready "$COMET_ENDPOINT"
   echo "INTEG-03 smoke passed"
 }
 
