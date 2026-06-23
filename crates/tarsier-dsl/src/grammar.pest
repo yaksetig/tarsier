@@ -388,7 +388,6 @@ formula_term = _{
     | bool_literal
     | qualified_ident
     | ident
-    | "(" ~ formula_expr ~ ")"
 }
 
 formula_op = { "&&" | "||" | "==>" | "<=>" | "U" | "W" | "R" | "~>" }

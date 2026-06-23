@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+      WAIT_SECS: "120"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -118,11 +119,13 @@ jobs:
           REPORT_FILE=artifacts/live-adapter/cometbft-live-report.json \
           EVENTS_FILE=artifacts/live-adapter/cometbft-live-events.jsonl \
           SERVER_LOG=artifacts/live-adapter/cometbft-live-server.log \
+          KEEP_HARNESS=1 \
           ./scripts/cometbft-conformance-active-smoke.sh smoke
 
           REPORT_FILE=artifacts/live-adapter/etcd-raft-live-report.json \
           EVENTS_FILE=artifacts/live-adapter/etcd-raft-live-events.jsonl \
           SERVER_LOG=artifacts/live-adapter/etcd-raft-live-server.log \
+          KEEP_HARNESS=1 \
           ./scripts/etcd-raft-conformance-active-smoke.sh smoke
 
       - name: Capture triage details on failure
@@ -136,6 +139,12 @@ jobs:
           docker compose -f integration/cometbft-live/docker-compose.yml logs --no-color > artifacts/live-adapter/cometbft-compose-logs.txt || true
           docker compose -f integration/etcd-raft-live/docker-compose.yml ps > artifacts/live-adapter/etcd-compose-ps.txt || true
           docker compose -f integration/etcd-raft-live/docker-compose.yml logs --no-color > artifacts/live-adapter/etcd-compose-logs.txt || true
+
+      - name: Stop live harnesses
+        if: always()
+        run: |
+          ./scripts/cometbft-live-harness.sh stop >/dev/null 2>&1 || true
+          ./scripts/etcd-raft-live-harness.sh stop >/dev/null 2>&1 || true
 
       - name: Upload nightly artifacts
         if: always()

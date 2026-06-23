@@ -38,6 +38,14 @@ jobs:
           else
             base_ref="HEAD"
           fi
+          if ! git cat-file -e "${base_ref}^{commit}" 2>/dev/null; then
+            echo "Base ref ${base_ref} is unavailable; falling back to HEAD^ for maintainability limits."
+            if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+              base_ref="HEAD^"
+            else
+              base_ref="HEAD"
+            fi
+          fi
           python3 scripts/check_maintainability_limits.py --base "${base_ref}"
 
       - name: Enforce Certification Gate Contract
@@ -220,9 +228,9 @@ jobs:
 
       - name: Checker Soundness Subset Gate
         run: |
-          output=$(cargo test -p tarsier-proof-kernel soundness_subset_ -- --nocapture 2>&1)
+          output=$(CARGO_TERM_COLOR=never cargo test -p tarsier-proof-kernel soundness_subset_ -- --nocapture 2>&1)
           echo "$output"
-          count=$(echo "$output" | grep -Ec 'test tests::soundness_subset_.*\\.\\.\\. ok')
+          count=$(echo "$output" | grep -Ec '^test tests::soundness_subset_.* \.\.\. ok$')
           if [ "$count" -lt 2 ]; then
             echo "ERROR: expected at least 2 checker soundness subset tests to pass, got $count"
             exit 1

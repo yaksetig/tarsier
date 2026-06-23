@@ -493,8 +493,11 @@ fn parse_fairness_mode(s: &str) -> miette::Result<FairnessMode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsStr;
     use std::path::Path;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::process::Stdio;
+    use std::thread;
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
     use tarsier_engine::pipeline::{ProofExportKind, ProofExportObligation};
     use tarsier_proof_kernel::CertificateObligationMeta;
 
@@ -522,8 +525,43 @@ mod tests {
         }
     }
 
+    fn command_output_with_timeout<I, S>(
+        binary: &str,
+        args: I,
+        timeout: Duration,
+    ) -> std::io::Result<Option<std::process::Output>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut child = Command::new(binary)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let deadline = Instant::now() + timeout;
+        loop {
+            if child.try_wait()?.is_some() {
+                return child.wait_with_output().map(Some);
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Ok(None);
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+
     fn compiler_available(binary: &str) -> bool {
-        Command::new(binary).arg("--version").output().is_ok()
+        match command_output_with_timeout(binary, ["--version"], Duration::from_secs(5)) {
+            Ok(Some(output)) => output.status.success(),
+            Ok(None) => {
+                eprintln!("skipping compiler smoke: `{binary} --version` timed out");
+                false
+            }
+            Err(_) => false,
+        }
     }
 
     fn tmp_smoke_dir(prefix: &str) -> std::path::PathBuf {
@@ -727,10 +765,13 @@ mod tests {
         let module_path = dir.join("TarsierExport.lean");
         write_module(&module_path, &out);
 
-        let cmd = Command::new("lean").arg(&module_path).output();
+        let cmd =
+            command_output_with_timeout("lean", [module_path.as_os_str()], Duration::from_secs(10));
         fs::remove_dir_all(&dir).ok();
 
-        let output = cmd.expect("lean invocation should be spawnable");
+        let output = cmd
+            .expect("lean invocation should be spawnable")
+            .expect("lean compile smoke should finish before timeout");
         assert!(
             output.status.success(),
             "lean compile smoke failed.\nstdout:\n{}\nstderr:\n{}",
@@ -750,10 +791,13 @@ mod tests {
         let module_path = dir.join("TarsierExport.v");
         write_module(&module_path, &out);
 
-        let cmd = Command::new("coqc").arg(&module_path).output();
+        let cmd =
+            command_output_with_timeout("coqc", [module_path.as_os_str()], Duration::from_secs(10));
         fs::remove_dir_all(&dir).ok();
 
-        let output = cmd.expect("coqc invocation should be spawnable");
+        let output = cmd
+            .expect("coqc invocation should be spawnable")
+            .expect("coqc compile smoke should finish before timeout");
         assert!(
             output.status.success(),
             "coq compile smoke failed.\nstdout:\n{}\nstderr:\n{}",
@@ -763,10 +807,26 @@ mod tests {
     }
 
     #[cfg(unix)]
-    #[test]
-    fn run_certcheck_reports_pass_for_valid_json_report() {
+    fn write_executable_script(path: &std::path::Path, script: &str) {
+        use std::io::Write;
         use std::os::unix::fs::PermissionsExt;
 
+        let mut file = fs::File::create(path).expect("script should be created");
+        file.write_all(script.as_bytes())
+            .expect("script should be written");
+        file.sync_all().expect("script should be synced");
+        drop(file);
+
+        let mut perms = fs::metadata(path)
+            .expect("script metadata should be readable")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(path, perms).expect("script should be executable");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_certcheck_reports_pass_for_valid_json_report() {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock should be after epoch")
@@ -789,12 +849,7 @@ while [ "$#" -gt 0 ]; do
 done
 printf '{"overall":"pass"}' > "$REPORT"
 "#;
-        fs::write(&script_path, script).expect("script should be written");
-        let mut perms = fs::metadata(&script_path)
-            .expect("script metadata should be readable")
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).expect("script should be executable");
+        write_executable_script(&script_path, script);
 
         let result = run_certcheck(&base, &script_path).expect("certcheck wrapper should pass");
         assert_eq!(result.overall, "pass");
@@ -806,8 +861,6 @@ printf '{"overall":"pass"}' > "$REPORT"
     #[cfg(unix)]
     #[test]
     fn run_certcheck_fails_when_report_overall_is_fail() {
-        use std::os::unix::fs::PermissionsExt;
-
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock should be after epoch")
@@ -830,12 +883,7 @@ while [ "$#" -gt 0 ]; do
 done
 printf '{"overall":"fail"}' > "$REPORT"
 "#;
-        fs::write(&script_path, script).expect("script should be written");
-        let mut perms = fs::metadata(&script_path)
-            .expect("script metadata should be readable")
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).expect("script should be executable");
+        write_executable_script(&script_path, script);
 
         let err = run_certcheck(&base, &script_path).expect_err("certcheck wrapper should fail");
         let msg = format!("{err:?}");
@@ -847,8 +895,6 @@ printf '{"overall":"fail"}' > "$REPORT"
     #[cfg(unix)]
     #[test]
     fn run_certcheck_fails_when_json_report_is_malformed() {
-        use std::os::unix::fs::PermissionsExt;
-
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock should be after epoch")
@@ -871,12 +917,7 @@ while [ "$#" -gt 0 ]; do
 done
 printf '{"overall":' > "$REPORT"
 "#;
-        fs::write(&script_path, script).expect("script should be written");
-        let mut perms = fs::metadata(&script_path)
-            .expect("script metadata should be readable")
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).expect("script should be executable");
+        write_executable_script(&script_path, script);
 
         let err =
             run_certcheck(&base, &script_path).expect_err("malformed report should fail to parse");
